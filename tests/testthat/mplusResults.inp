@@ -1,7 +1,7 @@
 TITLE:
 Running Model via Mplus
 DATA:
-FILE = "mplusResults_806c95cb59657018957d8abde0909092.dat";
+FILE = "mplusResults_2f55eb38256759e6ebc9b0699ecf1d13.dat";
  
 VARIABLE:
 NAMES = x1 x2 z1 z2 y1 y2; 

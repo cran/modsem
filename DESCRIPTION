@@ -2,7 +2,7 @@ Package: modsem
 Type: Package
 Title: Latent Interaction (and Moderation) Analysis in Structural
         Equation Models (SEM)
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: 
     person(given = "Kjell", family = "Solem Slupphaug", 
            email = "slupphaugkjell@gmail.com", role = c("aut", "cre"),
@@ -17,10 +17,10 @@ Description:
       The residual centering approach (Little et al., 2006).
       The double centering approach (Lin et al., 2010).
       The latent moderated structural equations (LMS) approach (Klein & Moosbrugger, 2000).
-      The quasi-maximum likelihood (QML) approach (Klein & Muthén, 2007)
+      The quasi-maximum likelihood (QML) approach (Klein & Muthén, 2007) (temporarily unavailable)
     The constrained- unconstrained, residual- and double centering- approaches
     are estimated via 'lavaan' (Rosseel, 2012), whilst the LMS- and QML- approaches
-    are estimated via 'nlsem' (Umbach et al., 2017). Alternatively model can be
+    are estimated via by ModSEM it self. Alternatively model can be
     estimated via 'Mplus' (Muthén & Muthén, 1998-2017).
     References:
     Algina, J., & Moulder, B. C. (2001). 
@@ -44,24 +44,21 @@ Description:
     Muthén, L.K. and Muthén, B.O. (1998-2017).  
       "'Mplus' User’s Guide.  Eighth Edition."
       <https://www.statmodel.com/>.
-    Umbach N, Naumann K, Brandt H, Kelava A (2017). 
-      "Fitting Nonlinear Structural Equation Models in R with Package 'nlsem'."
-      <doi:10.18637/jss.v077.i07>.
     Rosseel Y (2012). 
       <doi:10.18637/jss.v048.i02>.
       "'lavaan': An R Package for Structural Equation Modeling." 
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 7.2.3
-LinkingTo: Rcpp
-Imports: Rcpp, purrr, stringr, lavaan, rlang, MplusAutomation, nlsem,
-        R6, dplyr
+RoxygenNote: 7.3.1
+LinkingTo: Rcpp, RcppArmadillo
+Imports: Rcpp, purrr, stringr, lavaan, rlang, MplusAutomation, nlme,
+        R6, dplyr, matlib, mvnfast, stats, gaussquad, mvtnorm
 Depends: R (>= 3.50)
 URL: https://github.com/Kss2k/modsem
 NeedsCompilation: yes
-Packaged: 2024-03-22 16:18:52 UTC; kjell
+Packaged: 2024-04-15 14:32:33 UTC; kjell
 Author: Kjell Solem Slupphaug [aut, cre]
     (<https://orcid.org/0009-0005-8324-2834>)
 Repository: CRAN
-Date/Publication: 2024-03-23 11:00:02 UTC
+Date/Publication: 2024-04-15 14:50:02 UTC

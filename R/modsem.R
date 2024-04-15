@@ -7,7 +7,8 @@
 #' "uca" = unconstrained approach (passed to lavaan),
 #' "dblcent" = double centering approach (passed to lavaan),
 #' "pind" = prod ind approach, with no constraints or centering (passed to lavaan),
-#' "lms" = laten model structural equations (passed to nlsem),
+#' "lms" = laten model structural equations (not passed to lavaan).
+#' "qml" = quasi maximum likelihood estimation of laten model structural equations (not passed to lavaan).
 #' "custom" = use parameters specified in the function call (passed to lavaan)
 #' @param match should the product indicators be created by using the match-strategy
 #' @param standardizeData should data be scaled before fitting model
@@ -22,7 +23,6 @@
 #' @param constrainedLoadings should syntax for constrained loadings be produced (overwritten by method, if method != NULL)
 #' @param constrainedVar should syntax for constrained variances be produced (overwritten by method, if method != NULL)
 #' @param constrainedResCovMethod method for constraining residual covariances
-#' @param qml should QML be used in LMS (via nlsem)
 #' @param auto.scale methods which should be scaled automatically (usually not useful)
 #' @param auto.center methods which should be centered automatically (usually not useful)
 #' @param estimator estimator to use in lavaan
@@ -33,22 +33,57 @@
 #' @return ModSEM object
 #' @export 
 #' @description
-#' modsem is a function for estimating structural equation models with latent product indicators.
-#' It is essentially a facny wrapper for lavaan::sem() (and nlsem::nlsem()) which generates the 
+#' modsem is a function for estimating interaction effects between latent variables, 
+#' in structural equation models (SEM's).
+#' Methods for estimating interaction effects in SEM's can basically be split into 
+#' two frameworks: 1. Product Indicator based approaches ("dblcent", "rca", "uca", 
+#' "ca", "pind"), and 2. Distributionally based approaches ("lms", "qml").
+#' For the product indicator based approaces, modsem() is essentially a just 
+#' a fancy wrapper for lavaan::sem()  which generates the 
 #' necessary syntax, and variables for the estimation of models with latent product indicators.
+#' The distributionally based approaches are implemented in seperately, and are 
+#' are not estimated using lavaan::sem(), but rather using custom functions (largely)
+#' written in C++ for performance reasons.
 #' @examples
 #' library(modsem)
+#' # For more examples check README and/or GitHub.
+#' # One interaction
 #' m1 <- '
 #'   # Outer Model
 #'   X =~ x1 + x2 +x3
 #'   Y =~ y1 + y2 + y3
 #'   Z =~ z1 + z2 + z3
-#'
+#'   
 #'   # Inner model
-#'   Y ~ X + Z + X:Z
-#''
+#'   Y ~ X + Z + X:Z 
+#' '
+#' 
+#' # Double centering approach
 #' est1 <- modsem(m1, oneInt)
 #' summary(est1)
+#' 
+#' # Theory Of Planned Behavior
+#' tpb <- ' 
+#' # Outer Model (Based on Hagger et al., 2007)
+#'   LATT =~ att1 + att2 + att3 + att4 + att5
+#'   LSN =~ sn1 + sn2
+#'   LPBC =~ pbc1 + pbc2 + pbc3
+#'   LINT =~ int1 + int2 + int3
+#'   LBEH =~ b1 + b2
+#' 
+#' # Inner Model (Based on Steinmetz et al., 2011)
+#'   # Covariances
+#'   LATT ~~ LSN + LPBC
+#'   LPBC ~~ LSN 
+#'   # Causal Relationsships
+#'   LINT ~ LATT + LSN + LPBC
+#'   LBEH ~ LINT + LPBC 
+#'   LBEH ~ LINT:LPBC  
+#' '
+#' 
+#' # double centering approach
+#' estTpb <- modsem(tpb, data = TPB)
+#' summary(estTpb)
 modsem <- function(modelSyntax = NULL,
                    data = NULL,
                    method = "dblcent",
@@ -64,7 +99,6 @@ modsem <- function(modelSyntax = NULL,
                    constrainedLoadings = NULL,
                    constrainedVar = NULL,
                    constrainedResCovMethod = NULL,
-                   qml = FALSE,
                    auto.scale = "none",
                    auto.center = "none",
                    estimator = "ML", 
@@ -77,7 +111,7 @@ modsem <- function(modelSyntax = NULL,
   if (is.null(data)) stop("No data provided in modsem")
 
   # PreSteps -------------------------------------------------------------------
-  modEnv$data <- data
+  modEnv$data <- data <- as.data.frame(data)
   ## Standardizing data
   if (standardizeData || method %in% auto.scale) {
     modEnv$data <- lapplyDf(modEnv$data,
@@ -94,12 +128,11 @@ modsem <- function(modelSyntax = NULL,
   modelSpec <- parseLavaan(modelSyntax, colnames(data), match = match)
 
   # Setting parameters according to method 
-  if (method == "lms") {
+  if (method %in% c("lms", "qml")) {
     # If method is LMS we pass it own to its own version of modsem()
     LMS <- modsem.LMS(modelSpec,
+                      method = method,
                       data = modEnv$data,
-                      qml = qml,
-                      centerData = centerData,
                       ...)
     return(LMS)
 

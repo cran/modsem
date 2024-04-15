@@ -1,8 +1,12 @@
-‚# ModSEM
+# ModSEM
 This is a package which allows you to perform interactions between latent variables (i.e., moderation) in CB-SEM. See https://bookdown.org/slupphaugkjell/quartomodsem/ for a tutorial.
 
 # To Install 
 ```
+# From CRAN 
+install.packages("modsem")
+
+# Latest version from Github
 install.packages("devtools")
 devtools::install_github("kss2k/modsem")
 ```
@@ -18,15 +22,21 @@ There are a number of approaches for estimating interaction effects in SEM. In `
 - "uca" = unconstrained approach (Marsh, 2004)
 - "rca" = residual centering approach (Little et al., 2006)
 - "dblcent" = double centering approach (Marsh., 2013)
-  - default
+  - default 
 - "pind" = basic product indicator approach (not recommended)
-- "lms" = The latent moderated structural equations approach through the nlsem package
-  - note: can only be done if you have a single endogenous (dependent) variable. 
-  - do `qml = TRUE` for the quasi maximum likelihood version
+- "lms" = The latent moderated structural equations approach
+  - note: now implemented with multiple endogenous variables
+    however it does not allow interactions between two enodgenous
+    variables, it does however allow interactions between exogenous:endogenous
+    and exogenous:exogenous
   - do `optimize = TRUE` for faster convergence (experimental feature)
+- "qml" = The Quasi Maximum Likelihood estimation of latent moderated structural equations. 
+  - note: only works with a single endogenous variable.
 - "mplus" 
   - estimates model through Mplus, if it is installed
 
+# New Feature (10.04.24)
+- Implemented a new estimator for the LMS approach, which now works with more complicated models
 
 # Examples 
 
@@ -43,10 +53,56 @@ m1 <- '
   Y ~ X + Z + X:Z 
 '
 
-est1 <- modsem(m1, oneInt)
-summary(est1)
+# Double centering approach
+est1Dblcent <- modsem(m1, oneInt)
+summary(est1Dblcent)
+
+# Constrained approach
+est1Ca <- modsem(m1, oneInt, method = "ca")
+summary(est1Ca)
+
+# QML approach 
+est1Qml <- modsem(m1, oneInt, method = "qml")
+summary(est1Qml) 
+
+# LMS approach 
+est1Lms <- modsem(m1, oneInt, method = "lms") 
+summary(est1Lms)
 ```
 
+## Theory Of Planned Behavior
+```
+tpb <- ' 
+# Outer Model (Based on Hagger et al., 2007)
+  LATT =~ att1 + att2 + att3 + att4 + att5
+  LSN =~ sn1 + sn2
+  LPBC =~ pbc1 + pbc2 + pbc3
+  LINT =~ int1 + int2 + int3
+  LBEH =~ b1 + b2
+
+# Inner Model (Based on Steinmetz et al., 2011)
+  # Covariances
+  LATT ~~ LSN + LPBC
+  LPBC ~~ LSN 
+  # Causal Relationsships
+  LINT ~ LATT + LSN + LPBC
+  LBEH ~ LINT + LPBC 
+  LBEH ~ LINT:LPBC  
+'
+
+# double centering approach
+estTpbDblCent <- modsem(tpb, data = TPB, method = "dblcent")
+summary(estTpbDblCent)
+
+# Constrained approach using Wrigths path tracing rules for generating
+# the appropriate constraints
+estTpbCa <- modsem(tpb, data = TPB, method = "ca") 
+summary(estTpbCa)
+
+# LMS approach 
+estTpbLms <- modsem(tpb, data = TPB, method = "lms")
+summary(estTpbLms)
+```
 ## Interactions between two observed variables
 ```
 est2 <- modsem('y1 ~ x1 + z1 + x1:z1', data = oneInt, method = "pind")
@@ -80,7 +136,8 @@ m4 <- '
   Y ~ X + Z + G + H + X:Z + G:H
 '
 
-est4 <- modsem(m4, twoInt)
+# Using unconstrained approach
+est4 <- modsem(m4, twoInt, method = "uca")
 summary(est4)
 ```
 
@@ -97,6 +154,7 @@ m5 <- '
   Y ~ X + Z + G + X:Z:G
 '
 
-est5 <- modsem(m5, tripleInt, standardizeData = TRUE)
+# Residual centering approach
+est5 <- modsem(m5, tripleInt, standardizeData = TRUE, method = "rca")
 summary(est5)
 ```
