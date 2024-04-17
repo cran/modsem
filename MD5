@@ -1,4 +1,4 @@
-be80ebbb2d070aecce25ed58cb9e177c *DESCRIPTION
+f428725ff441b440a3d7994e19e3e59a *DESCRIPTION
 31293bcdcd9a82fb9c0da38a3403dd26 *LICENSE
 23e909df1e39e6c6520751fb78b53b69 *NAMESPACE
 7f690ecdf5efbad88d2c37ce27ba62d8 *R/LavSyntaxFunctionCalls.R
@@ -7,16 +7,16 @@ be80ebbb2d070aecce25ed58cb9e177c *DESCRIPTION
 3cf754b8270f9661c962578acb9a2a9c *R/constraintsCA.R
 d28e19d11ef7a1d232fd1844f8bd7708 *R/createLabels.R
 fff47f3ae16a715f014e9828b4fcef8f *R/datasets.R
-3e8e23c1368be14d19e3606479859393 *R/emLms.R
-152789d2e0a44b04dfba954b389d4ab3 *R/equationsLms.R
-5dfe09e78f8eb731e02873feedf8a008 *R/equationsQml.R
+fc9109ea1c92e703843531fdeb924794 *R/emLms.R
+e9b901385c20422f8d46aea76860ce2f *R/equationsLms.R
+e67ae77aa5b37625755719413fd05629 *R/equationsQml.R
 2d8072e6d336c2b746d8a6282362ad01 *R/estQml.R
 c3f2dc9e659b11aa0bd60b5a1849dc8b *R/getModelSpecification.R
 8f8b657511ae478e6e72cc7fcbbb2aef *R/lexer.R
 5156cb9b6d4ae485f08916bfeee3e653 *R/methodSettings.R
-edbc79356bd2f04a92848d0c496cb8a7 *R/modelLmsQml.R
+bb2085db3b0f7fd1afa19da595677900 *R/modelLmsQml.R
 e402005d594a9b6e5e7c0af58fbb19a5 *R/modsem-package.R
-b1acf8b671d0f684afa776377b673b22 *R/modsem.R
+3adf6772c098a1b5a503db6143130306 *R/modsem.R
 f9e8ca6832442a7d264b66d118ec901f *R/mplus.R
 54509eeb4f63466ff827cc4ce5bedc0c *R/optimizeLmsQml.R
 9c91f5b6746f203a196f7900e537e04f *R/parceling.R
@@ -27,8 +27,8 @@ e3722bf5b1c92594d84898d57f7e69d6 *R/runMultipleModels.R
 30ed7b005f2ea7dacb202311076f5c5c *R/summaryLmsQml.R
 e8f5ef56a63adead8ad5021bc66b07bf *R/tokenizer.R
 5191b5cd41a3b1dc3380d2c167517135 *R/utils.R
-25bfa08dd8ca42d8fd6d57da7cac7545 *R/utilsLms.R
-b9fe458b8ffc15c38fb77f2dcaae53d5 *R/utilsQml.R
+284f1b7c5475972c3169f43ef0befa81 *R/utilsLms.R
+d49e878388423344d74ba0dd33c8efb2 *R/utilsQml.R
 e48f5354c8538028b541b1aff1d1cbf0 *README.md
 20c8d3f97d93e2e318a22508275b5a02 *build/partial.rdb
 7f84ff522c9bbe17d53bbac54b056953 *data/oneInt.rda
@@ -37,7 +37,7 @@ fc518620989d4a209552a1db7e29caab *data/tripleInt.rda
 d2dfaa8ebe50e3b9ddc3d86b8fc4842c *data/twoInt.rda
 4cb96a677ee1726ee5b2ff835979860a *man/TPB.Rd
 2787c4b32c336bb11955eae61f240228 *man/modsem-package.Rd
-d92109e363f53cacd37ed88abaf4497d *man/modsem.Rd
+9e5256ca4030abf90b82e191545050c8 *man/modsem.Rd
 f28b165a0834a8b98d8792dff9d1c53a *man/modsemify.Rd
 97eafdf9ec89898be2c6e911efa50a1c *man/multiplyIndicatorsCpp.Rd
 c6b6e080cc02aaf26a5039fd29cbc886 *man/oneInt.Rd
@@ -54,7 +54,7 @@ e1923ecfe66cbdc4ea15827deea39025 *src/RcppExports.cpp
 26f0f1f2ebfdc9057eba76c683767db4 *src/equationsLMS.cpp
 e3b8bc1efb624b0f36ff518e86779326 *src/multiplyIndicators.cpp
 d717daee5cd987b951fab5b6b0c242cc *tests/testthat/mplusResults.inp
-1151793399d39b598d3f61995087b70b *tests/testthat/mplusResults.out
+52aa21e5e35129f88407d92a34f9b4c3 *tests/testthat/mplusResults.out
 94067d21181e9c3cbff61a81722981c6 *tests/testthat/mplusResults_2f55eb38256759e6ebc9b0699ecf1d13.dat
 ffc2ba22b57638fe82945fb31eae06c8 *tests/testthat/mplusResults_806c95cb59657018957d8abde0909092.dat
 2a3425a4f15c60bb633e076a2cb940e4 *tests/testthat/mplusResults_9ae1075d88813d2b05dddbfb8fa37861.dat
@@ -64,6 +64,6 @@ f4bd4e58875ca585c47000ac190f0d46 *tests/testthat/mplusResults_e9480bee59c66cd9a4
 123a7a34cf7ed0ea3b75b5019cf50563 *tests/testthat/testManualInteractions.R
 640f016a012687c5bdfde9e89cc5edd3 *tests/testthat/testQML.R
 f9494f2f32c932195ac66492b502ebbb *tests/testthat/testTpb.R
-18474c37d11e2edfe92346175d55c1f5 *tests/testthat/testingLMS.R
+27c1bf73e9aa57df7b3224fd891c6623 *tests/testthat/testingLMS.R
 6d915482f3699b3f65550f6cea26ee2b *tests/testthat/testingMplus.R
 5927b845e9550f3d58531a9596591045 *tests/testthat/testingSyntax.R
