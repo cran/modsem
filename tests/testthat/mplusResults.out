@@ -1,6 +1,6 @@
 Mplus VERSION 8.10 DEMO (Linux)
 MUTHEN & MUTHEN
-04/17/2024   9:59 AM
+05/27/2024   2:39 PM
 
 INPUT INSTRUCTIONS
 
@@ -14,10 +14,11 @@ INPUT INSTRUCTIONS
    MISSING=.;
 
   ANALYSIS:
-  estimator= ml;
-        type = random;
-        algorithm = integration;
-        process = 8;
+  estimator = ml;
+  type = random;
+  algorithm = integration;
+  process = 8 ;
+
   MODEL:
   X BY x1;
   X BY x2;
@@ -226,9 +227,9 @@ QUALITY OF NUMERICAL RESULTS
        (ratio of smallest to largest eigenvalue)
 
 
-     Beginning Time:  09:59:44
-        Ending Time:  09:59:47
-       Elapsed Time:  00:00:03
+     Beginning Time:  14:39:13
+        Ending Time:  14:39:15
+       Elapsed Time:  00:00:02
 
 
 Mplus VERSION 8.10 DEMO (Linux) has the following limitations:

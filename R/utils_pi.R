@@ -1,15 +1,3 @@
-# wrapper around stop
-stop2 <- function(...) {
-  stop(..., call. = FALSE)
-}
-
-
-# Wrapper around warning() with .call = FALSE and .immediate = TRUE
-warning2 <- function(...) {
-  warning(..., call.= FALSE, immediate. = TRUE)
-}
-
-
 # function for selecting rows in a dataframe matching values on a specified column (type chr_vec)
 selectRowsByCol <- function(value, df, column) {
   column <- as.character(column)
@@ -43,7 +31,6 @@ lapplyNamed <- function(X, FUN, ..., names = X) {
 }
 
 
-
 lapplyDf <- function(df, FUN, ...) {
   structure(lapply(df, FUN, ...),
             names = names(df),
@@ -55,7 +42,7 @@ lapplyDf <- function(df, FUN, ...) {
 # scale numeric vector is numeric
 scaleIfNumeric <- function(x, scaleFactor = TRUE) {
   if (is.null(x)) {
-    warning2("x in scaleIfNumeric was NULL")
+    warning("x in scaleIfNumeric was NULL")
     return(NULL)
   }
   if (scaleFactor == TRUE & is.factor(x)) {
@@ -70,7 +57,6 @@ scaleIfNumeric <- function(x, scaleFactor = TRUE) {
 # A fancy version of purrr::list_cbind()
   # This function will remove duplicate columns, before combining the
     # dataframes
-
   # note this function might be slow for large df's, I might create a C++
     # version of it
 combineListDf <- function(listDf) {
@@ -94,7 +80,7 @@ combineListDf <- function(listDf) {
   if (sum(as.integer(matchingColnames)) > 0) {
     duplicates <- stringr::str_c(colnames(listDf[[2]])[matchingColnames],
                                  collapse = ", ")
-    warning2(
+    warning(
       "There were some duplicate product indicators, was this intended?\n",
       "The duplicates of these product indicators were removed: \n",
       duplicates, "\n")
@@ -105,7 +91,6 @@ combineListDf <- function(listDf) {
     )
 
   combineListDf(c(list(combinedDf), listDf[-(1:2)]))
-
 }
 
 
@@ -161,8 +146,31 @@ rbindParTable <- function(parTable, newRows) {
 }
 
 
-silentStop <- function() {
-  opt <- options(show.error.messages = FALSE)
-  on.exit(options(opt))
-  stop()
+greplRowDf <- function(col, df) {
+  if (is.null(df)) return(FALSE)
+  any(apply(df, MARGIN = 2, 
+            FUN = function(dfCol) all(sort(col) == sort(dfCol))))
+}
+
+
+`forceRowNames<-` <- function(df, value) {
+  attr(df, "row.names") <- value
+  df
+}
+
+
+# see functions for generating formulas for 
+# constrained approach
+`%in_paired%` <- function(x, y) {
+  out <- vector("logical", length(x))
+  for (i in seq_along(x)) {
+    matches <- y == x[[i]]
+    if (any(matches)) {
+      y <- y[!matches]
+      out[[i]] <- TRUE
+    } else {
+      out[[i]] <- FALSE
+    }
+  }
+  out
 }

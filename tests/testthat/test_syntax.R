@@ -1,13 +1,12 @@
+devtools::load_all()
 models <- list(m1 = ' 
                # latent variables 
                ind60 =~ x1 + x2 + x3 
                dem60 =~ y1 + y2 + y3 + y4 
                dem65 =~ y5 + y6 + y7 + y8 
-               ind60:dem60 =~ x1:y1 + x2:y2 + x3:mean(y3, y4)
                # regressions
                dem60 ~ ind60 
                dem65 ~ ind60 + dem60 
-               dem65 ~ ind60:dem60
                # residual covariances 
                y1 ~~ y5
                y2 ~~ y4 + y6 
@@ -17,25 +16,20 @@ models <- list(m1 = '
                ',
                m3 = ' visual  =~ x1 + x2 + x3 
                textual =~ x4 + x5 + x6
-               speed   =~ x7 + x8 + x9
-               textual:speed =~ x4:x7 + x5:x8 + x6:x9
-               visual ~ speed + textual + textual:speed',
+               speed   =~ x7 + x8 + x9 ',
                m4 = 'visual  =~ x1 + start(0.8)*x2 + start(1.2)*x3
                textual =~ x4 + start(0.5)*x5 + start(1.0)*x6
-               speed   =~ x7 + start(0.7)*x8 + start(1.8)*x9
-               visual ~ speed + textual + speed:textual',
+               speed   =~ x7 + start(0.7)*x8 + start(1.8)*x9',
                m5 = '# three-factor model
                visual  =~ x1 + x2 + x3
                textual =~ x4 + x5 + x6
                speed   =~ x7 + x8 + x9
-               visual ~ speed + textual + 0.1*speed:textual
                # intercepts with fixed values
                x1 + x2 + x3 + x4 ~ 0.5*1',
                m6 = '# three-factor model
                visual  =~ x1 + x2 + x3
                textual =~ x4 + x5 + x6
                speed   =~ x7 + x8 + x9
-               visual ~ speed + textual + speed:textual
                # intercepts
                x1 ~ 1
                x2 ~ 1
@@ -50,21 +44,12 @@ models <- list(m1 = '
                Y ~ c*X
                # mediator
                M ~ a*X
-               Y ~ b*M + M:X
+               Y ~ b*M
                # indirect effect (a*b)
                ab := a*b
-               # total effect
-               total := c + (a*b)
                '
 )
 
-
-d2 <- vector("list", 12L) 
-varNames <- names(d2) <- c("x1", "x2", paste0("y", 1:10))
-for (i in varNames) {
-  d2[[i]] <- stats::rnorm(500)
-}
-d2 <- as.data.frame(d2)
 
 set.seed(1234)
 X <- rnorm(100)
@@ -79,21 +64,45 @@ data <- list(d1 = lavaan::PoliticalDemocracy,
              d6 = lavaan::HolzingerSwineford1939, 
              d7 = d7)
 
-nativeMethods <- allNativeMethods[!allNativeMethods %in%  c("pind",
-                                                           "ca",
-                                                           "uca")]
-methods <- list(m1 = nativeMethods,
-                m2 = nativeMethods,
-                m3 = nativeMethods,
-                m4 = nativeMethods,
-                m5 = nativeMethods,
-                m6 = nativeMethods)
-
 
 estimates <- vector("list", length(models))
 for (i in seq_along(estimates)) {
-    runMultipleMethods(models[[i]], data = data[[i]], 
-                              methods = methods[[i]],
-                              estimator = "ML",
-    removeFromParTable = "")
+  estimates[[i]]$lav <- tryCatch({
+    est <- lavaan::sem(models[[i]], data = data[[i]])
+    est
+  },
+  warning = function(e) {
+    warning("Warning in lav model ", i)
+    warning(capturePrint(e))
+  },
+  error = function(e) {
+    est <- NA
+    warning("Error in lav model ", i)
+  },
+  finally = {
+    est
+  })
+  estimates[[i]]$modsem <- tryCatch({
+    est <- modsem(models[[i]], data = data[[i]], estimator = "ML")
+    est
+  },
+  warning = function(e) {
+    warning("Warning in modsem model ", i)
+    est
+  },
+  error = function(e) {
+    est <- NA
+    warning("Error in modsem model ", i) 
+  },
+  finally = {
+    est
+  })
+}
+
+for (est in estimates) {
+  lavaanEst <- lavaan::parameterEstimates(est$lav)
+  lavaanEst[is.na(lavaanEst)] <- -999
+  modsemEst <- lavaan::parameterEstimates(est$modsem$lavaan)
+  modsemEst[is.na(modsemEst)] <- -999
+  stopifnot(all(lavaanEst == modsemEst))
 }
