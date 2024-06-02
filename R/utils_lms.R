@@ -1,3 +1,7 @@
+# Utils for lms approach
+# Last updated: 29.05.2024
+
+
 sortData <- function(data, allIndsXis, allIndsEtas) {
   if (!all(c(allIndsXis, allIndsEtas) %in% colnames(data))) 
     stop("Missing Observed Variables in Data")
@@ -48,8 +52,10 @@ removeInteractions <- function(model) {
 
 
 # Faster version of mvtnorm::dmvnorm() given that sigma is positive 
+# there are some drawbacks to using mvnfast. In particular, 
+# its a little less consistent
 dMvn <- function(X, mean, sigma, log = FALSE) {
-  sigma <- round(sigma, 12)
+  sigma <- round(sigma, 12) # makes it more reliable
   return(tryCatch(mvnfast::dmvn(X, mean, sigma, log, ncores = 2),
                   error = function(e) mvtnorm::dmvnorm(X, mean, sigma, log)))
 }
@@ -83,4 +89,27 @@ diagPartitionedMat <- function(X, Y) {
                cbind(matrix(0, nrow = NROW(Y), ncol = NCOL(X)), Y)),
             dimnames = list(c(rownames(X), rownames(Y)), 
                             c(colnames(X), colnames(Y))))
+}
+
+
+formatNumeric <- function(x, digits = 3) {
+  if (is.numeric(x)) {
+    format(round(x, digits), nsmall = digits, digits = digits, 
+           trim = FALSE, justify = "right")
+  } else {
+    format(x, trim = FALSE, justify = "right") 
+  }
+}
+
+
+oneWayTableToDataFrame <- function(table) {
+  df <- as.data.frame(table)
+  out <- data.frame(freq = df$Freq)
+  rownames(out) <- df$Var1
+  out
+}
+
+
+whichIsMax <- function(x) {
+  which(x == max(x))
 }

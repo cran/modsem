@@ -8,7 +8,7 @@ m1 <- "
 
 # Inner model
   Y ~ X + Z
-  Y ~ X:Z
+  Y ~ Z:X + X:X
 "
 # funnily enough, the starting parameters from the double centering approach
 # give better loglikelihoods than the ones arrived at by the EM algorithm
@@ -20,29 +20,40 @@ est1 <- modsem(m1, oneInt,
   convergence = 1e-2, sampleGrad = NULL, maxstep = 1
 )
 duration1 <- Sys.time() - startTime1
-
+plot_interaction("X", "Z", "Y", "X:Z", -3:3, c(-0.5, 0.5), est1)
+print(summary(est1))
+# I have no clue why, but changing the ordering of how the interaction terms 
+# are specified, ends up changing the number of iterations (and results ever 
+# so slightly) -- even though the matrices are exactly the same. This can be 
+# seen through the fact that the starting loglikelihoods are the same (if optimized) 
+# indicating that the matrices are the same (i.e,. produce the same results, when
+# given the same values). 
+# Solution: slightly different results from lavaan, giving slightly different 
+# starting parameters
 tpb <- "
 # Outer Model (Based on Hagger et al., 2007)
-  LATT =~ att1 + att2 + att3 + att4 + att5
+  ATT =~ att1 + att2 + att3 + att4 + att5
   LSN =~ sn1 + sn2
-  LPBC =~ pbc1 + pbc2 + pbc3
-  LINT =~ int1 + int2 + int3
-  LBEH =~ b1 + b2
+  PBC =~ pbc1 + pbc2 + pbc3
+  INT =~ int1 + int2 + int3
+  BEH =~ b1 + b2
 
 # Inner Model (Based on Steinmetz et al., 2011)
-  # Covariances
-  LATT ~~ cAsn * LSN + cApbc * LPBC
-  LPBC ~~ cPbcSn * LSN
   # Causal Relationsships
-  LINT ~ gIa * LATT + gIsn * LSN + gIpbc * LPBC
-  LBEH ~ LINT + LPBC
-  LBEH ~ LPBC:LINT
+  INT ~ ATT + LSN + PBC
+  BEH ~ INT + PBC
+  # BEH ~ ATT:PBC
+  BEH ~ PBC:INT
+  # BEH ~ PBC:PBC
 "
 
 startTime2 <- Sys.time()
 est2 <- modsem(tpb, TPB, 
   method = "lms", optimize = TRUE, verbose = TRUE, 
   convergence = 1e-2, sampleGrad = NULL, 
-  nodes = 20, # closer to mplus when using higher number of nodes
+  nodes = 16
+  # closer to mplus when tweaking the number of nodes and convergence criterion
+  # nodes = 100, convergence = 1e-7 is very very close to mplus
 )
 duration2 <- Sys.time() - startTime2
+plot_interaction(x = "INT", z = "PBC", y = "BEH", xz = "PBC:INT", vals_z = c(-0.5, 0.5), model = est2)

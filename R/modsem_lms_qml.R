@@ -1,3 +1,6 @@
+# Estimate SEM using lms and qml
+# Last updated: 29.05.2024
+
 #' Interaction between latent variables using lms and qml approaches
 #' @param modelSyntax lavaan syntax
 #' @param data dataframe
@@ -37,13 +40,10 @@
 #' '
 #' 
 #' \dontrun{
-#' # Double centering approach
-#' est1 <- modsem_lms_qml(m1, oneInt)
+#' # QML Approach
+#' est1 <- modsem_lms_qml(m1, oneInt, method = "qml")
 #' summary(est1)
 #' 
-#' # The Constrained Approach 
-#' est1Constrained <- modsem_lms_qml(m1, oneInt, method = "ca")
-#' summary(est1Constrained)
 #'
 #' # Theory Of Planned Behavior
 #' tpb <- ' 
@@ -92,13 +92,17 @@ modsem_lms_qml <- function(modelSyntax = NULL,
   } else if (!is.data.frame(data)) {
     data <- as.data.frame(data)
   }
+    
+  if (!method %in% c("lms", "qml")) {
+    stop("Method must be either 'lms' or 'qml'")
+  }
 
   if (center) data <- lapplyDf(data, FUN = function(x) x - mean(x))
   if (standardize) data <- lapplyDf(data, FUN = scaleIfNumeric, 
                                     scaleFactor = FALSE)
 
-  model <- specifyLmsModel(modelSyntax, data = data, 
-                           method = method, m = nodes)
+  model <- specifyModelLmsQml(modelSyntax, data = data, 
+                              method = method, m = nodes)
   if (optimize) model <- optimizeStartingParamsLms(model)
   switch(method, 
          "qml" = estQml(model, verbose = verbose, 
