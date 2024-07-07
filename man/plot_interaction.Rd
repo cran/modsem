@@ -8,7 +8,7 @@ plot_interaction(
   x,
   z,
   y,
-  xz,
+  xz = NULL,
   vals_x = seq(-3, 3, 0.001),
   vals_z,
   model,
@@ -23,14 +23,15 @@ plot_interaction(
 
 \item{y}{The name of the outcome variable}
 
-\item{xz}{The name of the interaction term}
+\item{xz}{The name of the interaction term. If the interaction term is not specified, it
+it will be created using `x` and `z`.}
 
 \item{vals_x}{The values of the x variable to plot, the more values the smoother the std.error-area will be}
 
 \item{vals_z}{The values of the moderator variable to plot. A seperate regression 
 line ("y ~ x | z") will be plotted for each value of the moderator variable}
 
-\item{model}{An object of class `modsem_pi`, `modsem_lms_qml`, or `modsem_mplus`}
+\item{model}{An object of class `modsem_pi`, `modsem_da`, or `modsem_mplus`}
 
 \item{alpha_se}{The alpha level for the std.error area}
 
@@ -61,14 +62,14 @@ plot_interaction("X", "Z", "Y", "X:Z", -3:3, c(-0.2, 0), est1)
 tpb <- "
 # Outer Model (Based on Hagger et al., 2007)
   ATT =~ att1 + att2 + att3 + att4 + att5
-  LSN =~ sn1 + sn2
+  SN =~ sn1 + sn2
   PBC =~ pbc1 + pbc2 + pbc3
   INT =~ int1 + int2 + int3
   BEH =~ b1 + b2
 
 # Inner Model (Based on Steinmetz et al., 2011)
   # Causal Relationsships
-  INT ~ ATT + LSN + PBC
+  INT ~ ATT + SN + PBC
   BEH ~ INT + PBC
   # BEH ~ ATT:PBC
   BEH ~ PBC:INT

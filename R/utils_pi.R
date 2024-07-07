@@ -1,3 +1,13 @@
+warning2 <- function(...) {
+  warning(..., call. = FALSE)
+}
+
+
+stop2 <- function(...) {
+  stop(..., call. = FALSE)
+}
+
+
 # function for selecting rows in a dataframe matching values on a specified column (type chr_vec)
 selectRowsByCol <- function(value, df, column) {
   column <- as.character(column)
@@ -22,27 +32,10 @@ selectValuesByCol <- function(value, df, column.value, column.match) {
 }
 
 
-# Wrapper of lapply where elements are names based on names argument, by default names
-# are based on X
-lapplyNamed <- function(X, FUN, ..., names = X) {
-
-  structure(lapply(X, FUN, ...),
-            names = names)
-}
-
-
-lapplyDf <- function(df, FUN, ...) {
-  structure(lapply(df, FUN, ...),
-            names = names(df),
-            row.names = 1:nrow(df),
-            class = "data.frame")
-}
-
-
 # scale numeric vector is numeric
 scaleIfNumeric <- function(x, scaleFactor = TRUE) {
   if (is.null(x)) {
-    warning("x in scaleIfNumeric was NULL")
+    warning2("x in scaleIfNumeric was NULL")
     return(NULL)
   }
   if (scaleFactor == TRUE & is.factor(x)) {
@@ -80,7 +73,7 @@ combineListDf <- function(listDf) {
   if (sum(as.integer(matchingColnames)) > 0) {
     duplicates <- stringr::str_c(colnames(listDf[[2]])[matchingColnames],
                                  collapse = ", ")
-    warning(
+    warning2(
       "There were some duplicate product indicators, was this intended?\n",
       "The duplicates of these product indicators were removed: \n",
       duplicates, "\n")
@@ -101,7 +94,7 @@ maxDepth <- function(list, max = 2, depth = 1) {
   }
 
   if (depth > max) {
-    stop("Incorrectly nested syntax")
+    stop2("Incorrectly nested syntax")
   }
   deepest <- 1
   for (i in seq_along(list)) {
@@ -138,7 +131,7 @@ rbindParTable <- function(parTable, newRows) {
           list(row) %in% parTableRows,
         parTableRows = newParTableRows)
   if (sum(as.integer(duplicateRows)) > 0) {
-    warning("Some duplicates in the parTable was removed, have you accidentally ",
+    warning2("Some duplicates in the parTable was removed, have you accidentally ",
             "specified some of these in your syntax? \n",
             capturePrint(parTable[duplicateRows, ]))
   }

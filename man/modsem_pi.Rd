@@ -5,21 +5,21 @@
 \title{Interaction between latent variables using product indicators}
 \usage{
 modsem_pi(
-  modelSyntax = NULL,
+  model.syntax = NULL,
   data = NULL,
   method = "dblcent",
-  match = FALSE,
-  standardizeData = FALSE,
-  centerData = FALSE,
-  firstLoadingFixed = TRUE,
-  centerBefore = NULL,
-  centerAfter = NULL,
-  residualsProds = NULL,
-  residualCovSyntax = NULL,
-  constrainedProdMean = NULL,
-  constrainedLoadings = NULL,
-  constrainedVar = NULL,
-  constrainedResCovMethod = NULL,
+  match = NULL,
+  standardize.data = FALSE,
+  center.data = FALSE,
+  first.loading.fixed = TRUE,
+  center.before = NULL,
+  center.after = NULL,
+  residuals.prods = NULL,
+  residual.cov.syntax = NULL,
+  constrained.prod.mean = NULL,
+  constrained.loadings = NULL,
+  constrained.var = NULL,
+  constrained.res.cov.method = NULL,
   auto.scale = "none",
   auto.center = "none",
   estimator = "ML",
@@ -29,7 +29,7 @@ modsem_pi(
 )
 }
 \arguments{
-\item{modelSyntax}{lavaan syntax}
+\item{model.syntax}{lavaan syntax}
 
 \item{data}{dataframe}
 
@@ -42,27 +42,27 @@ modsem_pi(
 
 \item{match}{should the product indicators be created by using the match-strategy}
 
-\item{standardizeData}{should data be scaled before fitting model}
+\item{standardize.data}{should data be scaled before fitting model}
 
-\item{centerData}{should data be centered before fitting model}
+\item{center.data}{should data be centered before fitting model}
 
-\item{firstLoadingFixed}{Sould the first factorloading in the latent prod be fixed to one?}
+\item{first.loading.fixed}{Sould the first factorloading in the latent prod be fixed to one?}
 
-\item{centerBefore}{should inds in prods be centered before computing prods (overwritten by method, if method != NULL)}
+\item{center.before}{should inds in prods be centered before computing prods (overwritten by method, if method != NULL)}
 
-\item{centerAfter}{should ind prods be centered after they have been computed?}
+\item{center.after}{should ind prods be centered after they have been computed?}
 
-\item{residualsProds}{should ind prods be centered using residuals (overwritten by method, if method != NULL)}
+\item{residuals.prods}{should ind prods be centered using residuals (overwritten by method, if method != NULL)}
 
-\item{residualCovSyntax}{should syntax for residual covariances be produced (overwritten by method, if method != NULL)}
+\item{residual.cov.syntax}{should syntax for residual covariances be produced (overwritten by method, if method != NULL)}
 
-\item{constrainedProdMean}{should syntax prod mean be produced (overwritten by method, if method != NULL)}
+\item{constrained.prod.mean}{should syntax prod mean be produced (overwritten by method, if method != NULL)}
 
-\item{constrainedLoadings}{should syntax for constrained loadings be produced (overwritten by method, if method != NULL)}
+\item{constrained.loadings}{should syntax for constrained loadings be produced (overwritten by method, if method != NULL)}
 
-\item{constrainedVar}{should syntax for constrained variances be produced (overwritten by method, if method != NULL)}
+\item{constrained.var}{should syntax for constrained variances be produced (overwritten by method, if method != NULL)}
 
-\item{constrainedResCovMethod}{method for constraining residual covariances}
+\item{constrained.res.cov.method}{method for constraining residual covariances}
 
 \item{auto.scale}{methods which should be scaled automatically (usually not useful)}
 
@@ -77,7 +77,7 @@ modsem_pi(
 \item{...}{arguments passed to other functions, e.g,. lavaan}
 }
 \value{
-ModSEM object
+modsem object
 }
 \description{
 modsem_pi is a function for estimating interaction effects between latent variables, 
@@ -88,6 +88,7 @@ two frameworks: 1. Product Indicator based approaches ("dblcent", "rca", "uca",
 modsem_pi() is essentially a just 
 a fancy wrapper for lavaan::sem()  which generates the 
 necessary syntax, and variables for the estimation of models with latent product indicators.
+use `default_settings_pi()` to get the default settings for the different methods.
 }
 \examples{
 library(modsem)
@@ -116,20 +117,20 @@ summary(est1Constrained)
 # Theory Of Planned Behavior
 tpb <- ' 
 # Outer Model (Based on Hagger et al., 2007)
-  LATT =~ att1 + att2 + att3 + att4 + att5
-  LSN =~ sn1 + sn2
-  LPBC =~ pbc1 + pbc2 + pbc3
-  LINT =~ int1 + int2 + int3
-  LBEH =~ b1 + b2
+  ATT =~ att1 + att2 + att3 + att4 + att5
+  SN =~ sn1 + sn2
+  PBC =~ pbc1 + pbc2 + pbc3
+  INT =~ int1 + int2 + int3
+  BEH =~ b1 + b2
 
 # Inner Model (Based on Steinmetz et al., 2011)
   # Covariances
-  LATT ~~ LSN + LPBC
-  LPBC ~~ LSN 
+  ATT ~~ SN + PBC
+  PBC ~~ SN 
   # Causal Relationsships
-  LINT ~ LATT + LSN + LPBC
-  LBEH ~ LINT + LPBC 
-  LBEH ~ LINT:LPBC  
+  INT ~ ATT + SN + PBC
+  BEH ~ INT + PBC 
+  BEH ~ INT:PBC  
 '
 
 # double centering approach

@@ -23,7 +23,7 @@ knitr::opts_chunk$set(
 #  '
 #  
 #  lms1 <- modsem(m1, oneInt, method = "lms")
-#  summary(lms1)
+#  summary(lms1, standardized = TRUE) # standardized estimates
 
 ## -----------------------------------------------------------------------------
 #  qml1 <- modsem(m1, oneInt, method = "qml")
@@ -49,6 +49,9 @@ knitr::opts_chunk$set(
 #    BEH ~ INT:PBC
 #  '
 #  
-#  lms2 <- modsem(tpb, TPB, method = "lms", nodes = 20)
+#  lms2 <- modsem(tpb, TPB, method = "lms", nodes = 32)
 #  summary(lms2)
+#  
+#  qml2 <- modsem(tpb, TPB, method = "qml")
+#  summary(qml2, standardized = TRUE) # standardized estimates
 

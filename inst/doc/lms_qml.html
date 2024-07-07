@@ -357,9 +357,9 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true"></a><span class="kw">library</span>(modsem)</span></code></pre></div>
-<div id="the-latent-moderated-structural-equations-lms-and-the-quasi-maximum-likelihood-qml-approaches." class="section level1">
-<h1>The Latent Moderated Structural Equations (LMS) and the Quasi Maximum Likelihood (QML) approaches.</h1>
-<p>The LMS and QML approaches are implemented in modsem. Currently the QML approach is only implented for simpler models with a single endogenous (i.e., dependent) variable. The LMS approach however works on most models, except for models where there is an interaction between two endogenous (i.e., dependent) variables. Both approaches (particularily the LMS approach) are quite computationally intensive, and are thus partly implemented in C++ (using Rcpp and RcppArmadillo). Additionally starting parameters are estimated using the double centering approach (and the means of the observed variables) are used to generate good starting parameters for faster convergence. If you want to see the progress of the estimation process you can use ´verbose = TRUE´.</p>
+<div id="the-latent-moderated-structural-equations-lms-and-the-quasi-maximum-likelihood-qml-approach" class="section level1">
+<h1>The Latent Moderated Structural Equations (LMS) and the Quasi Maximum Likelihood (QML) approach</h1>
+<p>Both the LMS- and QML approach works on most models, but interaction effects with endogenous can be a bit tricky to estimate (see the <a href="https://kss2k.github.io/intro_modsem/articles/interaction_two_etas.html">vignette</a>. Both approaches (particularily the LMS approach) are quite computationally intensive, and are thus partly implemented in C++ (using Rcpp and RcppArmadillo). Additionally starting parameters are estimated using the double centering approach (and the means of the observed variables) are used to generate good starting parameters for faster convergence. If you want to see the progress of the estimation process you can use ´verbose = TRUE´.</p>
 <div id="a-simple-example" class="section level2">
 <h2>A Simple Example</h2>
 <p>Here you can see an example of the LMS approach for a simple model. By default the summary function calculates fit measures compared to a null model (i.e., the same model without an interaction term).</p>
@@ -377,14 +377,15 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true"></a><span class="st">&#39;</span></span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true"></a></span>
 <span id="cb2-14"><a href="#cb2-14" aria-hidden="true"></a>lms1 &lt;-<span class="st"> </span><span class="kw">modsem</span>(m1, oneInt, <span class="dt">method =</span> <span class="st">&quot;lms&quot;</span>)</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true"></a><span class="kw">summary</span>(lms1)</span></code></pre></div>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true"></a><span class="kw">summary</span>(lms1, <span class="dt">standardized =</span> <span class="ot">TRUE</span>) <span class="co"># standardized estimates </span></span></code></pre></div>
 <p>Here you can see the same example using the QML approach.</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true"></a>qml1 &lt;-<span class="st"> </span><span class="kw">modsem</span>(m1, oneInt, <span class="dt">method =</span> <span class="st">&quot;qml&quot;</span>)</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true"></a><span class="kw">summary</span>(qml1)</span></code></pre></div>
 </div>
 <div id="a-more-complicated-example" class="section level2">
 <h2>A more complicated example</h2>
-<p>Here you can see an example of a more complicated example using the model from the theory of planned behaviour (TPB), where there are two endogenous variables, where there is an interaction between an endogenous and exogenous variable. (note this does not work with the QML approach). For more complicated models, it is recommended that you increase the number of nodes used for numerical integration. By default the number of nodes is set to 16, and can be increased using the nodes argument.</p>
+<p>Here you can see an example of a more complicated example using the model from the theory of planned behaviour (TPB), where there are two endogenous variables, where there is an interaction between an endogenous and exogenous variable. When estimating more complicated models with the LMS-approach, it is recommended that you increase the number of nodes used for numerical integration. By default the number of nodes is set to 16, and can be increased using the nodes argument. The argument has no effect on the QML approach. When there is an interaction effect between an endogenous and exogenous variable, it is recommended that you use at least 32 nodes for the LMS-approach. You can also get robust standard errors by setting <code>robust.se = TRUE</code> in the <code>modsem()</code> function.</p>
+<p>Note: If you want the lms-approach to give as similar results as possible to mplus, you would have to increase the number of nodes (e.g., <code>nodes = 100</code>).</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true"></a><span class="co"># ATT = Attitude, </span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true"></a><span class="co"># PBC = Perceived Behavioural Control </span></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true"></a><span class="co"># INT = Intention </span></span>
@@ -404,8 +405,11 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb4-17"><a href="#cb4-17" aria-hidden="true"></a><span class="st">  BEH ~ INT:PBC  </span></span>
 <span id="cb4-18"><a href="#cb4-18" aria-hidden="true"></a><span class="st">&#39;</span></span>
 <span id="cb4-19"><a href="#cb4-19" aria-hidden="true"></a></span>
-<span id="cb4-20"><a href="#cb4-20" aria-hidden="true"></a>lms2 &lt;-<span class="st"> </span><span class="kw">modsem</span>(tpb, TPB, <span class="dt">method =</span> <span class="st">&quot;lms&quot;</span>, <span class="dt">nodes =</span> <span class="dv">20</span>)</span>
-<span id="cb4-21"><a href="#cb4-21" aria-hidden="true"></a><span class="kw">summary</span>(lms2)</span></code></pre></div>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true"></a>lms2 &lt;-<span class="st"> </span><span class="kw">modsem</span>(tpb, TPB, <span class="dt">method =</span> <span class="st">&quot;lms&quot;</span>, <span class="dt">nodes =</span> <span class="dv">32</span>)</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true"></a><span class="kw">summary</span>(lms2)</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true"></a></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true"></a>qml2 &lt;-<span class="st"> </span><span class="kw">modsem</span>(tpb, TPB, <span class="dt">method =</span> <span class="st">&quot;qml&quot;</span>)</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true"></a><span class="kw">summary</span>(qml2, <span class="dt">standardized =</span> <span class="ot">TRUE</span>) <span class="co"># standardized estimates</span></span></code></pre></div>
 </div>
 </div>
 

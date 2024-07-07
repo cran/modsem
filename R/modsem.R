@@ -1,7 +1,9 @@
 #' Interaction between latent variables
 #'
-#' @param modelSyntax lavaan syntax
+#' @param model.syntax lavaan syntax
+#' 
 #' @param data dataframe
+#' 
 #' @param method method to use:
 #' "rca" = residual centering approach (passed to lavaan),
 #' "uca" = unconstrained approach (passed to lavaan),
@@ -10,10 +12,9 @@
 #' "lms" = laten model structural equations (not passed to lavaan).
 #' "qml" = quasi maximum likelihood estimation of laten model structural equations (not passed to lavaan).
 #' "custom" = use parameters specified in the function call (passed to lavaan)
-#' @param standardize should data be scaled before fitting model
-#' @param center should data be centered before fitting model
-#' @param ... arguments passed to other functions depending on method (see modsem_pi, modsem_lms_qml, and modsem_mplus)
-#' @return ModSEM object
+#' 
+#' @param ... arguments passed to other functions depending on method (see modsem_pi, modsem_da, and modsem_mplus)
+#' @return modsem object
 #' @export 
 #' @description
 #' modsem is a function for estimating interaction effects between latent variables, 
@@ -27,7 +28,7 @@
 #' The distributionally based approaches are implemented in seperately, and are 
 #' are not estimated using lavaan::sem(), but rather using custom functions (largely)
 #' written in C++ for performance reasons. For greater control, it is advised that 
-#' you use one of the sub-functions (modsem_pi, modsem_lms_qml, modsem_mplus) directly, 
+#' you use one of the sub-functions (modsem_pi, modsem_da, modsem_mplus) directly, 
 #' as passing additional arguments to them via modsem() can lead to unexpected behavior.
 #' @examples
 #' library(modsem)
@@ -49,82 +50,76 @@
 #' 
 #' \dontrun{
 #' # The Constrained Approach 
-#' est1Constrained <- modsem(m1, oneInt, method = "ca")
-#' summary(est1Constrained)
+#' est1_ca <- modsem(m1, oneInt, method = "ca")
+#' summary(est1_ca)
 #'
 #' # LMS approach
-#' est1LMS <- modsem(m1, oneInt, method = "lms")
-#' summary(est1LMS)
+#' est1_lms <- modsem(m1, oneInt, method = "lms")
+#' summary(est1_lms)
 #'
 #' # QML approach
-#' est1QML <- modsem(m1, oneInt, method = "qml")
-#' summary(est1QML)
+#' est1_qml <- modsem(m1, oneInt, method = "qml")
+#' summary(est1_qml)
 #' 
 #' }
 #' 
 #' # Theory Of Planned Behavior
 #' tpb <- ' 
 #' # Outer Model (Based on Hagger et al., 2007)
-#'   LATT =~ att1 + att2 + att3 + att4 + att5
-#'   LSN =~ sn1 + sn2
-#'   LPBC =~ pbc1 + pbc2 + pbc3
-#'   LINT =~ int1 + int2 + int3
-#'   LBEH =~ b1 + b2
+#'   ATT =~ att1 + att2 + att3 + att4 + att5
+#'   SN =~ sn1 + sn2
+#'   PBC =~ pbc1 + pbc2 + pbc3
+#'   INT =~ int1 + int2 + int3
+#'   BEH =~ b1 + b2
 #' 
 #' # Inner Model (Based on Steinmetz et al., 2011)
-#'   # Covariances
-#'   LATT ~~ LSN + LPBC
-#'   LPBC ~~ LSN 
-#'   # Causal Relationsships
-#'   LINT ~ LATT + LSN + LPBC
-#'   LBEH ~ LINT + LPBC 
-#'   LBEH ~ LINT:LPBC  
+#'   INT ~ ATT + SN + PBC
+#'   BEH ~ INT + PBC 
+#'   BEH ~ INT:PBC  
 #' '
 #' 
 #' # double centering approach
-#' estTpb <- modsem(tpb, data = TPB)
-#' summary(estTpb)
+#' est_tpb <- modsem(tpb, data = TPB)
+#' summary(est_tpb)
 #'
 #' \dontrun{
 #' # The Constrained Approach 
-#' estTpbConstrained <- modsem(tpb, data = TPB, method = "ca")
-#' summary(estTpbConstrained)
+#' est_tpb_ca <- modsem(tpb, data = TPB, method = "ca")
+#' summary(est_tpb_ca)
 #'
 #' # LMS approach
-#' estTpbLMS <- modsem(tpb, data = TPB, method = "lms")
-#' summary(estTpbLMS)
+#' est_tpb_lms <- modsem(tpb, data = TPB, method = "lms")
+#' summary(est_tpb_lms)
+#' 
+#' # QML approach
+#' est_tpb_qml <- modsem(tpb, data = TPB, method = "qml")
+#' summary(est_tpb_qml)
 #' }
-modsem <- function(modelSyntax = NULL,
+modsem <- function(model.syntax = NULL,
                    data = NULL,
                    method = "dblcent",
-                   standardize = FALSE,
-                   center = FALSE,
                    ...) {
-  if (is.null(modelSyntax)) {
-    stop("No modelSyntax provided")
-  } else if (!is.character(modelSyntax)) {
-    stop("The provided model syntax is not a string!")
-  } else if (length(modelSyntax) > 1) {
-    stop("The provided model syntax is not of length 1")
+  if (is.null(model.syntax)) {
+    stop2("No model.syntax provided")
+  } else if (!is.character(model.syntax)) {
+    stop2("The provided model syntax is not a string!")
+  } else if (length(model.syntax) > 1) {
+    stop2("The provided model syntax is not of length 1")
   }
 
   if (is.null(data)) {
-    stop("No data provided")
+    stop2("No data provided")
   } else if (!is.data.frame(data)) {
     data <- as.data.frame(data)
   }
 
-  if (center) data <- lapplyDf(data, FUN = function(x) x - mean(x))
-  if (standardize) data <- lapplyDf(data, FUN = scaleIfNumeric, 
-                                    scaleFactor = FALSE)
-
   if (method %in% c("rca", "uca", "dblcent", "pind", "ca", "custom")) {
-    return(modsem_pi(modelSyntax, data = data, method = method, ...))
+    return(modsem_pi(model.syntax, data = data, method = method, ...))
   } else if (method %in% c("lms", "qml")) {
-    return(modsem_lms_qml(modelSyntax, data = data, method = method, ...))
+    return(modsem_da(model.syntax, data = data, method = method, ...))
   } else if (method == "mplus") {
-    return(modsem_mplus(modelSyntax, data = data, ...))
+    return(modsem_mplus(model.syntax, data = data, ...))
   } else {
-    stop("Method not recognized")
+    stop2("Method not recognized")
   }
 }

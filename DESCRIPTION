@@ -2,7 +2,7 @@ Package: modsem
 Type: Package
 Title: Latent Interaction (and Moderation) Analysis in Structural
         Equation Models (SEM)
-Version: 0.1.4
+Version: 1.0.1
 Authors@R: 
     person(given = "Kjell", family = "Solem Slupphaug", 
            email = "slupphaugkjell@gmail.com", role = c("aut", "cre"),
@@ -20,7 +20,7 @@ Description:
       The quasi-maximum likelihood (QML) approach (Klein & Muthén, 2007) (temporarily unavailable)
     The constrained- unconstrained, residual- and double centering- approaches
     are estimated via 'lavaan' (Rosseel, 2012), whilst the LMS- and QML- approaches
-    are estimated via by ModSEM it self. Alternatively model can be
+    are estimated via by modsem it self. Alternatively model can be
     estimated via 'Mplus' (Muthén & Muthén, 1998-2017).
     References:
     Algina, J., & Moulder, B. C. (2001). 
@@ -53,14 +53,14 @@ LazyData: true
 RoxygenNote: 7.3.1
 LinkingTo: Rcpp, RcppArmadillo
 Imports: Rcpp, purrr, stringr, lavaan, rlang, MplusAutomation, nlme,
-        R6, dplyr, mvnfast, stats, gaussquad, mvtnorm, ggplot2
+        R6, dplyr, mvnfast, stats, fastGHQuad, mvtnorm, ggplot2
 Depends: R (>= 3.50)
 URL: https://github.com/Kss2k/modsem
 Suggests: knitr, rmarkdown
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2024-06-01 10:14:08 UTC; kjell
+Packaged: 2024-07-03 09:15:18 UTC; kjell
 Author: Kjell Solem Slupphaug [aut, cre]
     (<https://orcid.org/0009-0005-8324-2834>)
 Repository: CRAN
-Date/Publication: 2024-06-02 10:20:02 UTC
+Date/Publication: 2024-07-07 16:20:02 UTC

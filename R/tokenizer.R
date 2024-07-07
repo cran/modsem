@@ -38,7 +38,6 @@ getLines <- function(syntax) {
 
 createTokensLine <- function(line, i = 1,
                              token = NULL, listTokens = list()) {
-  # if (i == length(line)) browser()
   if (i > length(line)) {
     return(appendToList(listTokens, token))
   }
@@ -81,7 +80,7 @@ initializeToken <- function(char, pos, line) {
   } else if (grepl("[\\(\\)]", char)) {
     type <- "LavClosure"
     priority <- 2
-  } else if (grepl("[\\=\\~\\*\\+\\<\\>\\-\\,\\:\\^]", char)) {
+  } else if (grepl("[\\=\\~\\*\\+\\<\\>\\-\\,\\:\\^\\/]", char)) {
     type <- "LavOperator"
     priority <- 0
   } else if (grepl("[[:alnum:]]", char)) {
@@ -91,7 +90,7 @@ initializeToken <- function(char, pos, line) {
     type <- "LavString"
     priority <- 10
   } else {
-    stop("Unrecognized class of token in line ", attr(line, "lineNumber"),
+    stop2("Unrecognized class of token in line ", attr(line, "lineNumber"),
          " pos ", pos, "\n",
          highlightError(line, pos = pos))
   }
@@ -121,7 +120,7 @@ fitsToken <- function(token, nextChar) {
 #' @export
 fitsToken.LavName <- function(token, nextChar) {
   if (length(nextChar) != 1) {
-    stop("Wrong length of nextChar", nextChar)
+    stop2("Wrong length of nextChar", nextChar)
   }
   # if object name ends with ( it is a function,
   # and next char belongs to a new object
@@ -135,7 +134,7 @@ fitsToken.LavName <- function(token, nextChar) {
 #' @export
 fitsToken.LavString <- function(token, nextChar) {
   if (length(nextChar) != 1) {
-    stop("Wrong length of nextChar", nextChar)
+    stop2("Wrong length of nextChar", nextChar)
   }
   # if object name ends with ( it is a function,
   # and next char belongs to a new object
@@ -149,7 +148,7 @@ fitsToken.LavString <- function(token, nextChar) {
 #' @export
 fitsToken.LavOperator <- function(token, nextChar) {
   if (length(nextChar) != 1) {
-    stop("Wrong length of nextChar", nextChar)
+    stop2("Wrong length of nextChar", nextChar)
   }
   completeToken <- paste0(token, nextChar)
   switch(completeToken,
@@ -167,7 +166,7 @@ fitsToken.LavOperator <- function(token, nextChar) {
 #' @export
 fitsToken.LavBlank <- function(token, nextChar) {
   if (length(nextChar) != 1) {
-    stop("Wrong length of nextChar", nextChar)
+    stop2("Wrong length of nextChar", nextChar)
   }
   grepl("\\s+", nextChar)
 }
@@ -182,7 +181,7 @@ fitsToken.LavClosure <- function(token, nextChar) {
 #' @export
 fitsToken.LavNumeric <- function(token, nextChar) {
   if (length(nextChar) != 1) {
-    stop("Wrong length of nextChar", nextChar)
+    stop2("Wrong length of nextChar", nextChar)
   }
   grepl("[[:digit:].]", nextChar)
 }
@@ -213,7 +212,7 @@ assignSubClass.LavOperator <- function(token) {
           ":"  = {subClass <- "LavInteraction"; priority <- 2},
           ":=" = {subClass <- "LavMediation";   priority <- 0},
           ","  = {subClass <- "LavSeperator";   priority <- 0},
-          stop("Unrecognized operator: ", highlightErrorToken(token))
+          stop2("Unrecognized operator: ", highlightErrorToken(token))
   )
   structure(token,
             class = c(subClass, class(token)),
@@ -226,7 +225,7 @@ assignSubClass.LavClosure <- function(token) {
   switch(getTokenString(token),
           "("  = {subClass <- "LeftBracket";    priority <- 3},
           ")"  = {subClass <- "RightBracket";   priority <- 3},
-          stop("Unrecognized operator: ", token)
+          stop2("Unrecognized operator: ", token)
   )
   structure(token,
             class = c(subClass, class(token)),
@@ -277,14 +276,14 @@ prioritizeTokens <- function(listTokens, i = 1, brackets = list(),
                              nLeftBrackets = 0) {
   if (is.null(listTokens) || i > length(listTokens)) {
     if (nLeftBrackets != 0) {
-        stop("Unmatched left bracket", highlightErrorToken(brackets[[1]]))
+        stop2("Unmatched left bracket", highlightErrorToken(brackets[[1]]))
     }
     return(listTokens)
   } else if (is.RightClosure(listTokens[[i]])) {
     brackets <- brackets[-length(brackets)]
     nLeftBrackets <- nLeftBrackets - 1
     if (nLeftBrackets < 0) {
-      stop("Unmatched right bracket ", highlightErrorToken(listTokens[[i]]))
+      stop2("Unmatched right bracket ", highlightErrorToken(listTokens[[i]]))
     }
   }
   getTokenPriority(listTokens[[i]]) <-
@@ -313,7 +312,7 @@ removeLavBlankLine <- function(line, removeComments = TRUE) {
 tokenizeSyntax <- function(syntax, optimize = TRUE) {
   resetModsemParseEnv()
   if (!is.character(syntax)) {
-    stop("Syntax must be a string")
+    stop2("Syntax must be a string")
   }
   lines <- getLines(syntax)
   modsemParseEnv$syntaxLines <- lines
@@ -342,7 +341,7 @@ mergeTokensToString <- function(listTokens) {
 
 addCharToken <- function(token, nextChar) {
   if (length(nextChar) != 1) {
-    stop("Wrong length of nextChar ", nextChar)
+    stop2("Wrong length of nextChar ", nextChar)
   }
 
   out <- paste0(token, nextChar)
@@ -406,6 +405,11 @@ is.LavToken <- function(token) {
 }
 
 
+is.LavName <- function(token) {
+  inherits(token, "LavName")
+}
+
+
 is.LavOperator <- function(token) {
   inherits(token, "LavOperator")
 }
@@ -455,4 +459,11 @@ is.firstClassOperator <- function(token) {
          ">"  = TRUE,
          "==" = TRUE,
          FALSE)
+}
+
+
+#' @export
+as.character.LavToken <- function(x, ...) {
+  attributes(x) <- NULL
+  x
 }

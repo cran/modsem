@@ -357,10 +357,10 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true"></a><span class="kw">library</span>(modsem)</span></code></pre></div>
-<p>If you’re using one of the product indicator approaches, you might want to use some lavaan functions on top of the estimated lavaan-object. To do so you can extract the lavaan-object using ‘$’.</p>
+<p>If you’re using one of the product indicator approaches, you might want to use some lavaan functions on top of the estimated lavaan-object. To do so you can extract the lavaan-object using the <code>extract_lavaan()</code> function.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true"></a><span class="kw">library</span>(lavaan)</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true"></a></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true"></a>m1 &lt;-<span class="st"> &quot;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true"></a>m1 &lt;-<span class="st"> &#39;</span></span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true"></a><span class="st"># Outer Model</span></span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true"></a><span class="st">X =~ x1 + x2 + x3</span></span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true"></a><span class="st">Y =~ y1 + y2 + y3</span></span>
@@ -368,11 +368,11 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true"></a></span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true"></a><span class="st"># Inner model</span></span>
 <span id="cb2-10"><a href="#cb2-10" aria-hidden="true"></a><span class="st">Y ~ X + Z + X:Z</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true"></a><span class="st">&quot;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true"></a><span class="st">&#39;</span></span>
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true"></a></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true"></a>est1 &lt;-<span class="st"> </span><span class="kw">modsem</span>(m1, oneInt)</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true"></a>lavObject &lt;-<span class="st"> </span>est1<span class="op">$</span>lavaan</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true"></a>bootstrap &lt;-<span class="st"> </span><span class="kw">bootstrapLavaan</span>(lavObject, <span class="dt">R =</span> <span class="dv">500</span>)</span></code></pre></div>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true"></a>est &lt;-<span class="st"> </span><span class="kw">modsem</span>(m1, oneInt)</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true"></a>lav_object &lt;-<span class="st"> </span><span class="kw">extract_lavaan</span>(est)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true"></a>bootstrap &lt;-<span class="st"> </span><span class="kw">bootstrapLavaan</span>(lav_object, <span class="dt">R =</span> <span class="dv">500</span>)</span></code></pre></div>
 
 
 

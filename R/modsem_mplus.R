@@ -1,6 +1,6 @@
 #' Estimation latent interactions through mplus 
 #'
-#' @param modelSyntax lavaan/modsem syntax 
+#' @param model.syntax lavaan/modsem syntax 
 #' @param data dataset
 #' @param estimator estimator argument passed to mplus
 #' @param type type argument passed to mplus
@@ -15,20 +15,20 @@
 #' # Theory Of Planned Behavior
 #' tpb <- ' 
 #' # Outer Model (Based on Hagger et al., 2007)
-#'   LATT =~ att1 + att2 + att3 + att4 + att5
-#'   LSN =~ sn1 + sn2
-#'   LPBC =~ pbc1 + pbc2 + pbc3
-#'   LINT =~ int1 + int2 + int3
-#'   LBEH =~ b1 + b2
+#'   ATT =~ att1 + att2 + att3 + att4 + att5
+#'   SN =~ sn1 + sn2
+#'   PBC =~ pbc1 + pbc2 + pbc3
+#'   INT =~ int1 + int2 + int3
+#'   BEH =~ b1 + b2
 #' 
 #' # Inner Model (Based on Steinmetz et al., 2011)
 #'   # Covariances
-#'   LATT ~~ LSN + LPBC
-#'   LPBC ~~ LSN 
+#'   ATT ~~ SN + PBC
+#'   PBC ~~ SN 
 #'   # Causal Relationsships
-#'   LINT ~ LATT + LSN + LPBC
-#'   LBEH ~ LINT + LPBC 
-#'   LBEH ~ LINT:LPBC  
+#'   INT ~ ATT + SN + PBC
+#'   BEH ~ INT + PBC 
+#'   BEH ~ INT:PBC  
 #' '
 #' 
 #' \dontrun{
@@ -36,16 +36,19 @@
 #' summary(estTpbLMS)
 #' }
 #' 
-modsem_mplus <- function(modelSyntax, 
+modsem_mplus <- function(model.syntax, 
                          data, 
                          estimator = "ml", 
                          type = "random", 
                          algorithm = "integration", 
                          process = "8", 
                          ...) {
-  parTable <- modsemify(modelSyntax)
-  indicators <- parTable[parTable$op == "=~", "rhs", drop = TRUE] |>
-    unique()
+  parTable <- modsemify(model.syntax)
+  indicators <- unique(parTable[parTable$op == "=~", "rhs", drop = TRUE])
+  intTerms <- unique(getIntTermRows(parTable)$rhs)
+  intTermsMplus <- stringr::str_remove_all(intTerms, ":") |>
+    stringr::str_to_upper()
+
   model <- MplusAutomation::mplusObject(
     TITLE = "Running Model via Mplus",
     usevariables = indicators,
@@ -64,14 +67,15 @@ modsem_mplus <- function(modelSyntax,
   coefs <- MplusAutomation::extract.mplus.model(results)
   coefsTable <- data.frame(lhsOpRhs = coefs@coef.names,
                            est = coefs@coef,
-                           se = coefs@se,
-                           pvalue = coefs@pvalues)
+                           std.error = coefs@se,
+                           p.value = coefs@pvalues)
   # Measurement Model
   indicatorsCaps <- stringr::str_to_upper(indicators)
   patternMeas <-
     paste0("(", stringr::str_c(indicatorsCaps, collapse = "|"), ")") |>
     paste0("<-(?!>|Intercept)")
   measCoefNames <- grepl(patternMeas, coefsTable$lhsOpRhs, perl = TRUE)
+
   # Mplus has lhs/rhs in reversed order for the measurement model,
     # compared to lavaan,
   measRhs <- stringr::str_split_i(coefsTable$lhsOpRhs[measCoefNames],
@@ -79,7 +83,7 @@ modsem_mplus <- function(modelSyntax,
   measLhs <- stringr::str_split_i(coefsTable$lhsOpRhs[measCoefNames],
                                   "<-", i = 2)
   measModel <- data.frame(lhs = measLhs, op = "=~", rhs = measRhs) |>
-    cbind(coefsTable[measCoefNames, c("est", "se", "pvalue")])
+    cbind(coefsTable[measCoefNames, c("est", "std.error", "p.value")])
 
   # Structural Model
   measrRemoved <- coefsTable[!measCoefNames, ]
@@ -91,7 +95,14 @@ modsem_mplus <- function(modelSyntax,
   structRhs <- stringr::str_split_i(measrRemoved$lhsOpRhs[structCoefNames],
                                   "<-", i = 2)
   structModel <- data.frame(lhs = structLhs, op = "~", rhs = structRhs) |>
-    cbind(measrRemoved[structCoefNames, c("est", "se", "pvalue")])
+    cbind(measrRemoved[structCoefNames, c("est", "std.error", "p.value")])
+ 
+  for (i in seq_along(intTerms)) {
+    xzMplus <- intTermsMplus[[i]]
+    xzModsem <- intTerms[[i]]
+    structModel[structModel$rhs == xzMplus, "rhs"] <- xzModsem
+    structModel[structModel$lhs == xzMplus, "lhs"] <- xzModsem
+  }
 
   # Variances and Covariances
   structMeasrRemoved <- measrRemoved[!structCoefNames, ]
@@ -102,7 +113,7 @@ modsem_mplus <- function(modelSyntax,
   covVarRhs <- stringr::str_split_i(structMeasrRemoved$lhsOpRhs[covVarCoefNames],
                                   "<->", i = 2)
   covVarModel <- data.frame(lhs = covVarLhs, op = "~~", rhs = covVarRhs) |>
-    cbind(structMeasrRemoved[covVarCoefNames, c("est", "se", "pvalue")])
+    cbind(structMeasrRemoved[covVarCoefNames, c("est", "std.error", "p.value")])
 
   # Intercepts
   covStructMeasrRemoved <- structMeasrRemoved[!covVarCoefNames, ]
@@ -111,20 +122,21 @@ modsem_mplus <- function(modelSyntax,
   interceptLhs <- stringr::str_split_i(covStructMeasrRemoved$lhsOpRhs[interceptNames],
                                   "<-", i = 1)
   interceptModel <- data.frame(lhs = interceptLhs, op = "~", rhs = 1) |>
-    cbind(covStructMeasrRemoved[interceptNames, c("est", "se", "pvalue")])
+    cbind(covStructMeasrRemoved[interceptNames, c("est", "std.error", "p.value")])
 
   mplusParTable <- rbind(measModel, structModel, covVarModel, interceptModel)
-  mplusParTable [c("lhs", "rhs")] <- lapplyDf(mplusParTable[c("lhs", "rhs")],
-                                   function(x)
-                                    stringr::str_remove_all(x, " "))
-  mplusParTable$ci.lower <- mplusParTable$est - 1.96*mplusParTable$se
-  mplusParTable$ci.upper <- mplusParTable$est + 1.96*mplusParTable$se
-  mplusParTable$pvalue[mplusParTable$pvalue == 999] <- NA
-  mplusParTable$label <- NA
-  mplusParTable$z <- NA
+  mplusParTable [c("lhs", "rhs")] <- 
+    lapplyDf(mplusParTable[c("lhs", "rhs")], function(x)
+             stringr::str_remove_all(x, " "))
+  
+  mplusParTable$ci.lower <- mplusParTable$est - 1.96 * mplusParTable$std.error
+  mplusParTable$ci.upper <- mplusParTable$est + 1.96 * mplusParTable$std.error
+  mplusParTable$p.value[mplusParTable$p.value == 999] <- NA
+  mplusParTable$z.value <- mplusParTable$est / mplusParTable$std.error
+  mplusParTable$z.value[is.infinite(mplusParTable$z.value)] <- NA
+  mplusParTable$label <- ""
 
-  modelSpec <- list(parTable = parTable,
-                    coefParTable = mplusParTable,
+  modelSpec <- list(parTable = mplusParTable,
                     model = results,
                     coefs = coefs,
                     data = data)
@@ -141,7 +153,7 @@ parTableToMplusModel <- function(parTable, ignoreLabels = TRUE) {
   newRows <- lapply(elemsInInts,
                     function(x) {
                       if (length(x) != 2) {
-                        stop("Number of variables in interaction must be two")
+                        stop2("Number of variables in interaction must be two")
                       }
                       lhs <- paste0(x[[1]], x[[2]])
                       rhs <- paste(x[[1]], "XWITH", x[[2]])
@@ -155,7 +167,7 @@ parTableToMplusModel <- function(parTable, ignoreLabels = TRUE) {
   if (ignoreLabels) parTable[["mod"]] <- ""
   for (i in 1:nrow(parTable)) {
     if (parTable[["mod"]][i] != "") {
-      warning("Using labels in Mplus, was this intended?")
+      warning2("Using labels in Mplus, was this intended?")
       modifier <- paste0("* (", parTable[["mod"]][[i]],")")
 
     } else {
@@ -184,5 +196,5 @@ switchLavOpToMplus <- function(op) {
          "~" = "ON",
          "~~" = "WITH",
          ":" = "|",
-         stop("Operator not supported for use in Mplus: ", op, "\n"))
+         stop2("Operator not supported for use in Mplus: ", op, "\n"))
 }

@@ -1,4 +1,4 @@
-# ModSEM <img src="man/figures/ModSEM.png" alt="Logo" align = "right" height="139" class="logo">
+# [modsem](https://kss2k.github.io/intro_modsem/) <img src="man/figures/modsem.png" alt="Logo" align = "right" height="139" class="logo">
 This is a package which allows you to perform interactions between latent variables (i.e., moderation) in CB-SEM. See https://kss2k.github.io/intro_modsem/ for a tutorial.
 
 # To Install 
@@ -8,7 +8,7 @@ install.packages("modsem")
 
 # Latest version from Github
 install.packages("devtools")
-devtools::install_github("kss2k/modsem")
+devtools::install_github("kss2k/modsem", build_vignettes = TRUE)
 ```
 
 # Methods/Approaches
@@ -24,19 +24,18 @@ There are a number of approaches for estimating interaction effects in SEM. In `
 - `"dblcent"` = double centering approach (Marsh., 2013)
   - default 
 - `"pind"` = basic product indicator approach (not recommended)
-- `"lms"` = The latent moderated structural equations approach
-  - note: now implemented with multiple endogenous variables
-    however it does not allow interactions between two enodgenous
-    variables, it does however allow interactions between exogenous:endogenous
-    and exogenous:exogenous
-  - do `optimize = TRUE` for faster convergence (experimental feature)
-- `"qml"` = The Quasi Maximum Likelihood estimation of latent moderated structural equations. 
-  - note: only works with a single endogenous variable.
+- `"lms"` = The Latent Moderated Structural equations (LMS) approach, see the [vignette](https://kss2k.github.io/intro_modsem/articles/lms_qml.html)
+- `"qml"` = The Quasi Maximum Likelihood (QML) approach, see the [vignette](https://kss2k.github.io/intro_modsem/articles/lms_qml.html)
 - `"mplus"` 
   - estimates model through Mplus, if it is installed
 
-# New Feature (01.06.2024)
-- New function for plotting interaction effects (`plot_interaction()`)
+# New Features (01.06.2024-05-06-2024)
+- New function for plotting interaction effects (`plot_interaction()`), see the [vignette](https://kss2k.github.io/intro_modsem/articles/plot_interactions.html)
+- Interaction effects between endogenous and exogenous variables are now possible by default with QML-approach.
+- Interaction effects between two endogenous variables are now possible with the LMS 
+  and QML approach, using the 'cov.syntax' argument, see the [vignette](https://kss2k.github.io/intro_modsem/articles/interaction_two_etas.html)
+  for more information.
+  (only available on GitHub, not on CRAN)
 
 # Examples 
 
@@ -54,20 +53,20 @@ m1 <- '
 '
 
 # Double centering approach
-est1Dblcent <- modsem(m1, oneInt)
-summary(est1Dblcent)
+est1_dca <- modsem(m1, oneInt)
+summary(est1_dca)
 
 # Constrained approach
-est1Ca <- modsem(m1, oneInt, method = "ca")
-summary(est1Ca)
+est1_ca <- modsem(m1, oneInt, method = "ca")
+summary(est1_ca)
 
 # QML approach 
-est1Qml <- modsem(m1, oneInt, method = "qml")
-summary(est1Qml) 
+est1_qml <- modsem(m1, oneInt, method = "qml")
+summary(est1_qml, standardized = TRUE) 
 
 # LMS approach 
-est1Lms <- modsem(m1, oneInt, method = "lms") 
-summary(est1Lms)
+est1_lms <- modsem(m1, oneInt, method = "lms") 
+summary(est1_lms)
 ```
 
 ## Theory Of Planned Behavior
@@ -75,30 +74,34 @@ summary(est1Lms)
 tpb <- "
 # Outer Model (Based on Hagger et al., 2007)
   ATT =~ att1 + att2 + att3 + att4 + att5
-  LSN =~ sn1 + sn2
+  SN =~ sn1 + sn2
   PBC =~ pbc1 + pbc2 + pbc3
   INT =~ int1 + int2 + int3
   BEH =~ b1 + b2
 
 # Inner Model (Based on Steinmetz et al., 2011)
   # Causal Relationsships
-  INT ~ ATT + LSN + PBC
+  INT ~ ATT + SN + PBC
   BEH ~ INT + PBC
   BEH ~ PBC:INT
 "
 
 # double centering approach
-estTpbDblCent <- modsem(tpb, data = TPB, method = "dblcent")
-summary(estTpbDblCent)
+est_tpb_dca <- modsem(tpb, data = TPB, method = "dblcent")
+summary(est_tpb_dca)
 
 # Constrained approach using Wrigths path tracing rules for generating
 # the appropriate constraints
-estTpbCa <- modsem(tpb, data = TPB, method = "ca") 
-summary(estTpbCa)
+est_tpb_ca <- modsem(tpb, data = TPB, method = "ca") 
+summary(est_tpb_ca)
 
 # LMS approach 
-estTpbLms <- modsem(tpb, data = TPB, method = "lms")
-summary(estTpbLms)
+est_tpb_lms <- modsem(tpb, data = TPB, method = "lms")
+summary(est_tpb_lms, standardized = TRUE) 
+
+# QML approach 
+est_tpb_qml <- modsem(tpb, data = TPB, method = "qml") 
+summary(est_tpb_qml, standardized = TRUE)
 ```
 ## Interactions between two observed variables
 ```
@@ -117,41 +120,4 @@ m3 <- '
 
 est3 <- modsem(m3, oneInt, method = "pind")
 summary(est3)
-```
-
-## Multiple interaction terms
-```
-m4 <- '
-  # Outer Model
-  X =~ x1 + x2 +x3
-  Y =~ y1 + y2 + y3
-  Z =~ z1 + z2 + z3
-  G =~ g1 + g2 + g3
-  H =~ h1 + h2 + h3
-  
-  # Inner model
-  Y ~ X + Z + G + H + X:Z + G:H
-'
-
-# Using unconstrained approach
-est4 <- modsem(m4, twoInt, method = "uca")
-summary(est4)
-```
-
-## Interactionterms with more than two variables
-```
-m5 <- '
-  # Outer Model
-  X =~ x1 + x2 +x3
-  Y =~ y1 + y2 + y3
-  Z =~ z1 + z2 + z3
-  G =~ g1 + g2 + g3
-  
-  # Inner model
-  Y ~ X + Z + G + X:Z:G
-'
-
-# Residual centering approach
-est5 <- modsem(m5, tripleInt, standardizeData = TRUE, method = "rca")
-summary(est5)
 ```

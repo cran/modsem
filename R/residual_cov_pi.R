@@ -13,7 +13,7 @@ getParTableResCov.simple <- function(relDf) {
     return(NULL)
   }
   prodNames <- sort(colnames(relDf))
-  uniqueCombinations <- getUniqueCombinations(prodNames)
+  uniqueCombinations <- getUniqueCombos(prodNames)
   # Now we want to specify the covariance based on shared inds
   isShared <- vector("logical", length = nrow(uniqueCombinations))
 
@@ -77,7 +77,7 @@ getParTableResCov.equality <- function(relDf, setToZero = FALSE) {
   labelMatrix <- ifelse(labelMatrix == "", "0", paste0("share_", labelMatrix))
   labelMatrix[upper.tri(labelMatrix, diag = TRUE)] <- ""
 
-  uniqueCombos <- getUniqueCombinations(prodNames)
+  uniqueCombos <- getUniqueCombos(prodNames)
   uniqueCombos[["labels"]] <- vector("character", length = nrow(uniqueCombos))
   for (i in seq_len(nrow(uniqueCombos))) {
     uniqueCombos[["labels"]][[i]] <- labelMatrix[uniqueCombos[i, "V2"],
@@ -98,7 +98,7 @@ getParTableResCov.equality <- function(relDf, setToZero = FALSE) {
 # Constrained Approach ---------------------------------------------------------
 getParTableResCov.ca <- function(relDf, pt) {
   if (nrow(relDf) > 2) {
-    stop("Constrained approach for constraining residual covariances should ",
+    stop2("Constrained approach for constraining residual covariances should ",
          "not be used with latent products with more than two components")
   }
   if (ncol(relDf) <= 1) {
@@ -163,7 +163,7 @@ getFormulaResCovProdInd <- function(indProd1, indProd2, relDf, pt) {
   indShared <- rowShared[1, 1]
   indsNotShared <- unlist(rowNotShared[1, 1:2])
   lambdaShared <- createLabelLambda(indsNotShared, latentNotShared)
-  varLatentNotShared <- tracePath(pt, latentNotShared, latentNotShared)
+  varLatentNotShared <- trace_path(pt, latentNotShared, latentNotShared)
   varIndShared <- createLabelVar(indShared)
 
   rhs <- paste(lambdaShared[[1]], lambdaShared[[2]],

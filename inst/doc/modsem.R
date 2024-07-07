@@ -49,39 +49,8 @@ knitr::opts_chunk$set(
 #  summary(est3)
 
 ## -----------------------------------------------------------------------------
+#  
 #  m4 <- '
-#    # Outer Model
-#    X =~ x1 + x2 +x3
-#    Y =~ y1 + y2 + y3
-#    Z =~ z1 + z2 + z3
-#    G =~ g1 + g2 + g3
-#    H =~ h1 + h2 + h3
-#  
-#    # Inner model
-#    Y ~ X + Z + G + H + X:Z + G:H
-#  '
-#  
-#  est4 <- modsem(m4, twoInt)
-#  summary(est4)
-
-## -----------------------------------------------------------------------------
-#  m5 <- '
-#    # Outer Model
-#    X =~ x1 + x2 +x3
-#    Y =~ y1 + y2 + y3
-#    Z =~ z1 + z2 + z3
-#    G =~ g1 + g2 + g3
-#  
-#    # Inner model
-#    Y ~ X + Z + G + X:Z:G
-#  '
-#  
-#  est5 <- modsem(m5, tripleInt, standardizeData = TRUE)
-#  summary(est5)
-
-## -----------------------------------------------------------------------------
-#  
-#  m6 <- '
 #  # Outer Model
 #  X =~ x1 + x2 + x3
 #  Y =~ y1 + y2 + y3
@@ -90,6 +59,9 @@ knitr::opts_chunk$set(
 #  # Inner model
 #  Y ~ X + Z + Z:X + X:X
 #  '
+#  
+#  est4 <- modsem(m4, oneInt, "qml")
+#  summary(est4)
 
 ## -----------------------------------------------------------------------------
 #  
@@ -102,13 +74,8 @@ knitr::opts_chunk$set(
 #    BEH =~ b1 + b2
 #  
 #  # Inner Model (Based on Steinmetz et al., 2011)
-#    # Covariances
-#    ATT ~~ SN + PBC
-#    PBC ~~ SN
-#    # Causal Relationsships
 #    INT ~ ATT + SN + PBC
-#    BEH ~ INT + PBC
-#    BEH ~ INT:PBC
+#    BEH ~ INT + PBC + INT:PBC
 #  '
 #  # the double centering apporach
 #  est_tpb <- modsem(tpb, TPB)

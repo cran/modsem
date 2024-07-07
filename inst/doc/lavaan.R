@@ -11,7 +11,7 @@ knitr::opts_chunk$set(
 ## -----------------------------------------------------------------------------
 #  library(lavaan)
 #  
-#  m1 <- "
+#  m1 <- '
 #  # Outer Model
 #  X =~ x1 + x2 + x3
 #  Y =~ y1 + y2 + y3
@@ -19,9 +19,9 @@ knitr::opts_chunk$set(
 #  
 #  # Inner model
 #  Y ~ X + Z + X:Z
-#  "
+#  '
 #  
-#  est1 <- modsem(m1, oneInt)
-#  lavObject <- est1$lavaan
-#  bootstrap <- bootstrapLavaan(lavObject, R = 500)
+#  est <- modsem(m1, oneInt)
+#  lav_object <- extract_lavaan(est)
+#  bootstrap <- bootstrapLavaan(lav_object, R = 500)
 

@@ -5,11 +5,10 @@ knitr::opts_chunk$set(
   eval = FALSE
 )
 
-## ----setup--------------------------------------------------------------------
-#  library(modsem)
+## ----setup, eval = TRUE-------------------------------------------------------
+library(modsem)
 
 ## -----------------------------------------------------------------------------
-#  library(modsem)
 #  m1 <- '
 #  # Outer Model
 #  X =~ x1 + x2 + x3
@@ -37,19 +36,20 @@ knitr::opts_chunk$set(
 #  est2 <- modsem(m2, oneInt, match = TRUE)
 #  summary(est2)
 
-## -----------------------------------------------------------------------------
-#  m3 <- '
-#  # Outer Model
-#  X =~ x1 + x2
-#  Y =~ y1 + y2
-#  Z =~ z1 + z2
-#  
-#  # Inner model
-#  Y ~ X + Z + X:Z
-#  '
-#  est3 <- modsem(m3, oneInt, run = FALSE)
-#  cat(est3$syntax)
+## ----eval = TRUE--------------------------------------------------------------
+m3 <- '
+# Outer Model
+X =~ x1 + x2
+Y =~ y1 + y2
+Z =~ z1 + z2
 
-## -----------------------------------------------------------------------------
-#  head(est3$data)
+# Inner model
+Y ~ X + Z + X:Z 
+'
+syntax <- get_pi_syntax(m3)
+cat(syntax)
+
+## ----eval = TRUE--------------------------------------------------------------
+data <- get_pi_data(m3, oneInt)
+head(data)
 

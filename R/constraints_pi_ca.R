@@ -70,9 +70,9 @@ addCovariances <- function(pt) {
   latents <- unique(pt[pt$op == "=~", "lhs"])
   if (length(latents) == 0) return(pt)
 
-  combos <- getUniqueCombinations(latents)
+  combos <- getUniqueCombos(latents)
   combos$connected <- !is.na(apply(combos, MARGIN = 1, function(xy)
-                                   tracePath(pt, xy[[1]], xy[[2]])))
+                                   trace_path(pt, xy[[1]], xy[[2]])))
   toBeSpecified <- combos[!combos$connected, c("V1", "V2")]
   newRows <- apply(toBeSpecified[c("V1", "V2")],
                    MARGIN = 1,
@@ -130,7 +130,7 @@ specifyVarCovSingle <- function(parTable, relDf) {
   # and indicator products. It will also specifies covariances for latent
   # products, and elements int those products.
   if (nrow(relDf) > 2) {
-    stop("Constraints for products with more than two ",
+    stop2("Constraints for products with more than two ",
          " elements are not supported for this method")
   }
   # General info
@@ -141,9 +141,9 @@ specifyVarCovSingle <- function(parTable, relDf) {
   labelLatentProd <- createLabelVar(latentProd)
   labelsElemsInProd <- vapply(elemsInProdTerm, 
                               FUN.VALUE = vector("character", length = 1L),
-                              FUN = function(x) tracePath(parTable, x, x))
+                              FUN = function(x) trace_path(parTable, x, x))
 
-  labelCovElems <- tracePath(parTable, elemsInProdTerm[[1]],
+  labelCovElems <- trace_path(parTable, elemsInProdTerm[[1]],
                              elemsInProdTerm[[2]]) |> paste0(" ^ 2")
 
   lhs <- labelLatentProd
@@ -164,7 +164,7 @@ specifyVarCovSingle <- function(parTable, relDf) {
     purrr::list_rbind()
 
   # Variances of product indicators
-  constrainedVarProdInds <- vector("list", length = ncol(relDf))
+  constrained.varProdInds <- vector("list", length = ncol(relDf))
 
   for (indProd in colnames(relDf)) {
     labelVarIndProd <- createLabelVar(indProd)
@@ -178,7 +178,7 @@ specifyVarCovSingle <- function(parTable, relDf) {
         createLabelLambdaSquared(relDf[latent, indProd], 
                                  rownames(relDf)[[latent]])
       labelsVarLatents[[latent]] <- 
-        tracePath(parTable, rownames(relDf)[[latent]],
+        trace_path(parTable, rownames(relDf)[[latent]],
                   rownames(relDf)[[latent]])
       labelsVarInds[[latent]] <- createLabelVar(relDf[latent, indProd])
     }
@@ -195,13 +195,13 @@ specifyVarCovSingle <- function(parTable, relDf) {
     rhs3 <- paste(labelsVarInds[[1]], labelsVarInds[[2]], sep = " * ")
     rhs <- paste(rhs1, rhs2, rhs3, sep = " + ")
 
-    constrainedVarProdInds[[indProd]] <- createParTableRow(c(lhs, rhs), op = "==")
+    constrained.varProdInds[[indProd]] <- createParTableRow(c(lhs, rhs), op = "==")
   }
 
-  constrainedVarProdInds <- purrr::list_rbind(constrainedVarProdInds)
+  constrained.varProdInds <- purrr::list_rbind(constrained.varProdInds)
   rbindParTable(parTable, rbind(varLatentProd,
                                 covsElemsProd,
-                                constrainedVarProdInds))
+                                constrained.varProdInds))
 }
 
 
