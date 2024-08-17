@@ -1,5 +1,6 @@
-# [modsem](https://kss2k.github.io/intro_modsem/) <img src="man/figures/modsem.png" alt="Logo" align = "right" height="139" class="logo">
-This is a package which allows you to perform interactions between latent variables (i.e., moderation) in CB-SEM. See https://kss2k.github.io/intro_modsem/ for a tutorial.
+# `modsem` <img src="man/figures/modsem.png" alt="Logo" align = "right" height="139" class="logo">
+This is a package which allows you to perform interactions between latent variables (i.e., moderation) in CB-SEM. 
+See https://kss2k.github.io/intro_modsem/ for a tutorial.
 
 # To Install 
 ```
@@ -28,14 +29,6 @@ There are a number of approaches for estimating interaction effects in SEM. In `
 - `"qml"` = The Quasi Maximum Likelihood (QML) approach, see the [vignette](https://kss2k.github.io/intro_modsem/articles/lms_qml.html)
 - `"mplus"` 
   - estimates model through Mplus, if it is installed
-
-# New Features (01.06.2024-05-06-2024)
-- New function for plotting interaction effects (`plot_interaction()`), see the [vignette](https://kss2k.github.io/intro_modsem/articles/plot_interactions.html)
-- Interaction effects between endogenous and exogenous variables are now possible by default with QML-approach.
-- Interaction effects between two endogenous variables are now possible with the LMS 
-  and QML approach, using the 'cov.syntax' argument, see the [vignette](https://kss2k.github.io/intro_modsem/articles/interaction_two_etas.html)
-  for more information.
-  (only available on GitHub, not on CRAN)
 
 # Examples 
 

@@ -14,7 +14,7 @@ reverseIntTerm <- function(xz) {
 
 
 getEtas <- function(parTable, isLV = FALSE, checkAny = TRUE) {
-  cond <- parTable$op == "~" & parTable$lhs != "1"
+  cond <- parTable$op == "~" & parTable$rhs != "1"
   if (isLV) {
     lVs <- unique(parTable[parTable$op == "=~", "lhs"])
     cond <- cond & parTable$lhs %in% lVs
@@ -74,7 +74,7 @@ getOVs <- function(parTable = NULL, model.syntax = NULL) {
   if (!is.null(model.syntax)) parTable <- modsemify(model.syntax)
   if (is.null(parTable)) stop2("Missing parTable")
   lVs <- getLVs(parTable)   
-  select <- parTable$op %in% c("=~", "~", "~~") & parTable$lhs != "1"
+  select <- parTable$op %in% c("=~", "~", "~~") & parTable$rhs != "1"
   vars <- unique(c(parTable$lhs[select], parTable$rhs[select]))
   vars[!vars %in% lVs]
 }
@@ -185,6 +185,14 @@ getIntercept <- function(x, parTable) {
 }
 
 
+getIntercepts <- function(x, parTable) {
+  out <- vapply(x, FUN.VALUE = numeric(1L), FUN = function(x_i) 
+                getIntercept(x_i, parTable = parTable))
+  names(out) <- x
+  out
+}
+
+
 getMean <- function(x, parTable) {
   if (length(x) > 1) stop2("x must be a single string")
 
@@ -228,4 +236,10 @@ centerInteraction <- function(parTable) {
   } 
 
   parTable
+}
+
+
+getWarningWrapper <- function(silent = FALSE) { # function factory
+  if (silent) return(suppressWarnings)
+  function(x) x
 }

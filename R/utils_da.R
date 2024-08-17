@@ -1,12 +1,5 @@
 # Utils for lms approach
-# Last updated: 29.05.2024
-
-
-sortData <- function(data, allIndsXis, allIndsEtas) {
-  if (!all(c(allIndsXis, allIndsEtas) %in% colnames(data))) 
-    stop2("Missing Observed Variables in Data")
-  as.matrix(data[c(allIndsXis, allIndsEtas)])
-}
+# Last updated: 31.07.2024
 
 
 getFreeParams <- function(model) {
@@ -38,7 +31,7 @@ removeInteractions <- function(model) {
 # there are some drawbacks to using mvnfast. In particular, 
 # its a little less consistent
 dmvn <- function(X, mean, sigma, log = FALSE) {
-  return(tryCatch(mvnfast::dmvn(X, mean, sigma, log, ncores = 2),
+  return(tryCatch(mvnfast::dmvn(X, mean, sigma, log, ncores = 2), #ThreadEnv$n.threads),
                   error = function(e) mvtnorm::dmvnorm(X, mean, sigma, log)))
 }
 
@@ -87,13 +80,47 @@ getK_NA <- function(omegaEta) {
 }
 
 
-cleanAndSortData <- function(data, allIndsXis, allIndsEtas) {
-  if (is.null(data)) return(NULL)
-  # sort Data before optimizing starting params
-  data <- sortData(data, allIndsXis,  allIndsEtas)
+sortData <- function(data, allIndsXis, allIndsEtas) {
+  if (!all(c(allIndsXis, allIndsEtas) %in% colnames(data))) 
+    stop2("Missing Observed Variables in Data")
+  data[c(allIndsXis, allIndsEtas)]
+}
+
+
+anyAllNA <- function(data) {
+  any(vapply(data, FUN.VALUE = logical(1L), function(x) all(is.na(x))))
+}
+
+
+castDataNumericMatrix <- function(data) {
+  data <- tryCatch({
+    numericData <- lapplyDf(data, FUN = as.numeric)
+  },
+  warning = function(w) {
+    warning2("Warning in converting data to numeric: \n", w)
+    numericData <- suppressWarnings(lapplyDf(data, FUN = as.numeric))
+    if (anyAllNA(numericData)) stop2("Unable to conver data to type numeric") 
+    numeric
+  }, 
+  error = function(e) {
+    stop2("Unable to convert data to type numeric")
+  })
+  as.matrix(data)
+}
+
+
+filterData <- function(data) {
   completeCases <- stats::complete.cases(data)
   if (any(!completeCases)) warning2("Removing missing values case-wise.")
   data[completeCases, ]
+}
+
+
+cleanAndSortData <- function(data, allIndsXis, allIndsEtas) {
+  if (is.null(data)) return(NULL)
+  # sort Data before optimizing starting params
+  sortData(data, allIndsXis,  allIndsEtas) |> 
+    castDataNumericMatrix() |> filterData()
 }
 
 
@@ -300,6 +327,13 @@ repPartitionedCols <- function(matrix, length = 1) {
 }
 
 
+diagBindSquareMatrices <- function(X, Y) {
+  XY <- matrix(0, nrow = NROW(X), ncol = NCOL(Y), 
+               dimnames = list(rownames(X), colnames(Y)))
+  rbind(cbind(X, XY), cbind(t(XY), Y))
+}
+
+
 #' @export
 as.logical.matrix <- function(x, ...) {
   structure(x != 0, 
@@ -309,7 +343,7 @@ as.logical.matrix <- function(x, ...) {
 
 
 isScalingY <- function(x) {
-  seq_along(x) %in% which(x == 1 | x == 0)
+  (seq_along(x) %in% which(x == 0)) | seq_along(x) %in% which.max(x == 1)
 }
 
 
@@ -336,6 +370,16 @@ getDegreesOfFreedom <- function(m, coef) {
   df + nMeans
 }
 
+
 getInfoQuad <- function(quad) {
   list(dim = quad$k, nodes.dim = quad$m, nodes.total = quad$m ^ quad$k) 
+}
+
+
+getFixedInterceptSyntax <- function(indicator, syntax, parTable) {
+  if (is.null(indicator) || is.null(syntax) ||
+      NROW(parTable[parTable$lhs == indicator &
+           parTable$op == "~" & parTable$rhs == "1", ])) return(syntax)
+  else addition <-  paste0("\n", indicator, " ~ 0 * 1")
+  paste0(syntax, addition)
 }

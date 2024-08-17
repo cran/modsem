@@ -43,6 +43,8 @@
 #' @param group group variable for multigroup analysis
 #' 
 #' @param run should the model be run via lavaan, if FALSE only modified syntax and data is returned
+#'
+#' @param suppress.warnings.lavaan should warnings from lavaan be supressed?
 #' 
 #' @param ... arguments passed to other functions, e.g,. lavaan
 #' 
@@ -130,6 +132,7 @@ modsem_pi <- function(model.syntax = NULL,
                       estimator = "ML", 
                       group = NULL,
                       run = TRUE, 
+                      suppress.warnings.lavaan = FALSE,
                       ...) {
   if (is.null(model.syntax)) stop2("No model syntax provided in modsem")
   if (is.null(data)) stop2("No data provided in modsem")
@@ -200,8 +203,9 @@ modsem_pi <- function(model.syntax = NULL,
 
   # Estimating the model via lavaan::sem() 
   if (run) {
+    lavWrapper <- getWarningWrapper(silent = suppress.warnings.lavaan)
     lavEst <- tryCatch(lavaan::sem(newSyntax, newData, estimator = estimator, 
-                                   group = group, ...),
+                                   group = group, ...) |> lavWrapper(),
                        error = function(cnd) {
                          warning2("Error in Lavaan: \n")
                          warning2(capturePrint(cnd))
@@ -221,7 +225,6 @@ createProdInds <- function(modelSpec,
                            center.before = FALSE,
                            center.after = FALSE,
                            residuals.prods = FALSE) {
-  
   indProds <- purrr::map2(.x = modelSpec$relDfs,
                           .y = modelSpec$indsInLatentProds,
                           .f = createIndProds,
@@ -260,12 +263,12 @@ createIndProds <- function(relDf,
   # Check if inds are numeric
   isNumeric <- sapply(inds, is.numeric)
 
-  if (sum(as.integer(!isNumeric)) > 0) {
+  if (any(!isNumeric)) {
     stop2("Expected inds to be numeric when creating prods")
   }
 
-  # Centering them, if center == TRUE
-  if (centered == TRUE) {
+  # Centering them
+  if (centered) {
     inds <- lapplyDf(inds,
                      FUN = function(x) x - mean(x))
 

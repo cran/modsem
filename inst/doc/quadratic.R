@@ -1,8 +1,9 @@
 ## ----include = FALSE----------------------------------------------------------
+EVAL_DEFAULT <- FALSE
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  eval = FALSE
+  eval = EVAL_DEFAULT
 )
 
 ## ----setup--------------------------------------------------------------------

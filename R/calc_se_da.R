@@ -13,7 +13,7 @@ calcFIM_da <- function(model,
                        EFIM.S = 3e4, 
                        epsilon = 1e-8,
                        verbose = FALSE) {
-  if (!calc.se) return(NULL)
+  if (!calc.se) return(list(FIM = NULL, vcov = NULL, type = "none"))
   if (verbose) cat("Calculating standard errors\n")
   
   I <- switch(method, 
@@ -91,7 +91,7 @@ calcSE_da <- function(calc.se = TRUE, vcov, theta, NA__ = -999) {
     return(rep(NA__, length(theta)))
   }
 
-  se <- sqrt(diag(vcov))
+  se <- suppressWarnings(sqrt(diag(vcov)))
 
   if (all(is.na(se))) 
     warning2("SE's could not be computed, negative Hessian is singular.")

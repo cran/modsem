@@ -1,8 +1,9 @@
 ## ----include = FALSE----------------------------------------------------------
+EVAL_DEFAULT <- FALSE
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  eval = FALSE
+  eval = EVAL_DEFAULT
 )
 
 ## ----setup--------------------------------------------------------------------
@@ -38,9 +39,25 @@ knitr::opts_chunk$set(
 #  '
 #  
 #  lms2 <- modsem(m1, oneInt, method = "lms")
+#  summary(lms2)
 
 ## -----------------------------------------------------------------------------
 #  m3 <- '
+#  # Outer Model
+#    X =~ x1 # X is observed
+#    Z =~ z1 # Z is observed
+#    Y =~ y1 # Y is observed
+#  
+#  # Inner model
+#    Y ~ X + Z
+#    Y ~ X:Z
+#  '
+#  
+#  qml3 <- modsem(m3, oneInt, method = "qml")
+#  summary(qml3)
+
+## -----------------------------------------------------------------------------
+#  m4 <- '
 #  # Outer Model
 #    X =~ x1 # X is observed
 #    Z =~ z1 # Z is observed
@@ -51,5 +68,6 @@ knitr::opts_chunk$set(
 #    Y ~ X:Z
 #  '
 #  
-#  qml3 <- modsem(m3, oneInt, method = "qml")
+#  qml4 <- modsem(m3, oneInt, method = "qml")
+#  summary(qml4)
 

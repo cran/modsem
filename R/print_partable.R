@@ -1,7 +1,7 @@
 colsOut <- c("lhs", "op", "rhs", "est", "std.error", 
               "z.value", "p.value", "ci.lower", "ci.upper")
 header <- c("Variable", "op", "Variable", "Estimate",
-            "Std.Error", "z.value", "Pr(>|z|)", "CI.Lower", "CI.Upper")
+            "Std.Error", "z.value", "P(>|z|)", "CI.Lower", "CI.Upper")
 
 
 formatParTable <- function(parTable, digits = 3, scientific = FALSE,
@@ -14,17 +14,18 @@ formatParTable <- function(parTable, digits = 3, scientific = FALSE,
     paste(parTable$lhs[isStructOrMeasure], parTable$op[isStructOrMeasure])
 
 
-  parTable$lhs[parTable$rhs == "1"] <- 
-    pasteLabels(parTable$lhs[parTable$rhs == "1"], 
-                parTable$label[parTable$rhs == "1"], 
+  isResVar <- parTable$op == "~~" & parTable$lhs == parTable$rhs
+  parTable$lhs[parTable$rhs == "1" | isResVar] <- 
+    pasteLabels(parTable$lhs[parTable$rhs == "1" | isResVar], 
+                parTable$label[parTable$rhs == "1" | isResVar], 
                 width = width)
   parTable$rhs[parTable$rhs != "1"] <- 
     pasteLabels(parTable$rhs[parTable$rhs != "1"], 
                 parTable$label[parTable$rhs != "1"], width = width)
 
-  parTable$lhs <- format(parTable$lhs, width = width, justify = "left")
+  parTable$lhs[!isStructOrMeasure] <- 
+    format(parTable$lhs[!isStructOrMeasure], width = width, justify = "left")
   parTable$rhs <- format(parTable$rhs, width = width, justify = "left")
-
   parTable$p.value <- formatPval(parTable$p.value, scientific = scientific)
 
   if (!ci) {
