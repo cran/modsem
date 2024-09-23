@@ -13,7 +13,8 @@ calcFIM_da <- function(model,
                        EFIM.S = 3e4, 
                        epsilon = 1e-8,
                        verbose = FALSE) {
-  if (!calc.se) return(list(FIM = NULL, vcov = NULL, type = "none"))
+  if (!calc.se) return(list(FIM = NULL, vcov = NULL, vcov.sub = NULL, type = "none",
+                            raw.labels = names(theta), n.additions = 0))
   if (verbose) cat("Calculating standard errors\n")
   
   I <- switch(method, 
@@ -36,9 +37,11 @@ calcFIM_da <- function(model,
      stop2("Unrecognized method: ", method) 
   )
 
+
   if (robust.se) {
-    if (hessian && FIM == "observed")
-      warning("'robust.se = TRUE' should not be paired with 'EFIM.hessian = TRUE' && 'FIM = \"observed\"'")
+    warnif(hessian && FIM == "observed", 
+           "'robust.se = TRUE' should not be paired with ",
+           "'EFIM.hessian = TRUE' && 'FIM = \"observed\"'")
     H <- calcHessian(model, theta = theta, data = data, method = method, 
                      epsilon = epsilon)
     invH <- solveFIM(H, NA__ = NA__)
@@ -48,9 +51,20 @@ calcFIM_da <- function(model,
     vcov <- solveFIM(I, NA__ = NA__)
   }
 
-  dimnames(I) <- dimnames(vcov) <- list(names(theta), names(theta))
-  list(FIM = I, vcov = vcov, type = FIM)
+  vcov.all <- getVCOV_LabelledParams(vcov = vcov, model = model, theta = theta,
+                                     method = method)
+ 
+  nAdditions   <- ncol(vcov.all) - ncol(vcov)
+  lavLabels    <- model$lavLabels
+  subLavLabels <- lavLabels[colnames(vcov.all) %in% names(theta)]
+  rawLabels    <- colnames(vcov.all)
+  dimnames(vcov.all) <- list(lavLabels, lavLabels)
+  dimnames(I) <- dimnames(vcov) <- list(subLavLabels, subLavLabels)
+
+  list(FIM = I, vcov = vcov.all, vcov.sub = vcov, type = FIM,
+       raw.labels = rawLabels, n.additions = nAdditions)
 }
+
 
 calcHessian <- function(model, theta, data, method = "lms", 
                         epsilon = 1e-8) {
@@ -83,22 +97,23 @@ solveFIM <- function(H, NA__ = -999) {
 }
 
 
-calcSE_da <- function(calc.se = TRUE, vcov, theta, NA__ = -999) {
-  if (!calc.se) return(rep(NA__, length(theta)))
+calcSE_da <- function(calc.se = TRUE, vcov, rawLabels, NA__ = -999) {
+  if (!calc.se) return(rep(NA__, length(rawLabels)))
   if (is.null(vcov)) {
     warning2("Fisher Information Matrix (FIM) was not calculated, ",
              "unable to compute standard errors")
-    return(rep(NA__, length(theta)))
+    return(rep(NA__, length(rawLabels)))
   }
 
   se <- suppressWarnings(sqrt(diag(vcov)))
 
-  if (all(is.na(se))) 
+  if (all(is.na(se))) {
     warning2("SE's could not be computed, negative Hessian is singular.")
-  if (any(is.nan(se))) 
+  } else if (any(is.nan(se))) {
     warning2("SE's for some coefficients could not be computed.") 
+  }
 
-  if (!is.null(names(se))) names(se) <- names(theta)
+  if (!is.null(names(se))) names(se) <- rawLabels
   se[is.na(se)] <- NA__
   se
 }
@@ -156,6 +171,7 @@ calcEFIM_LMS <- function(model, finalModel = NULL, theta, data, S = 3e4,
 calcOFIM_QML <- function(model, theta, data, hessian = FALSE, 
                          epsilon = 1e-8) {
   N <- nrow(model$data)
+
   if (hessian) {
     # negative hessian (sign = -1)
     I <- nlme::fdHess(pars = theta, fun = logLikQml, model = model, 
@@ -197,4 +213,11 @@ calcEFIM_QML <- function(model, finalModel = NULL, theta, data, S = 3e4,
   for (i in seq_len(S)) I <- I + J[i, ] %*% t(J[i, ])
 
   I / (S / N)
+}
+
+
+getSE_Model <- function(model, se, method, n.additions) {
+  model$lenThetaLabel <- model$lenThetaLabel + n.additions
+  fillModel(replaceNonNaModelMatrices(model, value = -999),
+            theta = se, method = method)
 }

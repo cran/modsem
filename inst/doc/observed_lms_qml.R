@@ -56,18 +56,3 @@ knitr::opts_chunk$set(
 #  qml3 <- modsem(m3, oneInt, method = "qml")
 #  summary(qml3)
 
-## -----------------------------------------------------------------------------
-#  m4 <- '
-#  # Outer Model
-#    X =~ x1 # X is observed
-#    Z =~ z1 # Z is observed
-#    Y =~ y1 + y2 # Y needs to be latent, needing atleast two indicators
-#  
-#  # Inner model
-#    Y ~ X + Z
-#    Y ~ X:Z
-#  '
-#  
-#  qml4 <- modsem(m3, oneInt, method = "qml")
-#  summary(qml4)
-

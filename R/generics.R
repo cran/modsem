@@ -1,6 +1,6 @@
 #' Extract parameterEstimates from an estimated model
 #'
-#' @param object An object of class `modsem_pi`, `modsem_da`, or `modsem_mplus`
+#' @param object An object of class \code{\link{modsem_pi}}, \code{\link{modsem_da}}, or \code{\link{modsem_mplus}}
 #' @param ... Additional arguments passed to other functions
 #' @export 
 parameter_estimates <- function(object, ...) {
@@ -10,8 +10,8 @@ parameter_estimates <- function(object, ...) {
 
 #' Extract or modify parTable from an estimated model with estimated variances of interaction terms
 #'
-#' @param object An object of class `modsem_da`,  `modsem_mplus`, 
-#' or a parTable of class `data.frame`
+#' @param object An object of class \code{\link{modsem_da}},  \code{\link{modsem_mplus}}, 
+#' or a parTable of class \code{\link{data.frame}}
 #' @param ... Additional arguments passed to other functions
 #' @export
 var_interactions <- function(object, ...) {
@@ -21,29 +21,33 @@ var_interactions <- function(object, ...) {
 
 #' @export
 var_interactions.data.frame <- function(object, ...) {
-  parTable <- fillColsParTable(object)
+  parTable <- removeInteractionVariances(fillColsParTable(object))
   intTermVarRows <- parTable$lhs == parTable$rhs &
     grepl(":", parTable$lhs) & parTable$op == "~~"
-  parTable <- parTable[!intTermVarRows, ]
+  intTermCovRows <- parTable$lhs != parTable$lhs & parTable$op == "~~" &
+    (grepl(":", parTable$lhs) | grepl(":", parTable$rhs)) 
+  parTable <- parTable[!(intTermVarRows | intTermCovRows), ]
 
   intTerms <- unique(parTable[grepl(":", parTable$rhs) & 
                      parTable$op == "~", "rhs"])
 
   for (i in seq_len(length(intTerms))) {
-    # interaction term = XY
-    XY <- stringr::str_split_fixed(intTerms[[i]], ":", 2) 
-    muX <- getMean(XY[[1]], parTable)
-    muY <- getMean(XY[[2]], parTable)
-    varX <- calcCovParTable(XY[[1]], XY[[1]], parTable)
-    varY <- calcCovParTable(XY[[2]], XY[[2]], parTable)
-    covXY <- calcCovParTable(XY[[1]], XY[[2]], parTable)
-    varXZ <- muX ^ 2 * muY ^ 2 + varX * muY ^ 2 + varY * muX ^ 2 +
-      2 * muX * muY * covXY + varX * varY + covXY ^ 2
-    newRow <- data.frame(lhs = intTerms[[i]],
-                         op = "~~",
-                         rhs = intTerms[[i]],
+    # interaction term = XZ
+    XZ    <- stringr::str_split_fixed(intTerms[[i]], ":", 2) 
+    muX   <- getMean(XZ[[1]], parTable)
+    muZ   <- getMean(XZ[[2]], parTable)
+    varX  <- calcCovParTable(XZ[[1]], XZ[[1]], parTable)
+    varZ  <- calcCovParTable(XZ[[2]], XZ[[2]], parTable)
+    covXZ <- calcCovParTable(XZ[[1]], XZ[[2]], parTable)
+    varXZ <- varX * muZ ^ 2 + varZ * muX ^ 2 +
+      2 * muX * muZ * covXZ + varX * varZ + covXZ ^ 2
+    covX_XZ <- varX * muZ + muX * covXZ
+    covZ_XZ <- varZ * muX + muZ * covXZ
+    newRow <- data.frame(lhs = c(intTerms[[i]], XZ[[1]], XZ[[2]]),
+                         op = rep("~~", 3),
+                         rhs = rep(intTerms[[i]], 3),
                          label = "",
-                         est = varXZ,
+                         est = c(varXZ, covX_XZ, covZ_XZ),
                          std.error = NA, z.value = NA, p.value = NA,
                          ci.lower = NA, ci.upper = NA)
     parTable <- rbind(parTable, newRow)
@@ -54,18 +58,18 @@ var_interactions.data.frame <- function(object, ...) {
 
 #' Get standardized estimates
 #'
-#' @param object An object of class `modsem_da`,  `modsem_mplus`, 
-#' or a parTable of class `data.frame`
+#' @param object An object of class \code{modsem_da}, \code{modsem_mplus}, 
+#' or a \code{parTable} of class \code{data.frame}
 #' @param ... Additional arguments passed to other functions
-#' @details for `modsem_lms`, `modsem_qml` and `modsem_mplus` objects, 
-#' the interaction term is not standardized such that var(xz) = 1. 
+#' @details For \code{modsem_da}, and \code{modsem_mplus} objects, 
+#' the interaction term is not standardized such that \code{var(xz) = 1}. 
 #' The interaction term is not an actual variable in the model, meaning that it does not 
 #' have a variance. It must therefore be calculated from the other parameters in the model.
-#' Assuming normality and zero-means the variance is calculated as 
-#' `var(xz) = var(x) * var(z) + cov(x, z)^2`. Thus setting the variance of the interaction 
-#' term to 1, would only be 'correct' if the correlation between x and z is zero.
+#' Assuming normality and zero-means, the variance is calculated as 
+#' \code{var(xz) = var(x) * var(z) + cov(x, z)^2}. Thus setting the variance of the interaction 
+#' term to 1 would only be 'correct' if the correlation between \code{x} and \code{z} is zero.
 #' This means that the standardized estimates for the interaction term will 
-#' be different from those using lavaan, since there the interaction term is an 
+#' be different from those using \code{lavaan}, since there the interaction term is an 
 #' actual latent variable in the model, with a standardized variance of 1.
 #' @export
 standardized_estimates <- function(object, ...) {
@@ -78,7 +82,7 @@ standardized_estimates.data.frame <- function(object, intercepts = FALSE, ...) {
   parTable <- object[c("lhs", "op", "rhs", "label", "est", "std.error")]
   if (!intercepts) { # remove intercepts
     parTable <- centerInteraction(parTable)
-    parTable <- parTable[!(parTable$rhs == "1" & parTable$op == "~"), ]
+    parTable <- parTable[parTable$op != "~1", ]
   }
   parTable <- var_interactions(parTable)
 
@@ -127,8 +131,7 @@ standardized_estimates.data.frame <- function(object, intercepts = FALSE, ...) {
   gamma <- NULL
   selectStrucExprsEta <- NULL
   structExprsEta <- NULL
-  selectStrucExprs <- parTable$op == "~" & parTable$rhs != "1" &
-                         parTable$lhs %in% etas
+  selectStrucExprs <- parTable$op == "~" & parTable$lhs %in% etas
   for (eta in etas) {
     selectStrucExprsEta <- selectStrucExprs & parTable$lhs == eta
     structExprsEta <- parTable[selectStrucExprsEta, ]
@@ -192,8 +195,8 @@ standardized_estimates.data.frame <- function(object, intercepts = FALSE, ...) {
     parTable[selectRows, selectCols] <- gamma / sqrt(varXZ)
   }
   
-  parTable$z.value <- parTable$est / parTable$std.error
-  parTable$p.value <- 2 * stats::pnorm(-abs(parTable$z.value))
+  parTable$z.value  <- parTable$est / parTable$std.error
+  parTable$p.value  <- 2 * stats::pnorm(-abs(parTable$z.value))
   parTable$ci.lower <- parTable$est - 1.96 * parTable$std.error
   parTable$ci.upper <- parTable$est + 1.96 * parTable$std.error
 
@@ -208,9 +211,9 @@ standardized_estimates.data.frame <- function(object, intercepts = FALSE, ...) {
 #' @param ... Additional arguments passed to other functions
 #' @description function used to inspect fittet object. similar to `lavInspect()`
 #' argument 'what' decides what to inspect
-#' @details for `modsem_lms`, `modsem_qml` and `modsem_lavaan` 
+#' @details for `modsem_da`, and `modsem_lavaan` 
 #' for `modsem_lavaan`, it is just a wrapper for `lavInspect()`
-#' for `modsem_lms` and `modsem_qml` what can either be "all", "matrices", "optim", 
+#' for `modsem_da` and `` what can either be "all", "matrices", "optim", 
 #' or just the name of what to extract. 
 #' @export
 modsem_inspect <- function(object, what = NULL, ...) {

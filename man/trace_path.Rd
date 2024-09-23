@@ -9,35 +9,38 @@ trace_path(
   x,
   y,
   parenthesis = TRUE,
+  missing.cov = FALSE,
   measurement.model = FALSE,
   maxlen = 100,
   ...
 )
 }
 \arguments{
-\item{pt}{A data frame with columns lhs, op, rhs, and mod, from modsemify(syntax)}
+\item{pt}{A data frame with columns \code{lhs}, \code{op}, \code{rhs}, and \code{mod}, from \link{modsemify}}
 
-\item{x}{source variable}
+\item{x}{Source variable}
 
-\item{y}{destination variable}
+\item{y}{Destination variable}
 
-\item{parenthesis}{if TRUE, the output will be enclosed in parenthesis}
+\item{parenthesis}{If \code{TRUE}, the output will be enclosed in parenthesis}
 
-\item{measurement.model}{if TRUE, the function will use the measurement model}
+\item{missing.cov}{If \code{TRUE}, covariances missing from the model syntax will be added}
 
-\item{maxlen}{maximum length of a path before aborting}
+\item{measurement.model}{If \code{TRUE}, the function will use the measurement model}
 
-\item{...}{additional arguments passed to trace_path}
+\item{maxlen}{Maximum length of a path before aborting}
+
+\item{...}{Additional arguments passed to \link{trace_path}}
 }
 \value{
 A string with the estimated path (simplified if possible)
 }
 \description{
-This function estimates the path from x to y using the path tracing rules, 
-note that it only works with structural parameters, so "=~" are ignored. unless 
-measurement.model = TRUE.
-you want to use the measurement model, 
-"~" in the mod column of pt.
+This function estimates the path from \code{x} to \code{y} using the path tracing rules. 
+Note that it only works with structural parameters, so \code{"=~"} are ignored, unless 
+\code{measurement.model = TRUE}.
+If you want to use the measurement model, 
+\code{"~"} should be in the \code{mod} column of \code{pt}.
 }
 \examples{
 library(modsem)
@@ -51,5 +54,5 @@ m1 <- '
   Y ~ X + Z + X:Z
 '
 pt <- modsemify(m1)
-trace_path(pt, "Y", "Y") # variance of Y
+trace_path(pt, x = "Y", y = "Y", missing.cov = TRUE) # variance of Y
 }

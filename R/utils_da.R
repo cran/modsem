@@ -68,15 +68,10 @@ whichIsMax <- function(x) {
 }
 
 
-fillSymmetric <- function(mat, values) {
-  mat[is.na(mat)] <- values
-  mat[upper.tri(mat)] <- t(mat)[upper.tri(mat)]
-  mat
-}
-
-
-getK_NA <- function(omegaEta) {
-  sum(apply(omegaEta, 1, function(x) any(is.na(x))))
+getK_NA <- function(omega, labelOmega) {
+  na    <- apply(omega, MARGIN = 1, FUN = function(x) any(is.na(x)))
+  label <- apply(labelOmega, MARGIN = 1, FUN = function(x) any(x != ""))
+  sum(na | label)
 }
 
 
@@ -139,7 +134,7 @@ createDoubleIntTerms <- function(x, z = NULL, sep = ":") {
 }
 
 
-getFreeOrConsIntTerms <- function(varsInInt, eta, intTerms) {
+getFreeOrConstIntTerms <- function(varsInInt, eta, intTerms) {
   expr <- intTerms[intTerms$lhs == eta & intTerms$rhs %in% 
                    createDoubleIntTerms(varsInInt), "mod"]
   if (canBeNumeric(expr, includeNA = TRUE)) return(as.numeric(expr))
@@ -168,7 +163,7 @@ getEmptyModel <- function(parTable, cov.syntax, parTableCovModel,
   specifyModelDA(parTable = parTable, method = method,
                  cov.syntax = cov.syntax,
                  parTableCovModel = parTableCovModel,
-                 auto.constraints = FALSE, create.theta = FALSE,
+                 auto.constraints = FALSE, createTheta = FALSE,
                  checkModel = FALSE)
 }
 
@@ -191,10 +186,12 @@ replaceNonNaModelMatrices <- function(model, value = -999) {
 
 
 removeUnknownLabels <- function(parTable) {
-  fixedParams <- unique(parTable[parTable$op %in% c("==", ">", "<"), ]$lhs)
-  parTable[!parTable$lhs %in% fixedParams &
-           !parTable$op %in% c("==", ">", "<") &
-           !parTable$lhs %in% parTable$mod, ]
+  ops    <- c("==", ">", "<", ":=")
+  labels <- unique(parTable$mod[parTable$mod != ""])
+  parTable[!parTable$op %in% ops |
+           (parTable$op %in% ops &
+            parTable$lhs %in% parTable$mod &
+            !constraintsContainUnmatchedLabels(parTable, labels)), ]
 }
 
 
@@ -202,12 +199,25 @@ getLabeledParamsLavaan <- function(parTable, fixedParams = NULL) {
   if (is.null(parTable$label)) return(NULL)
   labelRows <- parTable[parTable$label != "" &
                         !parTable$label %in% fixedParams,
-                        c("est", "label"), drop = FALSE] |> 
-    lapply(unique)
-
+                        c("est", "label"), drop = FALSE] |>
+    uniqueByVar("label")
+  
   theta <- as.numeric(labelRows$est)
   names(theta) <- labelRows$label
   theta
+}
+
+
+uniqueByVar <- function(df, var) {
+  vals <- unique(df[[var]])
+  udf  <- NULL
+
+  for (v in vals) {
+    match <- df[df[[var]] == v, , drop = FALSE][1, , drop = FALSE]
+    udf <- rbind(udf, match)
+  }
+
+  udf
 }
 
 
@@ -272,8 +282,8 @@ checkNodesLms <- function(parTable,
 
 
 removeInteractionVariances <- function(parTable) {
-  parTable[!(parTable$op == "~~" & grepl(":", parTable$lhs) & 
-             grepl(":", parTable$rhs) & parTable$rhs == parTable$lhs), ]
+  parTable[!(parTable$op == "~~" & 
+             (grepl(":", parTable$lhs) | grepl(":", parTable$rhs))), ]
 }
 
 
@@ -379,7 +389,17 @@ getInfoQuad <- function(quad) {
 getFixedInterceptSyntax <- function(indicator, syntax, parTable) {
   if (is.null(indicator) || is.null(syntax) ||
       NROW(parTable[parTable$lhs == indicator &
-           parTable$op == "~" & parTable$rhs == "1", ])) return(syntax)
+           parTable$op == "~1", ])) return(syntax)
   else addition <-  paste0("\n", indicator, " ~ 0 * 1")
   paste0(syntax, addition)
+}
+
+
+getEtaRowLabelOmega <- function(label) {
+  stringr::str_split_1(label, "~")[[1]]
+}
+
+
+getXiRowLabelOmega <- function(label) {
+  stringr::str_split_1(label, "~")[[2]]
 }

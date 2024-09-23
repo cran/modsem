@@ -42,19 +42,23 @@ tpb <- "
   BEH =~ b1 + b2
 
 # Inner Model (Based on Steinmetz et al., 2011)
+  # Covariances
+  LATENT_VAR_ATT ~~ SN + PBC
+  PBC ~~ SN 
   # Causal Relationsships
   INT ~ gamma_int_att * LATENT_VAR_ATT + b * SN + b * PBC
   BEH ~ 0.2 * INT + a * PBC
   BEH ~ PBC:INT
   gamma_int_att == a
-  p1 == 1 
+  p1 == 1 + 0.1
   a2 == 1
   s1 == 1 
   i1 == 1
+  my_custom_parameter := a * 2
 "
 
 covModel <- '
-PBC ~ a * LATENT_VAR_ATT + a * SN
+PBC ~ a * LATENT_VAR_ATT + SN
 '
 
 startTime2 <- Sys.time()
@@ -66,14 +70,14 @@ testthat::expect_warning({
   }, regexp = "It is recommended .* between endogenous variables .*")
 duration2 <- Sys.time() - startTime2
 plot_interaction(x = "INT", z = "PBC", y = "BEH", vals_z = c(-0.5, 0.5), model = est2)
-print(summary(est2, H0 = FALSE))
+print(summary(est2))
 var_interactions(est2)
 standardized_estimates(est2)
-vcov(est2) 
-modsem_inspect(est2) 
-coef(est2)
+print(vcov(est2)[8:14, 8:14])
+modsem_inspect(est2)
+print(coef(est2))
 coefficients(est2)
-
+cat("Number of observations using 'nobs()':", nobs(est2), "\n")
 
 tpb2 <- ' 
 # Outer Model (Based on Hagger et al., 2007)

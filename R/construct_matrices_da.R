@@ -1,106 +1,146 @@
 # Functions for constructing matrices for LMS and QML. 
 # Last updated: 06.06.2024
+setMatrixConstraints <- function(X, parTable, op, RHS, LHS, type, nonFreeParams) {
+  fillConstExprs(X, parTable = parTable, op = op, RHS = RHS, LHS = LHS, 
+                 type = type, nonFreeParams = nonFreeParams) |>
+    fillDynExprs(parTable = parTable, op = op, RHS = RHS, LHS = LHS, type = type)
+}
 
-constructLambda <- function(lVs, indsLVs, parTable, auto.constraints = TRUE) {
-  numLVs <- length(lVs) 
-  indsLVs <- indsLVs[lVs] # make sure it is sorted
-  numIndsLVs <- lapply(indsLVs, FUN = length)
-  allIndsLVs <- unlist(indsLVs)
-  numAllIndsLVs <- length(allIndsLVs)
 
-  lambda <- matrix(0, nrow = numAllIndsLVs, ncol = numLVs,
-                    dimnames = list(allIndsLVs, lVs))
-  lastRowPreviousLV <- 0
-  if (auto.constraints) firstVal <- 1 else firstVal <- NA
-  for (i in seq_along(lVs)) {
-    rowIndices <- seq_len(numIndsLVs[[i]]) + lastRowPreviousLV
-    lambda[rowIndices, i] <-
-      c(firstVal, rep(NA, numIndsLVs[[i]] - 1))
-    lastRowPreviousLV <- lastRowPreviousLV + numIndsLVs[[i]]
-  }
+fillConstExprs <- function(X, parTable, op, RHS, LHS, type, nonFreeParams = TRUE) {
+  constExprs <- parTable[parTable$op == op & 
+                         parTable$rhs %in% RHS &
+                         parTable$lhs %in% LHS &
+                         canBeNumeric(parTable$mod, includeNA = !nonFreeParams), ]
+  constExprs[constExprs$op == "~1", "rhs"] <- "1"
 
-  constExprs <- parTable[parTable$op == "=~" & 
-                         parTable$rhs %in% allIndsLVs &
-                         parTable$lhs %in% lVs &
-                         canBeNumeric(parTable$mod), ]
+  setVal <- getSetValFunc(type)
   for (i in seq_len(NROW(constExprs))) {
     lhs <- constExprs[i, "lhs"]
     rhs <- constExprs[i, "rhs"]
-    lambda[rhs, lhs] <- as.numeric(constExprs[i, "mod"])
+    val <- as.numeric(constExprs[i, "mod"])
+    X   <- setVal(X = X, rhs = rhs, lhs = lhs, val = val)
   }
 
-  labelLambda <- as.character.matrix(lambda, empty = TRUE)
-  dynamicExprs <- parTable[parTable$op == "=~" & 
-                           parTable$rhs %in% allIndsLVs &
-                           parTable$lhs %in% lVs &
+  if (type == "symmetric") X[upper.tri(X)] <- 0
+  X
+}
+  
+
+fillDynExprs <- function(X, parTable, op, RHS, LHS, type) {
+  # dynamic exprs need a corresponding matrix of labels
+  labelX <- as.character.matrix(X, empty = TRUE)
+  dynamicExprs <- parTable[parTable$op == op & 
+                           parTable$rhs %in% RHS &
+                           parTable$lhs %in% LHS &
                            !canBeNumeric(parTable$mod,
                                          includeNA = TRUE), ]
+  dynamicExprs[dynamicExprs$op == "~1", "rhs"] <- "1"
+
+  setVal <- getSetValFunc(type)
   for (i in seq_len(NROW(dynamicExprs))) {
     lhs <- dynamicExprs[i, "lhs"]
     rhs <- dynamicExprs[i, "rhs"]
     mod <- dynamicExprs[i, "mod"]
-    lambda[rhs, lhs] <- 0
-    labelLambda[rhs, lhs] <- mod
+
+    X      <- setVal(X = X, rhs = rhs, lhs = lhs, val = 0)
+    labelX <- setVal(X = labelX, rhs = rhs, lhs = lhs, val = mod)
   }
   
-  list(numeric = lambda, label = labelLambda)
+  list(numeric = X, label = labelX)
+}
+
+
+getSetValFunc <- function(type) {
+  switch(type, 
+         rhs       = setValRhsFirst,
+         lhs       = setValLhsFirst,
+         symmetric = setValSymmetric,
+         stop("Unrecognized type, this is probably a bug!"))
+}
+
+
+setValRhsFirst <- function(X, rhs, lhs, val) {
+  X[rhs, lhs] <- val
+  X
+}
+
+
+setValLhsFirst <- function(X, rhs, lhs, val) {
+  X[lhs, rhs] <- val
+  X
+}
+
+
+setValSymmetric <- function(X, rhs, lhs, val) {
+  X[lhs, rhs]     <- X[rhs, lhs] <- val
+  X
+}
+
+
+getEmptyPhi <- function(phi) {
+  labelPhi <- as.character.matrix(phi, empty = TRUE)
+  list(numeric = phi, label = labelPhi)
+}
+
+
+constructLambda <- function(lVs, indsLVs, parTable, auto.constraints = TRUE) {
+  numLVs        <- length(lVs) 
+  indsLVs       <- indsLVs[lVs] # make sure it is sorted
+  numIndsLVs    <- lapply(indsLVs, FUN = length)
+  allIndsLVs    <- unlist(indsLVs)
+  numAllIndsLVs <- length(allIndsLVs)
+  firstVal      <- ifelse(auto.constraints, 1, NA)
+
+  lastRowPreviousLV <- 0
+  lambda <- matrix(0, nrow = numAllIndsLVs, ncol = numLVs,
+                   dimnames = list(allIndsLVs, lVs))
+
+  for (i in seq_along(lVs)) {
+    rowIndices            <- seq_len(numIndsLVs[[i]]) + lastRowPreviousLV
+    lambda[rowIndices, i] <- c(firstVal, rep(NA, numIndsLVs[[i]] - 1))
+    lastRowPreviousLV     <- lastRowPreviousLV + numIndsLVs[[i]]
+  }
+  
+  setMatrixConstraints(X = lambda, parTable = parTable, op = "=~", 
+                       RHS = allIndsLVs, LHS = lVs, type = "rhs", 
+                       nonFreeParams = TRUE) # first params are by default set to 1
 }
 
 
 constructTau <- function(lVs, indsLVs, parTable, mean.observed = TRUE) {
-  indsLVs <- indsLVs[lVs] # make sure it is sorted
-  numIndsLVs <- lapply(indsLVs, FUN = length)
-  allIndsLVs <- unlist(indsLVs)
+  indsLVs       <- indsLVs[lVs] # make sure it is sorted
+  numIndsLVs    <- lapply(indsLVs, FUN = length)
+  allIndsLVs    <- unlist(indsLVs)
   numAllIndsLVs <- length(allIndsLVs)
+  default       <- ifelse(mean.observed, NA, 0)
   lavOptimizerSyntaxAdditions <- ""
-
-  if (mean.observed) default <- NA else default <- 0
 
   tau <- matrix(default, nrow = numAllIndsLVs, ncol = 1,
                 dimnames = list(allIndsLVs, "1"))
   for (lV in lVs) { # set first ind to 0, if lV has meanstructure
-    if (NROW(parTable[parTable$lhs == lV & parTable$op == "~" & 
-             parTable$rhs == "1", ])) {
-      firstInd <- indsLVs[[lV]][[1]]
-      tau[firstInd, 1] <- 0 
-      lavOptimizerSyntaxAdditions <- 
-        getFixedInterceptSyntax(indicator = firstInd, parTable = parTable, 
-                                syntax = lavOptimizerSyntaxAdditions) 
+    subPT <- parTable[parTable$lhs == lV & parTable$op == "~1", ]
+    if (NROW(subPT)) {
+      firstInd         <- indsLVs[[lV]][[1]]
+      tau[firstInd, 1] <- 0
+      lavOptimizerSyntaxAdditions <-
+        getFixedInterceptSyntax(indicator = firstInd, parTable = parTable,
+                                syntax = lavOptimizerSyntaxAdditions)
     }
   }
 
-  constExprs <- parTable[parTable$op == "~" & 
-                         parTable$rhs == "1" &
-                         parTable$lhs %in% allIndsLVs &
-                         canBeNumeric(parTable$mod,
-                                      includeNA = TRUE), ]
-  for (i in seq_len(NROW(constExprs))) {
-    lhs <- constExprs[i, "lhs"]
-    tau[lhs, 1] <- as.numeric(constExprs[i, "mod"])
-  }
-  
-  labelTau <- as.character.matrix(tau, empty = TRUE)
-  dynamicExprs <- parTable[parTable$op == "~" & 
-                           parTable$rhs == "1" &
-                           parTable$lhs %in% allIndsLVs &
-                           !canBeNumeric(parTable$mod,
-                                         includeNA = TRUE), ]
-  for (i in seq_len(NROW(dynamicExprs))) {
-    lhs <- dynamicExprs[i, "lhs"]
-    mod <- dynamicExprs[i, "mod"]
-    tau[lhs, 1] <- 0
-    labelTau[lhs, 1] <- mod
-  }
-  
-  list(numeric = tau, label = labelTau, syntaxAdditions = lavOptimizerSyntaxAdditions)
+  c(setMatrixConstraints(X = tau, parTable = parTable, op = "~1", 
+                         RHS = "", LHS = allIndsLVs, type = "lhs",
+                         nonFreeParams = FALSE),
+    list(syntaxAdditions = lavOptimizerSyntaxAdditions))
 }
 
 
 constructTheta <- function(lVs, indsLVs, parTable, auto.constraints = TRUE) {
-  numLVs <- length(lVs) 
-  indsLVs <- indsLVs[lVs] # make sure it is sorted
-  numIndsLVs <- lapply(indsLVs, FUN = length)
-  allIndsLVs <- unlist(indsLVs)
+  numLVs        <- length(lVs) 
+  indsLVs       <- indsLVs[lVs] # make sure it is sorted
+  numIndsLVs    <- lapply(indsLVs, FUN = length)
+  allIndsLVs    <- unlist(indsLVs)
   numAllIndsLVs <- length(allIndsLVs)
 
   theta <- matrix(0, nrow = numAllIndsLVs, ncol = numAllIndsLVs,
@@ -109,187 +149,65 @@ constructTheta <- function(lVs, indsLVs, parTable, auto.constraints = TRUE) {
 
   if (auto.constraints) {
     for (lV in lVs) { # set to 0 if there is only a single indicator
-      if (numIndsLVs[[lV]] == 1) theta[indsLVs[[lV]], indsLVs[[lV]]] <- 0
+      if (numIndsLVs[[lV]] != 1) next
+      theta[indsLVs[[lV]], indsLVs[[lV]]] <- 0
     }
   }
 
-  constExprs <- parTable[parTable$op == "~~" & 
-                         parTable$lhs %in% allIndsLVs &
-                         parTable$rhs %in% allIndsLVs &
-                         canBeNumeric(parTable$mod, 
-                                      includeNA = TRUE), ] 
-  for (i in seq_len(NROW(constExprs))) {
-    lhs <- constExprs[i, "lhs"]
-    rhs <- constExprs[i, "rhs"]
-    theta[lhs, rhs] <- theta[rhs, lhs] <- as.numeric(constExprs[i, "mod"])
-  }
-  
-  labelTheta <- as.character.matrix(theta, empty = TRUE)
-  dynamicExprs <- parTable[parTable$op == "~~" & 
-                           parTable$lhs %in% allIndsLVs &
-                           parTable$rhs %in% allIndsLVs &
-                           !canBeNumeric(parTable$mod,
-                                         includeNA = TRUE), ]
-  for (i in seq_len(NROW(dynamicExprs))) {
-    lhs <- dynamicExprs[i, "lhs"]
-    rhs <- dynamicExprs[i, "rhs"]
-    mod <- dynamicExprs[i, "mod"]
-    theta[lhs, rhs] <- theta[rhs, lhs] <- 0
-    labelTheta[lhs, rhs] <- labelTheta[rhs, lhs] <- mod
-  }
-  theta[upper.tri(theta)] <- 0
-
-  list(numeric = theta, label = labelTheta)
+  setMatrixConstraints(X = theta, parTable = parTable, op = "~~", 
+                       RHS = allIndsLVs, LHS = allIndsLVs, type = "symmetric",
+                       nonFreeParams = FALSE)
 }
 
 
 constructGamma <- function(DVs, IVs, parTable) {
-  structExprs <- parTable[parTable$op == "~" &
-                          parTable$rhs != "1", ]
+  exprsGamma <- parTable[parTable$op == "~" & !grepl(":", parTable$rhs), ]
   numDVs <- length(DVs)
   numIVs <- length(IVs)
-  gamma <- matrix(0, nrow = numDVs, ncol = numIVs,
-                  dimnames = list(DVs, IVs))
-
-  exprsGamma <- structExprs[structExprs$lhs %in% DVs & 
-                            !grepl(":", structExprs$rhs) & 
-                            structExprs$rhs %in% IVs & 
-                            canBeNumeric(structExprs$mod,
-                                         includeNA = TRUE), ] 
-
-  for (i in seq_len(NROW(exprsGamma))) {
-    lhs <- exprsGamma[i, "lhs"]
-    rhs <- exprsGamma[i, "rhs"]
-    gamma[lhs, rhs] <- as.numeric(exprsGamma[i, "mod"])
-  }
-
-  labelGamma <- as.character.matrix(gamma, empty = TRUE)
-  dynamicExprs <- structExprs[structExprs$lhs %in% DVs & 
-                              !grepl(":", structExprs$rhs) & 
-                              structExprs$rhs %in% IVs & 
-                              !canBeNumeric(structExprs$mod,
-                                            includeNA = TRUE), ]
-  for (i in seq_len(NROW(dynamicExprs))) {
-    lhs <- dynamicExprs[i, "lhs"]
-    rhs <- dynamicExprs[i, "rhs"]
-    mod <- dynamicExprs[i, "mod"]
-    gamma[lhs, rhs] <- 0
-    labelGamma[lhs, rhs] <- mod
-  }
-
-  list(numeric = gamma, label = labelGamma)
+  gamma  <- matrix(0, nrow = numDVs, ncol = numIVs, dimnames = list(DVs, IVs))
+  
+  setMatrixConstraints(X = gamma, parTable = exprsGamma, op = "~", RHS = IVs,
+                       LHS = DVs, type = "lhs", nonFreeParams = FALSE)
 }
 
 
 constructPsi <- function(etas, parTable) {
-  numEtas <- length(etas)
-  psi <- matrix(0, nrow = numEtas, ncol = numEtas,
-                dimnames = list(etas, etas)) 
+  numEtas   <- length(etas)
+  psi       <- matrix(0, nrow = numEtas, ncol = numEtas,
+                      dimnames = list(etas, etas)) 
   diag(psi) <- NA
 
-  constExprs <- parTable[parTable$op == "~~" & 
-                         parTable$lhs %in% etas &
-                         parTable$rhs %in% etas &
-                         canBeNumeric(parTable$mod,
-                                      includeNA = TRUE), ]
-  for (i in seq_len(NROW(constExprs))) {
-    lhs <- constExprs[i, "lhs"]
-    rhs <- constExprs[i, "rhs"]
-    psi[lhs, rhs] <- psi[rhs, lhs] <- as.numeric(constExprs[i, "mod"])
-  }
-  psi[upper.tri(psi)] <- 0 
-
-  labelPsi <- as.character.matrix(psi, empty = TRUE)
-  dynamicExprs <- parTable[parTable$op == "~~" & 
-                           parTable$lhs %in% etas &
-                           parTable$rhs %in% etas &
-                           !canBeNumeric(parTable$mod,
-                                         includeNA = TRUE), ]
-  for (i in seq_len(NROW(dynamicExprs))) {
-    lhs <- dynamicExprs[i, "lhs"]
-    rhs <- dynamicExprs[i, "rhs"]
-    mod <- dynamicExprs[i, "mod"]
-    psi[lhs, rhs] <- psi[rhs, lhs] <- 0
-    labelPsi[lhs, rhs] <- labelPsi[rhs, lhs] <- mod
-  }
-
-  list(numeric = psi, label = labelPsi)
+  setMatrixConstraints(X = psi, parTable = parTable, op = "~~", 
+                       RHS = etas, LHS = etas, type = "symmetric",
+                       nonFreeParams = FALSE)
 }
 
 
 constructPhi <- function(xis, method = "lms", cov.syntax = NULL, 
                          parTable) {
   numXis <- length(xis)
-  phi <- matrix(0, nrow = numXis, ncol = numXis,
-                dimnames = list(xis, xis))
+  phi    <- matrix(0, nrow = numXis, ncol = numXis,
+                   dimnames = list(xis, xis))
   if (method != "lms" && is.null(cov.syntax)) {
     phi[lower.tri(phi, diag = TRUE)] <- NA
-  }
-  
-  constExprs <- parTable[parTable$op == "~~" & 
-                         parTable$lhs %in% xis &
-                         parTable$rhs %in% xis &
-                         canBeNumeric(parTable$mod), ]
-  for (i in seq_len(NROW(constExprs))) {
-    lhs <- constExprs[i, "lhs"]
-    rhs <- constExprs[i, "rhs"]
-    phi[lhs, rhs] <- phi[rhs, lhs] <- as.numeric(constExprs[i, "mod"])
-  }
-  phi[upper.tri(phi)] <- 0
-
-  labelPhi <- as.character.matrix(phi, empty = TRUE)
-  dynamicExprs <- parTable[parTable$op == "~~" & 
-                           parTable$lhs %in% xis &
-                           parTable$rhs %in% xis &
-                           !canBeNumeric(parTable$mod,
-                                         includeNA = TRUE), ]
-  for (i in seq_len(NROW(dynamicExprs))) {
-    lhs <- dynamicExprs[i, "lhs"]
-    rhs <- dynamicExprs[i, "rhs"]
-    mod <- dynamicExprs[i, "mod"]
-    phi[lhs, rhs] <- phi[rhs, lhs] <- 0
-    labelPhi[lhs, rhs] <- labelPhi[rhs, lhs] <- mod
-  }
-
-  list(numeric = phi, label = labelPhi)
+    setMatrixConstraints(X = phi, parTable = parTable, op = "~~", 
+                         RHS = xis, LHS = xis, type = "symmetric",
+                         nonFreeParams = FALSE)
+  } else getEmptyPhi(phi = phi)
 }
 
 
 constructA <- function(xis, method = "lms", cov.syntax = NULL,
                        parTable) {
   numXis <- length(xis)
-  A <- matrix(0, nrow = numXis, ncol = numXis,
-              dimnames = list(xis, xis))
+  A      <- matrix(0, nrow = numXis, ncol = numXis,
+                   dimnames = list(xis, xis))
   if (method == "lms" && is.null(cov.syntax)) {
     A[lower.tri(A, diag = TRUE)] <- NA
-  }
-
-  constExprs <- parTable[parTable$op == "~~" & 
-                         parTable$lhs %in% xis &
-                         parTable$rhs %in% xis &
-                         canBeNumeric(parTable$mod), ]
-  for (i in seq_len(NROW(constExprs))) {
-    lhs <- constExprs[i, "lhs"]
-    rhs <- constExprs[i, "rhs"]
-    A[lhs, rhs] <- A[lhs, rhs] <- as.numeric(constExprs[i, "mod"])
-  }
-  A[upper.tri(A)] <- 0
-
-  labelA <- as.character.matrix(A, empty = TRUE)
-  dynamicExprs <- parTable[parTable$op == "~~" & 
-                           parTable$lhs %in% xis &
-                           parTable$rhs %in% xis &
-                           !canBeNumeric(parTable$mod,
-                                         includeNA = TRUE), ]
-  for (i in seq_len(NROW(dynamicExprs))) {
-    lhs <- dynamicExprs[i, "lhs"]
-    rhs <- dynamicExprs[i, "rhs"]
-    mod <- dynamicExprs[i, "mod"]
-    A[lhs, rhs] <- A[lhs, rhs] <- 0
-    labelA[lhs, rhs] <- labelA[lhs, rhs] <- mod
-  }
-
-  list(numeric = A, label = labelA)
+    setMatrixConstraints(X = A, parTable = parTable, op = "~~", 
+                         RHS = xis, LHS = xis, type = "symmetric",
+                         nonFreeParams = FALSE)
+  } else getEmptyPhi(phi = A)
 }
 
 
@@ -300,30 +218,9 @@ constructAlpha <- function(etas, parTable, auto.constraints = TRUE,
   alpha <- matrix(default, nrow = numEtas, ncol = 1, 
                   dimnames = list(etas, "1"))
 
-  constExprs <- parTable[parTable$op == "~" & 
-                         parTable$rhs == "1" &
-                         parTable$lhs %in% etas &
-                         canBeNumeric(parTable$mod, 
-                                      includeNA = TRUE), ]
-  for (i in seq_len(NROW(constExprs))) {
-    eta <- constExprs[i, "lhs"]
-    alpha[eta, 1] <- as.numeric(constExprs[i, "mod"])
-  }
-  
-  labelAlpha <- as.character.matrix(alpha, empty = TRUE)
-  dynamicExprs <- parTable[parTable$op == "~" & 
-                           parTable$rhs == "1" &
-                           parTable$lhs %in% etas &
-                           !canBeNumeric(parTable$mod,
-                                         includeNA = TRUE), ]
-  for (i in seq_len(NROW(dynamicExprs))) {
-    eta <- dynamicExprs[i, "lhs"]
-    mod <- dynamicExprs[i, "mod"]
-    alpha[eta, 1] <- 0
-    labelAlpha[eta, 1] <- mod
-  }
-
-  list(numeric = alpha, label = labelAlpha)
+  setMatrixConstraints(X = alpha, parTable = parTable, op = "~1", 
+                       RHS = "", LHS = etas, type = "lhs",
+                       nonFreeParams = FALSE)
 }
 
 
@@ -514,6 +411,28 @@ getScalingLambdaY <- function(lambdaY, indsEtas, etas, method = "qml") {
 
 sortXisConstructOmega <- function(xis, varsInts, etas, intTerms, 
                                   method = "lms", double = FALSE) {
+  listSortedXis  <- sortXis(xis = xis, varsInts = varsInts, etas = etas, 
+                            intTerms = intTerms, double = double)
+  sortedXis    <- listSortedXis$sortedXis
+  nonLinearXis <- listSortedXis$nonLinearXis
+
+  omegaXiXi <- constructOmegaXiXi(xis = xis, etas = etas, 
+                                  sortedXis = sortedXis, 
+                                  nonLinearXis = nonLinearXis, 
+                                  varsInts = varsInts,
+                                  intTerms = intTerms)
+  omegaEtaXi <- constructOmegaEtaXi(xis = xis, etas = etas,
+                                    sortedXis = sortedXis, 
+                                    nonLinearXis = nonLinearXis, 
+                                    varsInts = varsInts,
+                                    intTerms = intTerms)
+
+  list(sortedXis = sortedXis, omegaXiXi = omegaXiXi,
+       omegaEtaXi = omegaEtaXi, k = length(nonLinearXis))
+}
+
+
+sortXis <- function(xis, varsInts, etas, intTerms, double) {
   # allVarsInInts should be sorted according to which variables 
   # occur in the most interaction terms (makes it more efficient)
   allVarsInInts <- unique(unlist(varsInts))
@@ -526,12 +445,9 @@ sortXisConstructOmega <- function(xis, varsInts, etas, intTerms,
     if (any(interaction %in% nonLinearXis) && !double ||
         all(interaction %in% nonLinearXis) && double) next # no need to add it again
 
-    if (length(interaction) > 2) {
-      stop2("Only interactions between two variables are allowed")
-    } else if (all(interaction %in% etas)) {
-      stop2("Interactions between two endogenous variables are not allowed, ",
-           "see \nvignette(\"interaction_two_etas\", \"modsem\")")
-    } 
+    stopif(length(interaction) > 2, "Only interactions between two variables are allowed")
+    stopif(all(interaction %in% etas), "Interactions between two endogenous ",
+           "variables are not allowed, see \nvignette(\"interaction_two_etas\", \"modsem\")")
 
     choice <- unique(interaction[which(!interaction %in% etas)])
     if (length(choice) > 1 && !double) {
@@ -541,54 +457,73 @@ sortXisConstructOmega <- function(xis, varsInts, etas, intTerms,
 
     nonLinearXis <- c(nonLinearXis, choice)
   }
+
   linearXis <- xis[!xis %in% nonLinearXis]
-  sortedXis <- c(nonLinearXis, linearXis)
 
-  # submatrices for omegas
-  omegaXiXi <- NULL
-  labelOmegaXiXi <- NULL
+  list(linearXis = linearXis, sortedXis = c(nonLinearXis, linearXis),
+       nonLinearXis = nonLinearXis)
+}
+
+
+constructOmegaEtaXi <- function(xis, etas, sortedXis, nonLinearXis,
+                                varsInts, intTerms) {
+  omega      <- NULL
+  labelOmega <- NULL 
+
   for (eta in etas) {
-    subOmegaXiXi <- matrix(0, nrow = length(xis), ncol = length(xis),
-                           dimnames = list(sortedXis, sortedXis))
-    subLabelOmegaXiXi <- as.character.matrix(subOmegaXiXi, empty = TRUE)
+    subOmega <- matrix(0, nrow = length(xis), ncol = length(etas),
+                            dimnames = list(sortedXis, etas))
+    subLabelOmega <- as.character.matrix(subOmega, empty = TRUE)
 
-    lapply(varsInts[intTerms$lhs == eta], FUN = function(row) {
-       if (!all(row %in% sortedXis)) return(NULL) 
+    for (row in varsInts[intTerms$lhs == eta]) {
+      if (!any(row %in% etas) || all(row %in% etas)) next
+
+      whichXi  <- which(!row %in% etas)
+      whichEta <- which(row %in% etas)
+
+      subOmega[row[[whichXi]], row[[whichEta]]] <- 
+        getFreeOrConstIntTerms(row, eta, intTerms)
+      subLabelOmega[row[[whichXi]], row[[whichEta]]] <- 
+        getLabelIntTerms(row, eta, intTerms)
+    }
+
+    omega      <- rbind(omega, labelRowsOmega(subOmega, eta = eta))
+    labelOmega <- rbind(labelOmega, labelRowsOmega(subLabelOmega, eta = eta))
+  }
+  list(numeric = omega, label = labelOmega)
+}
+
+
+constructOmegaXiXi <- function(xis, etas, sortedXis, nonLinearXis,
+                               varsInts, intTerms) {
+  omega      <- NULL
+  labelOmega <- NULL
+  for (eta in etas) {
+    subOmega <- matrix(0, nrow = length(sortedXis), ncol = length(sortedXis),
+                       dimnames = list(sortedXis, sortedXis))
+    subLabelOmega <- as.character.matrix(subOmega, empty = TRUE)
+
+    for (row in varsInts[intTerms$lhs == eta]) {
+       if (!all(row %in% sortedXis)) next
+
        whichRow <- which(row %in% nonLinearXis)[[1]] # if quadratic term pick first
        whichCol <- ifelse(whichRow == 1, 2, 1)
        
-       subOmegaXiXi[row[[whichRow]], row[[whichCol]]] <<- 
-         getFreeOrConsIntTerms(row, eta, intTerms)
-       subLabelOmegaXiXi[row[[whichRow]], row[[whichCol]]] <<-
+       subOmega[row[[whichRow]], row[[whichCol]]] <- 
+         getFreeOrConstIntTerms(row, eta, intTerms)
+       subLabelOmega[row[[whichRow]], row[[whichCol]]] <-
          getLabelIntTerms(row, eta, intTerms)
-    })
-    omegaXiXi <- rbind(omegaXiXi, subOmegaXiXi)
-    labelOmegaXiXi <- rbind(labelOmegaXiXi, subLabelOmegaXiXi)
+    }
+
+    omega      <- rbind(omega, labelRowsOmega(subOmega, eta = eta))
+    labelOmega <- rbind(labelOmega, labelRowsOmega(subLabelOmega, eta = eta))
   }
 
-  omegaEtaXi <- NULL
-  labelOmegaEtaXi <- NULL 
-  for (eta in etas) {
-    subOmegaEtaXi <- matrix(0, nrow = length(xis), ncol = length(etas),
-                            dimnames = list(sortedXis, etas))
-    subLabelOmegaEtaXi <- as.character.matrix(subOmegaEtaXi, empty = TRUE)
+  list(numeric = omega, label = labelOmega)
+}
 
-    lapply(varsInts[intTerms$lhs == eta], FUN = function(row) {
-       if (any(row %in% etas) & !all(row %in% etas)) {
-         whichXi <- which(!row %in% etas)
-         whichEta <- which(row %in% etas)
 
-         subOmegaEtaXi[row[[whichXi]], row[[whichEta]]] <<- 
-           getFreeOrConsIntTerms(row, eta, intTerms)
-         subLabelOmegaEtaXi[row[[whichXi]], row[[whichEta]]] <<- 
-           getLabelIntTerms(row, eta, intTerms)
-       }
-    })
-    omegaEtaXi <- rbind(omegaEtaXi, subOmegaEtaXi)
-    labelOmegaEtaXi <- rbind(labelOmegaEtaXi, subLabelOmegaEtaXi)
-  }
-  list(sortedXis = sortedXis, 
-       omegaXiXi = list(numeric = omegaXiXi, label = labelOmegaXiXi),
-       omegaEtaXi = list(numeric = omegaEtaXi, label = labelOmegaEtaXi),
-       k = length(nonLinearXis))
+labelRowsOmega <- function(X, eta) {
+  rownames(X) <- paste0(eta, "~", rownames(X))
+  X
 }

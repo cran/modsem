@@ -1,76 +1,10 @@
 #' @export
-parameter_estimates.modsem_lms <- function(object, ...) {
+parameter_estimates.modsem_da <- function(object, ...) {
   object$parTable
 }
 
 
-#' @export
-parameter_estimates.modsem_qml <- function(object, ...) {
-  object$parTable
-}
-
-
-MODSEM_VERSION <- "1.0.2"
-#' summary for modsem objects
-#'
-#' @param object modsem object to summarized
-#' @param H0 should a null model be estimated (used for comparison)
-#' @param verbose print progress for the estimation of null model
-#' @param r.squared calculate R-squared
-#' @param adjusted.stat should sample size corrected/adjustes AIC and BIC be reported?
-#' @param digits number of digits to print
-#' @param scientific print p-values in scientific notation
-#' @param ci print confidence intervals
-#' @param standardized print standardized estimates
-#' @param loadings print loadings
-#' @param regressions print regressions
-#' @param covariances print covariances
-#' @param intercepts print intercepts
-#' @param variances print variances
-#' @param ... additional arguments
-#' @rdname summary
-#' @export
-#' @examples
-#' \dontrun{
-#' m1 <- "
-#'  # Outer Model
-#'  X =~ x1 + x2 + x3
-#'  Y =~ y1 + y2 + y3
-#'  Z =~ z1 + z2 + z3
-#'
-#'  # Inner model
-#'  Y ~ X + Z + X:Z
-#' "
-#'
-#' est1 <- modsem(m1, oneInt, "lms")
-#' summary(est1, ci = TRUE, scientific = TRUE)
-#' }
-summary.modsem_lms <- function(object,
-                               H0 = TRUE,
-                               verbose = TRUE,
-                               r.squared = TRUE,
-                               adjusted.stat = FALSE,
-                               digits = 3,
-                               scientific = FALSE,
-                               ci = FALSE,
-                               standardized = FALSE,
-                               loadings = TRUE,
-                               regressions = TRUE,
-                               covariances = TRUE,
-                               intercepts = TRUE,
-                               variances = TRUE,
-                               ...) {
-  summaryLmsAndQml(object,
-    H0 = H0, verbose = verbose,
-    r.squared = r.squared, adjusted.stat = adjusted.stat,
-    digits = digits, scientific = scientific, ci = ci,
-    standardized = standardized, 
-    loadings = loadings, regressions = regressions,
-    covariances = covariances, intercepts = intercepts,
-    variances = variances, ...
-  )
-}
-
+MODSEM_VERSION <- "1.0.3"
 
 #' summary for modsem objects
 #'
@@ -88,6 +22,7 @@ summary.modsem_lms <- function(object,
 #' @param covariances print covariances
 #' @param intercepts print intercepts
 #' @param variances print variances
+#' @param var.interaction if FALSE (default) variances for interaction terms will be removed (if present)
 #' @param ... additional arguments
 #' @rdname summary
 #' @export
@@ -106,101 +41,74 @@ summary.modsem_lms <- function(object,
 #' est1 <- modsem(m1, oneInt, "qml")
 #' summary(est1, ci = TRUE, scientific = TRUE)
 #' }
-summary.modsem_qml <- function(object,
-                               H0 = TRUE,
-                               verbose = TRUE,
-                               r.squared = TRUE,
-                               adjusted.stat = FALSE,
-                               digits = 3,
-                               scientific = FALSE,
-                               ci = FALSE,
-                               standardized = FALSE, 
-                               loadings = TRUE,
-                               regressions = TRUE,
-                               covariances = TRUE,
-                               intercepts = TRUE,
-                               variances = TRUE,
-                               ...) {
-  summaryLmsAndQml(object,
-    H0 = H0, verbose = verbose,
-    r.squared = r.squared, adjusted.stat = adjusted.stat,
-    digits = digits, scientific = scientific, ci = ci,
-    standardized = standardized, 
-    loadings = loadings, regressions = regressions,
-    covariances = covariances, intercepts = intercepts,
-    variances = variances, ...
-  )
-}
+summary.modsem_da <- function(object,
+                              H0 = TRUE,
+                              verbose = TRUE,
+                              r.squared = TRUE,
+                              adjusted.stat = FALSE,
+                              digits = 3,
+                              scientific = FALSE,
+                              ci = FALSE,
+                              standardized = FALSE,
+                              loadings = TRUE,
+                              regressions = TRUE,
+                              covariances = TRUE,
+                              intercepts = TRUE,
+                              variances = TRUE,
+                              var.interaction = FALSE,
+                              ...) {
+  method <- object$method
 
-
-summaryLmsAndQml <- function(object,
-                             H0 = TRUE,
-                             verbose = TRUE,
-                             r.squared = TRUE,
-                             adjusted.stat = FALSE,
-                             digits = 3,
-                             scientific = FALSE,
-                             ci = FALSE,
-                             standardized = FALSE, 
-                             loadings = TRUE,
-                             regressions = TRUE,
-                             covariances = TRUE,
-                             intercepts = TRUE,
-                             variances = TRUE,
-                             includeVarIntTerm = FALSE, 
-                             ...) {
-  if (inherits(object, "modsem_qml")) 
-    method <- "qml"
-  else if (inherits(object, "modsem_lms")) 
-    method <- "lms"
-
-  if (standardized) 
+  if (standardized) {
     parTable <- standardized_estimates(object)
-  else 
+  } else {
     parTable <- parameter_estimates(object)
+  }
 
-  if (!includeVarIntTerm) 
+  if (!var.interaction) {
     parTable <- removeInteractionVariances(parTable)
+  }
   
   args <- object$args
   out <- list(
-    parTable = parTable,
-    data = object$data,
-    iterations = object$iterations,
-    logLik = object$logLik,
-    fit = fit_modsem_da(object, chisq = FALSE),
-    D = NULL,
-    N = NROW(object$data),
-    method = method,
-    optimizer = object$optimizer,
-    quad = object$info.quad,
-    type.se = object$type.se, 
+    parTable       = parTable,
+    data           = object$data,
+    iterations     = object$iterations,
+    logLik         = object$logLik,
+    fit            = fit_modsem_da(object, chisq = FALSE),
+    D              = NULL,
+    N              = NROW(object$data),
+    method         = method,
+    optimizer      = object$optimizer,
+    quad           = object$info.quad,
+    type.se        = object$type.se, 
     type.estimates = ifelse(standardized, "standardized", object$type.estimates),
-    information = object$information
+    information    = object$information
   )
 
   if (H0) {
-    estH0 <- estimateNullModel(object$originalParTable,
-      data = out$data,
-      method = method,
-      cov.syntax = object$model$covModel$syntax,
-      verbose = verbose,
-      calc.se = FALSE,
-      double = args$double,
-      standardize = args$standardize,
-      standardize.out = args$standardize.out,
-      mean.observed = args$mean.observed
+    estH0 <- estimateNullModel(
+        object$originalParTable,
+        data            = out$data,
+        method          = method,
+        cov.syntax      = object$model$covModel$syntax,
+        verbose         = verbose,
+        calc.se         = FALSE,
+        double          = args$double,
+        standardize     = args$standardize,
+        standardize.out = args$standardize.out,
+        mean.observed   = args$mean.observed
     )
 
     out$nullModel <- estH0
     if (is.null(estH0)) {
       warning2("Comparative fit to H0 will not be calculated.")
-      H0 <- FALSE
-      out$D <- NULL 
+      H0        <- FALSE
+      out$D     <- NULL 
       out$fitH0 <- NULL
 
     } else {
-      out$D <- compare_fit(estH0, object)
+      out$D     <- compare_fit(estH0, object)
       out$fitH0 <- fit_modsem_da(estH0)
     }
   } else {
@@ -210,20 +118,18 @@ summaryLmsAndQml <- function(object,
   if (r.squared) {
     out$r.squared <- calcRsquared(parTable)
     if (H0) out$r.squared$H0 <- calcRsquared(estH0$parTable)
-  } else {
-    out$r.squared <- NULL
-  }
+  } else out$r.squared <- NULL
 
   out$format <- list(
-    digits = digits,
-    scientific = scientific,
+    digits        = digits,
+    scientific    = scientific,
     adjusted.stat = adjusted.stat,
-    ci = ci,
-    loadings = loadings,
-    regressions = regressions,
-    covariances = covariances,
-    intercepts = intercepts,
-    variances = variances
+    ci            = ci,
+    loadings      = loadings,
+    regressions   = regressions,
+    covariances   = covariances,
+    intercepts    = intercepts,
+    variances     = variances
   )
 
   class(out) <- "summary_da"
@@ -250,7 +156,7 @@ print.summary_da <- function(x, digits = 3, ...) {
               x$N, x$iterations, round(x$logLik, 2), round(x$fit$AIC, 2), 
               round(x$fit$BIC, 2))
   if (x$format$adjusted.stat) {
-    names <- c(names, "Corrected Akaike (AICc)", "Adjusted Bayesian (aBIC)")
+    names  <- c(names, "Corrected Akaike (AICc)", "Adjusted Bayesian (aBIC)")
     values <- c(values, round(x$fit$AICc, 2), round(x$fit$aBIC, 2))
   }
 
@@ -349,48 +255,25 @@ print.summary_da <- function(x, digits = 3, ...) {
                    width.out = width.out), "\n")
 
   printParTable(x$parTable,
-    scientific = x$format$scientific,
-    ci = x$format$ci,
-    digits = x$format$digits,
-    loadings = x$format$loadings,
-    regressions = x$format$regressions,
-    covariances = x$format$covariances,
-    intercepts = x$format$intercepts,
-    variances = x$format$variances)
+                scientific  = x$format$scientific,
+                ci          = x$format$ci,
+                digits      = x$format$digits,
+                loadings    = x$format$loadings,
+                regressions = x$format$regressions,
+                covariances = x$format$covariances,
+                intercepts  = x$format$intercepts,
+                variances   = x$format$variances)
 }
 
 
 #' @export
-print.modsem_lms <- function(x, digits = 3, ...) {
-  parTable <- x$parTable
+print.modsem_da <- function(x, digits = 3, ...) {
+  parTable         <- x$parTable
   parTable$p.value <- format.pval(parTable$p.value, digits = digits)
-  names(parTable) <- c(
-    "lhs", "op", "rhs",
-    "est", "std.error",
-    "z.value", "p.value", # "P(>|z|)",
-    "ci.lower", "ci.upper"
-  )
-  est <- lapply(parTable, function(col) {
-    if (is.numeric(col)) round(col, digits) else col
-  }) |>
-    as.data.frame()
-  print(est)
-}
-
-
-#' @export
-print.modsem_qml <- function(x, digits = 3, ...) {
-  parTable <- x$parTable
-  parTable$p.value <- format.pval(parTable$p.value, digits = digits)
-  names(parTable) <- c(
-    "lhs", "op", "rhs",
-    "est", "std.error",
-    "z.value", "p.value", # "P(>|z|)",
-    "ci.lower", "ci.upper"
-  )
-  est <- lapply(parTable, function(col) {
-    if (is.numeric(col)) round(col, digits) else col
-  }) |>
+  names(parTable)  <- c("lhs", "op", "rhs", "label", "est", "std.error",
+                        "z.value", "p.value", "ci.lower", "ci.upper")
+  est <- lapply(parTable, FUN = function(col) 
+                if (is.numeric(col)) round(col, digits) else col) |>
     as.data.frame()
   print(est)
 }
@@ -408,39 +291,35 @@ estimateNullModel <- function(parTable,
                               double = NULL,
                               ...) {
   tryCatch({
-      strippedParTable <- removeUnknownLabels(parTable[!grepl(":", parTable$rhs), ])
-      if (NROW(strippedParTable) == NROW(parTable)) {
-        return(NULL)
-      }
+    strippedParTable <- removeUnknownLabels(parTable[!grepl(":", parTable$rhs), ])
+    if (NROW(strippedParTable) == NROW(parTable)) return(NULL)
 
-      syntax <- parTableToSyntax(strippedParTable)
-      if (verbose) cat("Estimating null model\n")
-      modsem_da(syntax, data, method, 
-                verbose = verbose, 
-                cov.syntax = cov.syntax, 
-                calc.se = calc.se, 
-                double = double,
-                standardize = standardize, 
-                standardize.out = standardize.out,
-                mean.observed = mean.observed, ...)
-    },
-    error = function(e) {
-      warning2(
-        "Null model could not be estimated. ",
-        "Error message: ", e$message
-      )
-      NULL
-    }
-  )
+    syntax <- parTableToSyntax(strippedParTable)
+    if (verbose) cat("Estimating null model\n")
+    modsem_da(syntax, data = data, 
+              method = method, 
+              verbose = verbose, 
+              cov.syntax = cov.syntax, 
+              calc.se = calc.se, 
+              double = double,
+              standardize = standardize, 
+              standardize.out = standardize.out,
+              mean.observed = mean.observed, ...)
+  },
+  error = function(e) {
+    warning2("Null model could not be estimated. ",
+             "Error message: ", e$message)
+    NULL
+  })
 }
 
 
 
 #' compare model fit for qml and lms models
 #'
-#' @param estH0 object of class `modsem_lms` or `modsem_qml` representing the
+#' @param estH0 object of class `modsem_da` representing the
 #' null hypothesis model
-#' @param estH1 object of class `modsem_lms` or `modsem_qml` representing the
+#' @param estH1 object of class `modsem_da` representing the
 #' @description Compare the fit of two models using the likelihood ratio test.
 #' `estH0` representing the null 
 #' hypothesis model, and `estH1` the alternative hypothesis model. Importantly, 
@@ -481,7 +360,7 @@ compare_fit <- function(estH0, estH1) {
   if (is.null(estH0) || is.null(estH1)) {
     return(NULL)
   }
-  df <- length(coef(estH1)) - length(coef(estH0))
+  df <- length(coef(estH1, type = "free")) - length(coef(estH0, type = "free"))
   D <- -2 * (estH0$logLik - estH1$logLik)
   p <- stats::pchisq(D, df = df, lower.tail = FALSE, log.p = FALSE)
   list(D = D, df = df, p = p, llChange = estH1$logLik - estH0$logLik)
@@ -490,59 +369,37 @@ compare_fit <- function(estH0, estH1) {
 
 calcRsquared <- function(parTable) {
   parTable <- var_interactions.data.frame(parTable)
-  etas <- unique(parTable$lhs[parTable$op == "~" &
-    parTable$rhs != "1"])
+  etas     <- unique(parTable$lhs[parTable$op == "~"])
 
   # Calculate Variances/R squared of Etas
   variances <- residuals <- Rsqr <- vector("numeric", length(etas))
   for (i in seq_along(etas)) {
     variances[[i]] <- calcCovParTable(etas[[i]], etas[[i]], parTable)
-    residuals[[i]] <- parTable$est[parTable$lhs == etas[[i]] &
-      parTable$op == "~~" &
-      parTable$rhs == etas[[i]]] |>
-      as.numeric()
+    residuals[[i]] <- as.numeric(parTable$est[parTable$lhs == etas[[i]] &
+                                              parTable$op == "~~" &
+                                              parTable$rhs == etas[[i]]])
     Rsqr[[i]] <- 1 - residuals[[i]] / variances[[i]]
   }
-  data.frame(
-    eta = etas, variance = variances,
-    residual = residuals, Rsqr = Rsqr
-  )
+
+  data.frame(eta = etas, variance = variances,
+             residual = residuals, Rsqr = Rsqr)
 }
 
 
 #' @export
-var_interactions.modsem_lms <- function(object, ...) {
-  var_interactions.data.frame(parameter_estimates(object))
-}
-
-
-#' @export
-var_interactions.modsem_qml <- function(object, ...) {
+var_interactions.modsem_da <- function(object, ...) {
   var_interactions.data.frame(parameter_estimates(object))
 }
 
 
 #' @export 
-standardized_estimates.modsem_lms <- function(object, ...) {
+standardized_estimates.modsem_da <- function(object, ...) {
   standardized_estimates.data.frame(parameter_estimates(object))
 }
 
 
 #' @export 
-standardized_estimates.modsem_qml <- function(object, ...) {
-  standardized_estimates.data.frame(parameter_estimates(object))
-}
-
-
-#' @export 
-modsem_inspect.modsem_lms <- function(object, what = NULL, ...) {
-  if (is.null(what)) what <- "default"
-  modsem_inspect_da(object, what = what, ...)
-}
-
-
-#' @export 
-modsem_inspect.modsem_qml <- function(object, what = NULL, ...) {
+modsem_inspect.modsem_da <- function(object, what = NULL, ...) {
   if (is.null(what)) what <- "default"
   modsem_inspect_da(object, what = what, ...)
 }
@@ -550,40 +407,53 @@ modsem_inspect.modsem_qml <- function(object, what = NULL, ...) {
 
 #' @export 
 #' @importFrom stats vcov
-vcov.modsem_qml <- function(object, ...) {
-  modsem_inspect_da(object, what = "vcov")[[1]]
-}
-
-
-#' @export 
-#' @importFrom stats vcov
-vcov.modsem_lms <- function(object, ...) {
+vcov.modsem_da <- function(object, ...) {
   modsem_inspect_da(object, what = "vcov")[[1]]
 }
 
 
 #' @export 
 #' @importFrom stats coefficients
-coefficients.modsem_qml <- function(object, ...) {
-  modsem_inspect_da(object, what = "coefficients")[[1]]
-}
-
-
-#' @export 
-#' @importFrom stats coefficients
-coefficients.modsem_lms <- function(object, ...) {
-  modsem_inspect_da(object, what = "coefficients")[[1]]
-}
-
-#' @export 
-#' @importFrom stats coef
-coef.modsem_qml <- function(object, ...) {
-  modsem_inspect_da(object, what = "coefficients")[[1]]
+coefficients.modsem_da <- function(object, type = "all", ...) {
+  what <- ifelse(type == "all", yes = "all.coefficients",
+                 no = "free.coefficients")
+  modsem_inspect_da(object, what = what)[[1]]
 }
 
 
 #' @export 
 #' @importFrom stats coef
-coef.modsem_lms <- function(object, ...) {
-  modsem_inspect_da(object, what = "coefficients")[[1]]
+coef.modsem_da <- function(object, type = "all", ...) {
+  coefficients.modsem_da(object, type = type, ...)
+}
+
+
+#' Wrapper for vcov
+#'
+#' @param object fittet model to inspect
+#' @param ... additional arguments
+#' @description wrapper for vcov, to be used with modsem::vcov_modsem_da, 
+#' since vcov is not in the namespace of modsem, but stats
+#' @export
+vcov_modsem_da <- function(object, ...) {
+  vcov.modsem_da(object, ...)
+}
+
+
+#' Wrapper for coef
+#'
+#' @param object fittet model to inspect
+#' @param ... additional arguments
+#' @description wrapper for coef, to be used with modsem::coef_modsem_da, 
+#' since coef is not in the namespace of modsem, but stats
+#' @export
+coef_modsem_da <- function(object, ...) {
+  coef.modsem_da(object, ...)
+}
+
+
+#' @export
+#' @importFrom stats nobs
+nobs.modsem_da <- function(object, ...) {
+  modsem_inspect_da(object, what = "N", ...)[[1]]
 }

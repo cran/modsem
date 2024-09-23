@@ -144,15 +144,23 @@ createParTableBranch <- function(syntaxTree) {
                   rep(x, len),
                 len = length(rhs)) |> as.vector()
   op <- rep(getTokenString(syntaxTree$op), length(rhs))
-  data.frame(lhs = lhs, op = op, rhs = rhs, mod = mod)
+  parTable <- data.frame(lhs = lhs, op = op, rhs = rhs, mod = mod)
+
+  # post-processing
+  parTable[parTable$op == ":=", "mod"] <- parTable[parTable$op == ":=", "lhs"]
+  intercepts <- parTable$op == "~" & parTable$rhs == "1"
+  parTable[intercepts, "op"]  <- "~1"
+  parTable[intercepts, "rhs"] <- ""
+
+  parTable
 }
 
 
-#' Generate parameter table for lavaan syntax 
+#' Generate parameter table for \code{lavaan} syntax 
 #'
 #' @param syntax model syntax
 #'
-#' @return data.frame with columns lhs, op, rhs, mod
+#' @return \code{data.frame} with columns \code{lhs, op, rhs, mod}
 #' @export modsemify
 #'
 #' @examples 
@@ -168,9 +176,8 @@ createParTableBranch <- function(syntaxTree) {
 #''
 #' modsemify(m1)
 modsemify <- function(syntax) {
-  if (!is.character(syntax) && length(syntax) > 1) {
-    stop2("Syntax is not a string og length 1")
-  }
+  stopif(!is.character(syntax) && length(syntax) > 1,
+         "Syntax is not a string og length 1")
   syntaxTrees <- createSyntaxTreesSyntax(syntax)
   parsedTrees <- parseSyntaxTrees(syntaxTrees)
   purrr::list_rbind(lapply(parsedTrees,
@@ -179,14 +186,18 @@ modsemify <- function(syntax) {
 
 
 parTableToSyntax <- function(parTable, removeColon = FALSE) {
-  out <- ''
+  intercepts <- parTable$op == "~1"
+  parTable[intercepts, "rhs"] <- "1"
+  parTable[intercepts, "op"]  <- "~"
+
+  out <- ""
   if (removeColon) {
     parTable$lhs <- stringr::str_remove_all(parTable$lhs, ":")
     parTable$rhs <- stringr::str_remove_all(parTable$rhs, ":")
     parTable$mod <- stringr::str_remove_all(parTable$mod, ":")
   }
   for (i in 1:nrow(parTable)) {
-    if (parTable[["mod"]][i] != "") {
+    if (parTable[["mod"]][[i]] != "" && parTable[["op"]][[i]] != ":=") {
       modifier <- paste0(parTable[["mod"]][[i]], "*")
     } else {
       modifier <- ""
@@ -203,9 +214,10 @@ parTableToSyntax <- function(parTable, removeColon = FALSE) {
 
 
 mergeTokens <- function(x, y) {
-  if (!"LavName" %in% class(x) || !"LavName" %in% class(x)) {
-    stop2("Interactions are reserved for objects ", highlightErrorToken(x))
-  }
+  stopif(!"LavName" %in% class(x) || !"LavName" %in% class(x),
+         "Interactions are reserved for objects ", 
+         highlightErrorToken(x))
+
   out <- paste0(x, y)
   attributes(out) <- attributes(x)
   out
