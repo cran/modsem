@@ -1,28 +1,28 @@
-parseLavaan <- function(model.syntax = NULL, variableNames = NULL, match = FALSE) {
+parseLavaan <- function(model.syntax = NULL, 
+                        variableNames = NULL, 
+                        match = FALSE,
+                        suppress.warnings.match = FALSE) {
   # Check if a model.syntax is provided, if not we should return an error
-  if (is.null(model.syntax)) 
+  if (is.null(model.syntax))
     stop2("No model.syntax provided")
-  else if (!is.character(model.syntax)) 
+  else if (!is.character(model.syntax))
     stop2("The provided model syntax is not a string!")
-  else if (length(model.syntax) > 1) 
+  else if (length(model.syntax) > 1)
     stop2("The provided model syntax is not of length 1")
 
   parTable <- modsemify(model.syntax)
   structuralExprs <- parTable[parTable$op == "~",]
-  measureExprs <- parTable[parTable$op %in% c("=~", "<~"), ]
-  lVs <- unique(parTable$lhs[parTable$op == "=~"])
-  vars <- unique(c(parTable$rhs[parTable$op %in% c("~", "=~")],
-                   parTable$lhs[parTable$op == "~"])) |>
-    stringr::str_split(pattern = ":", simplify = FALSE) |>
-    unlist() |> unique()
-  oVs <- vars[!vars %in% lVs]
-  prodNames <- parTable$rhs[grepl(":", parTable$rhs) & parTable$op == "~"] |>
-    unique()
+  measureExprs    <- parTable[parTable$op %in% c("=~", "<~"), ]
+
+  oVs  <- getOVs(parTable)
+  lVs  <- getLVs(parTable)
+  vars <- getVarsPI(parTable)
+  prodNames <- getProdNames(parTable)
   prodNamesCleaned <- stringr::str_remove_all(prodNames, ":")
 
   # Get all the indicators in the model
-  inds <- unique(measureExprs$rhs[!grepl(":", measureExprs$rhs)])
-  stopif(!all(inds %in% variableNames), 
+  inds <- getIndicators(parTable, observed=TRUE)
+  stopif(!all(inds %in% variableNames),
          "Unable to find observed variables in data: ",
          capturePrint(inds[!inds %in% variableNames]))
 
@@ -31,10 +31,12 @@ parseLavaan <- function(model.syntax = NULL, variableNames = NULL, match = FALSE
                                  FUN = splitProdName,
                                  pattern = ":",
                                  names = prodNamesCleaned)
+  checkElementsInProds(elementsInProds, lVs=lVs, oVs=oVs)
+  checkHigherOrderInteractions(elementsInProds, parTable=parTable)
 
   # Inds belonging to latent variables which are specified in the syntax
   indsLatents <- structureLavExprs(measureExprs)
-  
+
   if (length(prodNamesCleaned) > 0) {
     # Get inds belonging to latent variables, or if observed, just get the
     # observed variable in prod terms
@@ -45,9 +47,8 @@ parseLavaan <- function(model.syntax = NULL, variableNames = NULL, match = FALSE
                   names = prodNamesCleaned)
 
     # Creating a relDF for prodTerms
-    relDfs <- lapply(indsInLatentProds,
-                     FUN = createRelDf,
-                     match = match)
+    relDfs <- lapply(indsInLatentProds, FUN = createRelDf, match = match,
+                     suppress.warnings.match = suppress.warnings.match)
 
     # Get a list with all the inds in each interactionterm
     indsInLatentProds <- lapplyNamed(indsInLatentProds,
@@ -58,9 +59,9 @@ parseLavaan <- function(model.syntax = NULL, variableNames = NULL, match = FALSE
                                 FUN = colnames,
                                 names = names(relDfs))
   } else { # in the case where ther is no interaction effects
-    indsInLatentProds <- NULL 
-    relDfs <- NULL 
-    indProdNames <- NULL 
+    indsInLatentProds <- NULL
+    relDfs <- NULL
+    indProdNames <- NULL
   }
 
   # Return modelSpec
@@ -153,13 +154,13 @@ fixLatentNamesSyntax <- function(model.syntax, pattern) {
 }
 
 
-createRelDf <- function(indsProdTerm, match = FALSE) {
+createRelDf <- function(indsProdTerm, match = FALSE, suppress.warnings.match = FALSE) {
   if (match) {
-    lengths <- vapply(indsProdTerm, FUN.VALUE = integer(1L), 
-                      FUN = length) 
+    lengths <- vapply(indsProdTerm, FUN.VALUE = integer(1L),
+                      FUN = length)
     if ((shortest <- min(lengths)) != (longest <- max(lengths))) {
-      warning2("Unequal number of indicators for latent variables ",
-              "in product term, not all indicators will be used")
+      warnif(!suppress.warnings.match, "Unequal number of indicators for latent variables ",
+             "in product term, not all indicators will be used")
       indsProdTerm <- lapply(indsProdTerm,
                              FUN = function(x, shortest) x[seq_len(shortest)],
                              shortest = shortest)
@@ -174,10 +175,10 @@ createRelDf <- function(indsProdTerm, match = FALSE) {
       }
     }
   }
-  
+
   names <- apply(relDf, MARGIN = 2, FUN = stringr::str_c, collapse = "")
   structure(as.data.frame(relDf),
-            names = names, 
+            names = names,
             row.names = names(indsProdTerm))
 }
 

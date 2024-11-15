@@ -344,71 +344,83 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(modsem)</span></code></pre></div>
 <div id="the-basic-syntax" class="section level1">
 <h1>The Basic Syntax</h1>
-<p>modsem basically introduces a new feature to the lavaan-syntax – the
-semicolon operator (“:”). The semicolon operator works the same way as
-in the lm()-function. In order to specify an interaction effect between
-two variables, you join them by Var1:Var2, Models can either be
-estimated using the one of the product indicator approaches (“ca”,
-“rca”, “dblcent”, “pind”) or by using the latent moderated structural
-equations approach (“lms”), or the quasi maximum likelihood approach
-(“qml”). The product indicator approaches are estimated via lavaan,
-whilst the lms and qml approaches are estimated via modsem itself.</p>
+<p><code>modsem</code> introduces a new feature to the
+<code>lavaan</code> syntax—the semicolon operator (<code>:</code>). The
+semicolon operator works the same way as in the <code>lm()</code>
+function. To specify an interaction effect between two variables, you
+join them by <code>Var1:Var2</code>.</p>
+<p>Models can be estimated using one of the product indicator approaches
+(<code>&quot;ca&quot;</code>, <code>&quot;rca&quot;</code>, <code>&quot;dblcent&quot;</code>,
+<code>&quot;pind&quot;</code>) or by using the latent moderated structural
+equations approach (<code>&quot;lms&quot;</code>) or the quasi maximum likelihood
+approach (<code>&quot;qml&quot;</code>). The product indicator approaches are
+estimated via <code>lavaan</code>, while the <code>lms</code> and
+<code>qml</code> approaches are estimated via <code>modsem</code>
+itself.</p>
 <div id="a-simple-example" class="section level2">
 <h2>A Simple Example</h2>
-<p>Here we can see a simple example of how to specify an interaction
-effect between two latent variables in lavaan.</p>
+<p>Here is a simple example of how to specify an interaction effect
+between two latent variables in <code>lavaan</code>.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>m1 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="st">  # Outer Model</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="st">  X =~ x1 + x2 +x3</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="st">  X =~ x1 + x2 + x3</span></span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="st">  Y =~ y1 + y2 + y3</span></span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="st">  Z =~ z1 + z2 + z3</span></span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="st">  </span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="st">  # Inner model</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="st">  # Inner Model</span></span>
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="st">  Y ~ X + Z + X:Z </span></span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
 <span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>est1 <span class="ot">&lt;-</span> <span class="fu">modsem</span>(m1, oneInt)</span>
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est1)</span></code></pre></div>
-<p>By default the model is estimated using the “dblcent” method. If you
-want to use another method, but the method can be changed using the
-method argument.</p>
+<p>By default, the model is estimated using the <code>&quot;dblcent&quot;</code>
+method. If you want to use another method, you can change it using the
+<code>method</code> argument.</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>est1 <span class="ot">&lt;-</span> <span class="fu">modsem</span>(m1, oneInt, <span class="at">method =</span> <span class="st">&quot;lms&quot;</span>)</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est1)</span></code></pre></div>
 </div>
 <div id="interactions-between-two-observed-variables" class="section level2">
-<h2>Interactions Between two Observed Variables</h2>
-<p>modsem does not only allow you to estimate interactions between
-latent variables, but also interactions between observed variables. Here
-we first run a regression with only observed variables, where there is
-an interaction between x1 and z2, and then run an equivalent model using
-modsem().</p>
-<p><strong>Regression</strong></p>
+<h2>Interactions Between Two Observed Variables</h2>
+<p><code>modsem</code> allows you to estimate interactions between not
+only latent variables but also observed variables. Below, we first run a
+regression with only observed variables, where there is an interaction
+between <code>x1</code> and <code>z2</code>, and then run an equivalent
+model using <code>modsem()</code>.</p>
+<div id="using-a-regression" class="section level3">
+<h3>Using a Regression</h3>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>reg1 <span class="ot">&lt;-</span> <span class="fu">lm</span>(y1 <span class="sc">~</span> x1<span class="sc">*</span>z1, oneInt)</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(reg1)</span></code></pre></div>
-<p><strong>Using modsem()</strong> In general, when you have
-interactions between observed variables it is recommended that you use
-method = “pind”. Interaction effects with observed variables is not
-supported by the LMS- and QML-approach. In certain circumstances, you
-can define a latent variabale with a single indicator to estimate the
-interaction effect between two observed variables, in the LMS and QML
-approach, but it is generally not recommended.</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Here we use &quot;pind&quot; as the method (see chapter 3)</span></span>
+</div>
+<div id="using-modsem" class="section level3">
+<h3>Using <code>modsem</code></h3>
+<p>When you have interactions between observed variables, it is
+generally recommended to use <code>method = &quot;pind&quot;</code>. Interaction
+effects with observed variables are not supported by the
+<code>LMS</code> and <code>QML</code> approaches. In some cases, you can
+define a latent variable with a single indicator to estimate the
+interaction effect between two observed variables in the
+<code>LMS</code> and <code>QML</code> approaches, but this is generally
+not recommended.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Using &quot;pind&quot; as the method (see Chapter 3)</span></span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>est2 <span class="ot">&lt;-</span> <span class="fu">modsem</span>(<span class="st">&#39;y1 ~ x1 + z1 + x1:z1&#39;</span>, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;pind&quot;</span>)</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est2)</span></code></pre></div>
 </div>
+</div>
 <div id="interactions-between-latent-and-observed-variables" class="section level2">
-<h2>Interactions between Latent and Observed Variables</h2>
-<p>modsem also allows you to estimate interaction effects between latent
-and observed variables. To do so, you just join a latent and an observed
-variable by a colon, e.g., ‘latent:observer’. As with interactions
-between observed variables, it is generally recommended that you use
-method = “pind” for estimating the effect between observed x latent</p>
+<h2>Interactions Between Latent and Observed Variables</h2>
+<p><code>modsem</code> also allows you to estimate interaction effects
+between latent and observed variables. To do so, simply join a latent
+and an observed variable with a colon (e.g.,
+<code>&#39;latent:observer&#39;</code>). As with interactions between observed
+variables, it is generally recommended to use
+<code>method = &quot;pind&quot;</code> for estimating the effect between latent
+and observed variables.</p>
 <div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>m3 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="st">  # Outer Model</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="st">  X =~ x1 + x2 +x3</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="st">  X =~ x1 + x2 + x3</span></span>
 <span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="st">  Y =~ y1 + y2 + y3</span></span>
 <span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="st">  </span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="st">  # Inner model</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="st">  # Inner Model</span></span>
 <span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="st">  Y ~ X + z1 + X:z1 </span></span>
 <span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
 <span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a></span>
@@ -417,48 +429,48 @@ method = “pind” for estimating the effect between observed x latent</p>
 </div>
 <div id="quadratic-effects" class="section level2">
 <h2>Quadratic Effects</h2>
-<p>In essence, quadratic effects are just a special case of interaction
-effects. Thus modsem can also be used to estimate quadratic effects.</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>m4 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="st"># Outer Model</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="st">X =~ x1 + x2 + x3</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="st">Y =~ y1 + y2 + y3</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="st">Z =~ z1 + z2 + z3</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="st"># Inner model</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="st">Y ~ X + Z + Z:X + X:X</span></span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>est4 <span class="ot">&lt;-</span> <span class="fu">modsem</span>(m4, oneInt, <span class="st">&quot;qml&quot;</span>)</span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est4)</span></code></pre></div>
+<p>Quadratic effects are essentially a special case of interaction
+effects. Thus, <code>modsem</code> can also be used to estimate
+quadratic effects.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>m4 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="st"># Outer Model</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="st">X =~ x1 + x2 + x3</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="st">Y =~ y1 + y2 + y3</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="st">Z =~ z1 + z2 + z3</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="st"># Inner Model</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="st">Y ~ X + Z + Z:X + X:X</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>est4 <span class="ot">&lt;-</span> <span class="fu">modsem</span>(m4, oneInt, <span class="at">method =</span> <span class="st">&quot;qml&quot;</span>)</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est4)</span></code></pre></div>
 </div>
 <div id="more-complicated-examples" class="section level2">
 <h2>More Complicated Examples</h2>
-<p>Here we can see a more complicated example using the model for the
-theory of planned behaviour.</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>tpb <span class="ot">&lt;-</span> <span class="st">&#39; </span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="st"># Outer Model (Based on Hagger et al., 2007)</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="st">  ATT =~ att1 + att2 + att3 + att4 + att5</span></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="st">  SN =~ sn1 + sn2</span></span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="st">  PBC =~ pbc1 + pbc2 + pbc3</span></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="st">  INT =~ int1 + int2 + int3</span></span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH =~ b1 + b2</span></span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="st"># Inner Model (Based on Steinmetz et al., 2011)</span></span>
-<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="st">  INT ~ ATT + SN + PBC</span></span>
-<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH ~ INT + PBC + INT:PBC  </span></span>
-<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
-<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a><span class="co"># the double centering apporach</span></span>
+<p>Here is a more complex example using the theory of planned behavior
+(TPB) model.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>tpb <span class="ot">&lt;-</span> <span class="st">&#39; </span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="st"># Outer Model (Based on Hagger et al., 2007)</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="st">  ATT =~ att1 + att2 + att3 + att4 + att5</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="st">  SN =~ sn1 + sn2</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="st">  PBC =~ pbc1 + pbc2 + pbc3</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="st">  INT =~ int1 + int2 + int3</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH =~ b1 + b2</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="st"># Inner Model (Based on Steinmetz et al., 2011)</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="st">  INT ~ ATT + SN + PBC</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH ~ INT + PBC + INT:PBC  </span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a><span class="co"># The double-centering approach</span></span>
 <span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>est_tpb <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb, TPB)</span>
 <span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a><span class="co"># using the lms approach</span></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Using the LMS approach</span></span>
 <span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>est_tpb_lms <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb, TPB, <span class="at">method =</span> <span class="st">&quot;lms&quot;</span>)</span>
 <span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_tpb_lms)</span></code></pre></div>
-<p>Here is an example included two quadratic- and one interaction
-effect, using the included dataset <code>jordan</code>. The dataset is
-subset of the PISA 2006 dataset.</p>
+<p>Here is an example that includes two quadratic effects and one
+interaction effect, using the <code>jordan</code> dataset. The dataset
+is a subset of the PISA 2006 dataset.</p>
 <div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>m2 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="st">ENJ =~ enjoy1 + enjoy2 + enjoy3 + enjoy4 + enjoy5</span></span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="st">CAREER =~ career1 + career2 + career3 + career4</span></span>
@@ -469,9 +481,9 @@ subset of the PISA 2006 dataset.</p>
 <span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>est_jordan <span class="ot">&lt;-</span> <span class="fu">modsem</span>(m2, <span class="at">data =</span> jordan)</span>
 <span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>est_jordan_qml <span class="ot">&lt;-</span> <span class="fu">modsem</span>(m2, <span class="at">data =</span> jordan, <span class="at">method =</span> <span class="st">&quot;qml&quot;</span>)</span>
 <span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_jordan_qml)</span></code></pre></div>
-<p>Note: The other approaches work as well, but might be quite slow
-depending on the number of interaction effects (particularly for the
-LMS- and constrained approach).</p>
+<p><strong>Note</strong>: Other approaches also work but may be quite
+slow depending on the number of interaction effects, particularly for
+the <code>LMS</code> and constrained approaches.</p>
 </div>
 </div>
 

@@ -1,38 +1,39 @@
 simulateDataParTable <- function(parTable, N, colsOVs = NULL, colsLVs = NULL) {
   # endogenous variables (etas)model
-  etas <- getSortedEtas(parTable, isLV = TRUE, checkAny = TRUE)
+  etas    <- getSortedEtas(parTable, isLV = TRUE, checkAny = TRUE)
   numEtas <- length(etas)
-  
-  indsEtas <- getIndsLVs(parTable, etas)
+
+  indsEtas    <- getIndsLVs(parTable, etas)
   numIndsEtas <- vapply(indsEtas, FUN.VALUE = vector("integer", 1L),
                         FUN = length)
-  allIndsEtas <- unlist(indsEtas)
+  allIndsEtas    <- unique(unlist(indsEtas))
   numAllIndsEtas <- length(allIndsEtas)
-  
-  # exogenouts variables (xis) and interaction terms 
-  xis <- getXis(parTable, checkAny = TRUE)
+
+  # exogenouts variables (xis) and interaction terms
+  xis    <- getXis(parTable, checkAny = TRUE)
   numXis <- length(xis)
 
-  indsXis <- getIndsLVs(parTable, xis)
+  indsXis    <- getIndsLVs(parTable, xis)
   numIndsXis <- vapply(indsXis, FUN.VALUE = vector("integer", 1L),
                        FUN = length)
-  allIndsXis <- unlist(indsXis)
+  allIndsXis    <- unique(unlist(indsXis))
   numAllIndsXis <- length(allIndsXis)
-  
+
   # interaction terms
   intTerms <- getIntTerms(parTable)
   intTermRows <- getIntTermRows(parTable)
   varsIntTerms <- getVarsInts(intTermRows, removeColonNames = FALSE)
-  if (any(vapply(varsIntTerms, FUN.VALUE = numeric(1L), FUN = length) > 2)) {
-    stop2("Cannot simulate data for interaction effects with more than two ", 
-          "components, yet")
-  }
-  # simulate data for xis 
+
+  stopif(any(vapply(varsIntTerms, FUN.VALUE = numeric(1L), FUN = length) > 2),
+         "Cannot simulate data for interaction effects with more than two ",
+         "components, yet")
+
+  # simulate data for xis
   phi <- rmvnormParTable(parTable, type = "phi", N = N)
   psi <- rmvnormParTable(parTable, type = "psi", N = N)
   theta <- rmvnormParTable(parTable, type = "theta", N = N)
 
-  dataLVs <- phi 
+  dataLVs <- phi
 
   subVarsIntTerms <- varsIntTerms
   for (eta in etas) {
@@ -41,8 +42,8 @@ simulateDataParTable <- function(parTable, N, colsOVs = NULL, colsLVs = NULL) {
     XZ <- mutliplyPairs(dataLVs, XZ = subVarsIntTerms[toBuildXZ])
     subVarsIntTerms <- subVarsIntTerms[!toBuildXZ]
     dataLVs <- cbind(dataLVs, XZ)
-   
-    structExprsEta <- parTable[parTable$lhs == eta & parTable$op == "~", , 
+
+    structExprsEta <- parTable[parTable$lhs == eta & parTable$op == "~", ,
                                drop = FALSE]
     alpha <- parTable[parTable$lhs == eta & parTable$op == "~", "est"]
     if (NROW(alpha) == 0) alpha <- 0
@@ -54,9 +55,9 @@ simulateDataParTable <- function(parTable, N, colsOVs = NULL, colsLVs = NULL) {
     }
 
     y <- y + psi[, eta]
-    dataLVs <- cbind(dataLVs, matrix(y, nrow = N, dimnames = list(NULL, eta)))   
+    dataLVs <- cbind(dataLVs, matrix(y, nrow = N, dimnames = list(NULL, eta)))
   }
-    
+
   dataXZs <- dataLVs[, intTerms]
   dataLVs <- dataLVs[, c(xis, etas)]
   dataOVs <- matrix(0, nrow = N, ncol = numAllIndsXis + numAllIndsEtas,
@@ -64,13 +65,13 @@ simulateDataParTable <- function(parTable, N, colsOVs = NULL, colsLVs = NULL) {
   indsLVs <- c(indsXis, indsEtas)
   interceptVector <- rep(1, N)
 
-  for (lV in c(xis, etas)) { 
-    inds <- indsLVs[[lV]] 
+  for (lV in c(xis, etas)) {
+    inds <- indsLVs[[lV]]
     tau <- getIntercepts(inds, parTable = parTable)
-    lambda <- getLambda(lV = lV, inds = inds, parTable = parTable)  
-    dataOVs[, inds] <- 
-      interceptVector %*% t(tau) + 
-      dataLVs[, lV] %*% t(lambda) + 
+    lambda <- getLambda(lV = lV, inds = inds, parTable = parTable)
+    dataOVs[, inds] <-
+      interceptVector %*% t(tau) +
+      dataLVs[, lV] %*% t(lambda) +
       theta[, inds]
   }
 
@@ -82,16 +83,16 @@ simulateDataParTable <- function(parTable, N, colsOVs = NULL, colsLVs = NULL) {
 
 
 rmvnormParTable <- function(parTable, type = "phi", N) {
-  vars <- switch(type, 
+  vars <- switch(type,
                  phi = getXis(parTable, checkAny = TRUE),
                  psi = getSortedEtas(parTable, checkAny = TRUE, isLV = TRUE),
                  theta = getInds(parTable))
 
-  vcov <- matrix(0, nrow = length(vars), ncol = length(vars), 
+  vcov <- matrix(0, nrow = length(vars), ncol = length(vars),
                 dimnames = list(vars, vars))
 
   vcovExpres <- parTable[parTable$lhs %in% vars &
-                         parTable$op == "~~" & 
+                         parTable$op == "~~" &
                          parTable$rhs %in% vars, ]
 
   for (i in seq_len(nrow(vcovExpres))) {
@@ -105,14 +106,14 @@ rmvnormParTable <- function(parTable, type = "phi", N) {
   else beta0 <- rep(0, length(vars))
 
   X <- as.matrix(mvtnorm::rmvnorm(n = N, mean = beta0, sigma = vcov))
-  colnames(X) <- vars 
+  colnames(X) <- vars
   X
 }
 
 
 mutliplyPairs <- function(X, XZ) {
   if (!is.list(XZ)) stop("Expected xz to be a list: ", XZ)
-  prods <- matrix(0, nrow = NROW(X), ncol = length(XZ), 
+  prods <- matrix(0, nrow = NROW(X), ncol = length(XZ),
                   dimnames = list(NULL, names(XZ)))
   for (i in seq_len(length(XZ))) {
     col <- names(XZ)[[i]]
@@ -124,8 +125,8 @@ mutliplyPairs <- function(X, XZ) {
 
 
 getLambda <- function(lV, inds, parTable) {
-  lambda <- parTable[parTable$lhs == lV & 
-                     parTable$op == "=~" & 
+  lambda <- parTable[parTable$lhs == lV &
+                     parTable$op == "=~" &
                      parTable$rhs %in% inds, ]
   out <- lambda$est
   names(out) <- lambda$rhs

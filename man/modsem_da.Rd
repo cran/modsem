@@ -51,15 +51,15 @@ modsem_da(
 
 \item{nodes}{number of quadrature nodes (points of integration) used in \code{lms},
 increased number gives better estimates but slower computation. How many are needed depends on the complexity of the model.
-For simple models, somewhere between 16-24 nodes should be enough; for more complex models, higher numbers may be needed. 
-For models where there is an interaction effect between an endogenous and exogenous variable, 
-the number of nodes should be at least 32, but practically (e.g., ordinal/skewed data), more than 32 is recommended. In cases 
+For simple models, somewhere between 16-24 nodes should be enough; for more complex models, higher numbers may be needed.
+For models where there is an interaction effect between an endogenous and exogenous variable,
+the number of nodes should be at least 32, but practically (e.g., ordinal/skewed data), more than 32 is recommended. In cases
 where data is non-normal, it might be better to use the \code{qml} approach instead. For large
 numbers of nodes, you might want to change the \code{'quad.range'} argument.}
 
 \item{convergence}{convergence criterion. Lower values give better estimates but slower computation.}
 
-\item{optimizer}{optimizer to use, can be either \code{"nlminb"} or \code{"L-BFGS-B"}. For LMS, \code{"nlminb"} is recommended. 
+\item{optimizer}{optimizer to use, can be either \code{"nlminb"} or \code{"L-BFGS-B"}. For LMS, \code{"nlminb"} is recommended.
 For QML, \code{"L-BFGS-B"} may be faster if there is a large number of iterations, but slower if there are few iterations.}
 
 \item{center.data}{should data be centered before fitting model}
@@ -99,35 +99,36 @@ this will be extremely slow but should be more similar to \code{mplus}.}
 
 \item{FIM}{should the Fisher information matrix be calculated using the observed or expected values? Must be either \code{"observed"} or \code{"expected"}.}
 
-\item{EFIM.S}{if the expected Fisher information matrix is computed, \code{EFIM.S} selects the sample size of the generated data.}
+\item{EFIM.S}{if the expected Fisher information matrix is computed, \code{EFIM.S} selects the number of Monte Carlo samples. Defaults to 100. 
+\strong{NOTE}: This number should likely be increased for better estimates (e.g., 1000-10000), but it might drasticly increase computation time.}
 
 \item{OFIM.hessian}{should the observed Fisher information be computed using the Hessian? If \code{FALSE}, it is computed using the gradient.}
 
-\item{EFIM.parametric}{should data for calculating the expected Fisher information matrix be 
+\item{EFIM.parametric}{should data for calculating the expected Fisher information matrix be
 simulated parametrically (simulated based on the assumptions and implied parameters
-from the model), or non-parametrically (stochastically sampled)? If you believe that 
+from the model), or non-parametrically (stochastically sampled)? If you believe that
 normality assumptions are violated, \code{EFIM.parametric = FALSE} might be the better option.}
 
-\item{robust.se}{should robust standard errors be computed? Meant to be used for QML, 
+\item{robust.se}{should robust standard errors be computed? Meant to be used for QML,
 can be unreliable with the LMS approach.}
 
 \item{max.iter}{maximum number of iterations.}
 
 \item{max.step}{maximum steps for the M-step in the EM algorithm (LMS).}
 
-\item{fix.estep}{if \code{TRUE}, the E-step will be fixed, and the prior probabilities will be set to the best prior probabilities, 
+\item{fix.estep}{if \code{TRUE}, the E-step will be fixed, and the prior probabilities will be set to the best prior probabilities,
 if the log-likelihood decreases for more than 30 iterations.}
 
 \item{start}{starting parameters.}
 
 \item{epsilon}{finite difference for numerical derivatives.}
 
-\item{quad.range}{range in z-scores to perform numerical integration in LMS using 
-Gaussian-Hermite Quadratures. By default \code{Inf}, such that \code{f(t)} is integrated from -Inf to Inf, 
-but this will likely be inefficient and pointless at a large number of nodes. Nodes outside 
+\item{quad.range}{range in z-scores to perform numerical integration in LMS using
+Gaussian-Hermite Quadratures. By default \code{Inf}, such that \code{f(t)} is integrated from -Inf to Inf,
+but this will likely be inefficient and pointless at a large number of nodes. Nodes outside
 \code{+/- quad.range} will be ignored.}
 
-\item{n.threads}{number of cores to use for parallel processing. If \code{NULL}, it will use <= 2 threads. 
+\item{n.threads}{number of cores to use for parallel processing. If \code{NULL}, it will use <= 2 threads.
 If an integer is specified, it will use that number of threads (e.g., \code{n.threads = 4} will use 4 threads).
 If \code{"default"}, it will use the default number of threads (2).
 If \code{"max"}, it will use all available threads, \code{"min"} will use 1 thread.}
@@ -141,7 +142,7 @@ If \code{"max"}, it will use all available threads, \code{"min"} will use 1 thre
 \code{modsem_da()} is a function for estimating interaction effects between latent variables
 in structural equation models (SEMs) using distributional analytic (DA) approaches.
 Methods for estimating interaction effects in SEMs can basically be split into
-two frameworks: 
+two frameworks:
 1. Product Indicator-based approaches (\code{"dblcent"}, \code{"rca"}, \code{"uca"},
 \code{"ca"}, \code{"pind"})
 2. Distributionally based approaches (\code{"lms"}, \code{"qml"}).

@@ -1,5 +1,5 @@
 warning2 <- function(...) {
-  warning(..., call. = FALSE)
+  warning(..., call. = FALSE, immediate. = TRUE)
 }
 
 
@@ -14,7 +14,7 @@ stopif <- function(cond, ...) {
 
 
 warnif <- function(cond, ...) {
-  if (cond) stop2(...)
+  if (cond) warning2(...)
 }
 
 
@@ -22,7 +22,7 @@ warnif <- function(cond, ...) {
 calcCovParTable <- function(x, y, parTable, measurement.model = FALSE) {
   parTable$mod <- as.character(parTable$est)
   parTable <- parTable[c("lhs", "op", "rhs", "mod")]
-  eval(parse(text = trace_path(parTable, x, y, 
+  eval(parse(text = trace_path(parTable, x, y,
                               measurement.model = measurement.model)))
 }
 
@@ -59,11 +59,11 @@ getSortedEtas <- function(parTable, isLV = FALSE, checkAny = TRUE) {
 
       sortedEtas  <- c(eta, sortedEtas)
       structExprs <- structExprs[!grepl(eta, structExprs$lhs), ]
-      break 
+      break
     }
   }
 
-  if (!all(sortedEtas %in% unsortedEtas) && 
+  if (!all(sortedEtas %in% unsortedEtas) &&
       length(sortedEtas) != length(unsortedEtas)) {
       warning("unable to sort etas")
       return(unsortedEtas)
@@ -75,16 +75,33 @@ getSortedEtas <- function(parTable, isLV = FALSE, checkAny = TRUE) {
 
 getXis <- function(parTable, etas = NULL, isLV = TRUE, checkAny = TRUE) {
   if (is.null(etas)) etas <- getEtas(parTable, isLV = isLV)
-  if (!isLV) {
-    xis <- unique(parTable[parTable$op != "~1" &
-                  parTable$lhs %in% etas, "rhs"])
-  } else {
-    xis <- unique(parTable[parTable$op == "=~" &
-                  !parTable$lhs %in% etas, "lhs"])
+  # add all LVs which are not etas
+  xis <- unique(parTable[parTable$op == "=~" & !parTable$lhs %in% etas, "lhs"])
+
+  if (!isLV) { # add any other variabels found in structural expressions
+    xis <- unique(c(xis, parTable[parTable$op == "~" &
+                                  !parTable$rhs %in% etas, "rhs"]))
   }
-  
+
+  xis <- xis[!grepl(":", xis)] # remove interaction terms
+
   stopif(checkAny && !length(xis), "No xis found")
   xis
+}
+   
+
+getIndicators <- function(parTable, observed=TRUE) {
+  indicators <- unique(parTable[!grepl(":", parTable$rhs) & 
+                                parTable$op == "=~", "rhs"])
+
+  if (observed) indicators <- indicators[!indicators %in% getLVs(parTable)]
+  indicators
+}
+
+
+getProdNames <- function(parTable) {
+  unique(parTable[grepl(":", parTable$rhs) & 
+         parTable$op %in% c("~", "=~"), "rhs"])
 }
 
 
@@ -101,13 +118,28 @@ getOVs <- function(parTable = NULL, model.syntax = NULL) {
   select <- parTable$op %in% c("=~", "~", "~~")
   vars   <- unique(c(parTable$lhs[select], parTable$rhs[select]))
 
-  vars[!vars %in% lVs]
+  vars[!vars %in% lVs & !grepl(":", vars)]
+}
+
+
+getHigherOrderLVs <- function(parTable) {
+  lVs                  <- getLVs(parTable)
+  isHigherOrder        <- logical(length(lVs))
+  names(isHigherOrder) <- lVs
+
+  for (lV in lVs) {
+    inds <- parTable[parTable$lhs == lV & parTable$op == "=~", "rhs"] |>
+      stringr::str_split(pattern = ":") |> unlist()
+     
+    if (any(inds %in% lVs)) isHigherOrder[[lV]] <- TRUE
+  }
+
+  lVs[isHigherOrder]
 }
 
 
 getIndsLVs <- function(parTable, lVs) {
-  measrExprs <- parTable[parTable$op == "=~" & 
-                         parTable$lhs %in% lVs, ]
+  measrExprs <- parTable[parTable$op == "=~" & parTable$lhs %in% lVs, ]
   stopif(!NROW(measrExprs), "No measurement expressions found, for", lVs)
   lapplyNamed(lVs, FUN = function(lV) measrExprs[measrExprs$lhs == lV, "rhs"],
               names = lVs)
@@ -121,7 +153,7 @@ getInds <- function(parTable) {
 
 getIntTermRows <- function(parTable) {
   structExprs <- parTable[parTable$op == "~", ]
-  structExprs[grepl(":", structExprs$rhs), ] 
+  structExprs[grepl(":", structExprs$rhs), ]
 }
 
 
@@ -134,7 +166,7 @@ getIntTerms <- function(parTable) {
 getVarsInts <- function(intTerms, removeColonNames = TRUE) {
   if (removeColonNames) names <- stringr::str_remove_all(intTerms$rhs, ":")
   else names <- intTerms$rhs
-  lapplyNamed(intTerms$rhs, FUN = stringr::str_split_1, pattern = ":", 
+  lapplyNamed(intTerms$rhs, FUN = stringr::str_split_1, pattern = ":",
               names = names)
 }
 
@@ -145,7 +177,7 @@ maxchar <- function(x) {
 
 
 fillColsParTable <- function(parTable) {
-  colNames <- c("lhs", "op", "rhs", "label", "est", 
+  colNames <- c("lhs", "op", "rhs", "label", "est",
                 "std.error", "z.value", "p.value", "ci.lower", "ci.upper")
   parTable[colNames[!colNames %in% colnames(parTable)]] <- NA
   parTable[colNames]
@@ -208,7 +240,7 @@ getIntercept <- function(x, parTable) {
 
 
 getIntercepts <- function(x, parTable) {
-  out <- vapply(x, FUN.VALUE = numeric(1L), FUN = function(x_i) 
+  out <- vapply(x, FUN.VALUE = numeric(1L), FUN = function(x_i)
                 getIntercept(x_i, parTable = parTable))
   names(out) <- x
   out
@@ -241,19 +273,19 @@ centerInteraction <- function(parTable) {
 
     meanX <- getMean(X, parTable)
     meanZ <- getMean(Z, parTable)
-      
+
     gammaXZ <- rows[i, "est"]
-    gamma <- parTable[parTable$lhs == Y & parTable$op == "~", , drop = FALSE] 
+    gamma <- parTable[parTable$lhs == Y & parTable$op == "~", , drop = FALSE]
     gammaX <- gamma[gamma$rhs == X, "est"] + gammaXZ * meanZ
 
     gammaZ <- gamma[gamma$rhs == Z, "est"] + gammaXZ * meanX
-    
-    parTable[parTable$lhs == Y & parTable$op == "~" & 
+
+    parTable[parTable$lhs == Y & parTable$op == "~" &
              parTable$rhs == X, "est"] <- gammaX
-     
-    parTable[parTable$lhs == Y & parTable$op == "~" & 
+
+    parTable[parTable$lhs == Y & parTable$op == "~" &
              parTable$rhs == Z, "est"] <- gammaZ
-  } 
+  }
 
   parTable
 }
@@ -278,4 +310,41 @@ isRowInParTable <- function(row, pt, ignore = NULL) {
   }
 
   return(FALSE)
+}
+
+
+rename <- function(X, ...) {
+  newNames <- list(...)
+  oldNames <- names(newNames)
+
+  for (old in oldNames) {
+    names(X)[names(X) == old] <- newNames[[old]]
+  }
+
+  X
+}
+
+
+printf <- function(...) {
+  cat(sprintf(...))
+  utils::flush.console()
+}
+  
+
+clearConsoleLine <- function() {
+  printf(paste0("\r", strrep(" ", getOption("width", default=0L)), "\r"))
+}
+
+
+getDiffTwoMax <- function(x) {
+  if (length(x) < 2) return(NA)
+  y <- sort(x, decreasing = TRUE)
+  y[[1]] - y[[2]]
+}
+
+
+stripColonsParTable <- function(parTable) {
+  parTable$lhs <- stringr::str_remove_all(parTable$lhs, ":")
+  parTable$rhs <- stringr::str_remove_all(parTable$rhs, ":")
+  parTable
 }

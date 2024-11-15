@@ -26,6 +26,7 @@ modsem_pi(
   group = NULL,
   run = TRUE,
   suppress.warnings.lavaan = FALSE,
+  suppress.warnings.match = FALSE,
   ...
 )
 }
@@ -77,20 +78,22 @@ modsem_pi(
 
 \item{suppress.warnings.lavaan}{should warnings from \code{lavaan} be suppressed?}
 
+\item{suppress.warnings.match}{should warnings from \code{match} be suppressed?}
+
 \item{...}{arguments passed to other functions, e.g., \code{lavaan}}
 }
 \value{
 \code{modsem} object
 }
 \description{
-\code{modsem_pi()} is a function for estimating interaction effects between latent variables, 
+\code{modsem_pi()} is a function for estimating interaction effects between latent variables,
 in structural equation models (SEMs), using product indicators.
-Methods for estimating interaction effects in SEMs can basically be split into 
-two frameworks: 
-1. Product Indicator based approaches (\code{"dblcent"}, \code{"rca"}, \code{"uca"}, 
-\code{"ca"}, \code{"pind"}), and 
+Methods for estimating interaction effects in SEMs can basically be split into
+two frameworks:
+1. Product Indicator based approaches (\code{"dblcent"}, \code{"rca"}, \code{"uca"},
+\code{"ca"}, \code{"pind"}), and
 2. Distributionally based approaches (\code{"lms"}, \code{"qml"}).
-\code{modsem_pi()} is essentially a fancy wrapper for \code{lavaan::sem()} which generates the 
+\code{modsem_pi()} is essentially a fancy wrapper for \code{lavaan::sem()} which generates the
 necessary syntax and variables for the estimation of models with latent product indicators.
 Use \code{default_settings_pi()} to get the default settings for the different methods.
 }
@@ -103,9 +106,9 @@ m1 <- '
   X =~ x1 + x2 +x3
   Y =~ y1 + y2 + y3
   Z =~ z1 + z2 + z3
-  
+
   # Inner model
-  Y ~ X + Z + X:Z 
+  Y ~ X + Z + X:Z
 '
 
 # Double centering approach
@@ -113,13 +116,13 @@ est1 <- modsem_pi(m1, oneInt)
 summary(est1)
 
 \dontrun{
-# The Constrained Approach 
+# The Constrained Approach
 est1Constrained <- modsem_pi(m1, oneInt, method = "ca")
 summary(est1Constrained)
 }
 
 # Theory Of Planned Behavior
-tpb <- ' 
+tpb <- '
 # Outer Model (Based on Hagger et al., 2007)
   ATT =~ att1 + att2 + att3 + att4 + att5
   SN =~ sn1 + sn2
@@ -130,11 +133,11 @@ tpb <- '
 # Inner Model (Based on Steinmetz et al., 2011)
   # Covariances
   ATT ~~ SN + PBC
-  PBC ~~ SN 
+  PBC ~~ SN
   # Causal Relationships
   INT ~ ATT + SN + PBC
-  BEH ~ INT + PBC 
-  BEH ~ INT:PBC  
+  BEH ~ INT + PBC
+  BEH ~ INT:PBC
 '
 
 # Double centering approach
@@ -142,7 +145,7 @@ estTpb <- modsem_pi(tpb, data = TPB)
 summary(estTpb)
 
 \dontrun{
-# The Constrained Approach 
+# The Constrained Approach
 estTpbConstrained <- modsem_pi(tpb, data = TPB, method = "ca")
 summary(estTpbConstrained)
 }

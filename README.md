@@ -1,21 +1,31 @@
 # `modsem` <img src="man/figures/modsem.png" alt="Logo" align = "right" height="139" class="logo">
-This is a package which allows you to perform interactions between latent variables (i.e., moderation) in CB-SEM. 
-See https://kss2k.github.io/modsem/ for a tutorial.
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/kss2k/modsem/actions/workflows/checks.yml/badge.svg)](https://github.com/kss2k/modsem/actions/workflows/checks.yml)
+[![Tests](https://github.com/kss2k/modsem/actions/workflows/tests.yml/badge.svg)](https://github.com/kss2k/modsem/actions/workflows/tests.yml)
+[![CRAN](https://www.r-pkg.org/badges/version/modsem)](https://cran.r-project.org/package=modsem)
+[![PKGDOWN-Build](https://github.com/kss2k/modsem/actions/workflows/pkgdown.yml/badge.svg)](https://github.com/kss2k/modsem/actions/workflows/pkgdown.yml)
+<!-- badges: end -->
+`modsem` is an `R`-package for estimating interaction (i.e., moderation) effects between latent variables
+in structural equation models (SEMs). See https://www.modsem.org for a tutorial.
 
 # To Install 
 ```
 # From CRAN 
 install.packages("modsem")
 
-# Latest version from Github
+# Latest version from GitHub
 install.packages("devtools")
 devtools::install_github("kss2k/modsem", build_vignettes = TRUE)
 ```
 
 # Methods/Approaches
 
-There are a number of approaches for estimating interaction effects in SEM. In `modsem()`, the `method = "method"` argument allows you to choose which to use.
+There are a number of approaches for estimating interaction effects in SEM. 
+In `modsem()`, the `method = "method"` argument allows you to choose which to use.
+Different approaches can be categorized into two groups: 
+Product Indicator (PI) and Distribution Analytic (DA) approaches.
 
+## Product Indicator (PI) Approaches:
 - `"ca"` = constrained approach (Algina & Moulder, 2001)
     - Note that constraints can become quite complicated for complex models, 
       particularly when there is an interaction including enodgenous variables.
@@ -25,14 +35,16 @@ There are a number of approaches for estimating interaction effects in SEM. In `
 - `"dblcent"` = double centering approach (Marsh., 2013)
   - default 
 - `"pind"` = basic product indicator approach (not recommended)
-- `"lms"` = The Latent Moderated Structural equations (LMS) approach, see the [vignette](https://kss2k.github.io/modsem/articles/lms_qml.html)
-- `"qml"` = The Quasi Maximum Likelihood (QML) approach, see the [vignette](https://kss2k.github.io/modsem/articles/lms_qml.html)
+
+## Distribution Analytic (DA) Approaches
+- `"lms"` = The Latent Moderated Structural equations (LMS) approach, see the [vignette](https://modsem.org/articles/lms_qml.html)
+- `"qml"` = The Quasi Maximum Likelihood (QML) approach, see the [vignette](https://modsem.org/articles/lms_qml.html)
 - `"mplus"` 
   - estimates model through Mplus, if it is installed
 
 # Examples 
 
-## One interaction
+## Elementary Interaction Model (Kenny & Judd, 1984; Jaccard & Wan, 1995)
 ```
 library(modsem)
 m1 <- '
@@ -73,7 +85,6 @@ tpb <- "
   BEH =~ b1 + b2
 
 # Inner Model (Based on Steinmetz et al., 2011)
-  # Causal Relationsships
   INT ~ ATT + SN + PBC
   BEH ~ INT + PBC
   BEH ~ PBC:INT
@@ -100,8 +111,10 @@ summary(est_tpb_qml, standardized = TRUE)
 ```
 est2 <- modsem('y1 ~ x1 + z1 + x1:z1', data = oneInt, method = "pind")
 summary(est2)
+```
 
 ## Interaction between an obsereved and a latent variable 
+```
 m3 <- '
   # Outer Model
   X =~ x1 + x2 +x3

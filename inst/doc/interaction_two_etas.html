@@ -347,30 +347,32 @@ variables</h1>
 <h2>The Problem</h2>
 <p>Interaction effects between two endogenous (i.e., dependent)
 variables work as you would expect for the product indicator methods
-(<code>&quot;dblcent&quot;, &quot;rca&quot;, &quot;ca&quot;, &quot;uca&quot;</code>). For the lms- and qml
-approach however, it is not as straight forward.</p>
-<p>The lms- and qml approach can (by default) handle interaction effects
-between endogenous and exogenous (i.e., independent) variables, but not
-interaction effects between two endogenous variables. When there is an
-interaction effect between two endogenous variables, the equations
-cannot easily be written in ‘reduced’ form – meaning that normal
-estimation procedures won’t work.</p>
+(<code>&quot;dblcent&quot;</code>, <code>&quot;rca&quot;</code>, <code>&quot;ca&quot;</code>,
+<code>&quot;uca&quot;</code>). However, for the <code>lms</code> and
+<code>qml</code> approaches, it is not as straightforward.</p>
+<p>The <code>lms</code> and <code>qml</code> approaches can (by default)
+handle interaction effects between endogenous and exogenous (i.e.,
+independent) variables, but they do not natively support interaction
+effects between two endogenous variables. When an interaction effect
+exists between two endogenous variables, the equations cannot easily be
+written in “reduced” form, meaning that normal estimation procedures
+won’t work.</p>
 </div>
 <div id="the-solution" class="section level2">
 <h2>The Solution</h2>
-<p>This being said, there is a work-around for these limitations for
-both the lms- and qml-approach. In essence, the model can be split into
-two parts, one linear and one non-linear. Basically, you can replace the
-covariance matrix used in the estimation of the non-linear model, with
-the model-implied covariance matrix from a linear model. Thus you can
-treat an endogenous variable as if it were exogenous – given that it can
-be expressed in a linear model.</p>
+<p>Despite these limitations, there is a workaround for both the
+<code>lms</code> and <code>qml</code> approaches. Essentially, the model
+can be split into two parts: one linear and one non-linear. You can
+replace the covariance matrix used in the estimation of the non-linear
+model with the model-implied covariance matrix from a linear model. This
+allows you to treat an endogenous variable as if it were
+exogenous—provided that it can be expressed in a linear model.</p>
 </div>
 <div id="example" class="section level2">
 <h2>Example</h2>
-<p>Let’s consider the the theory of planned behaviour (TPB) where we
-wish to estimate the quadratic effect of INT on BEH (INT:INT). With the
-following model:</p>
+<p>Let’s consider the theory of planned behavior (TPB), where we wish to
+estimate the quadratic effect of <code>INT</code> on <code>BEH</code>
+(<code>INT:INT</code>). We can use the following model:</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>tpb <span class="ot">&lt;-</span> <span class="st">&#39; </span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="st"># Outer Model (Based on Hagger et al., 2007)</span></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="st">  ATT =~ att1 + att2 + att3 + att4 + att5</span></span>
@@ -384,16 +386,16 @@ following model:</p>
 <span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH ~ INT + PBC </span></span>
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH ~ INT:INT</span></span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span></code></pre></div>
-<p>Since INT is an endogenous variable, its quadratic term (i.e., an
-interaction effect with itself) would include two endogenous variables.
-Thus we would ordinarily not be able to estimate this model using the
-lms- or qml-approach. However, we can split the model into two parts,
-one linear and one non-linear. While INT is an endogenous variable, it
-can be expressed in a linear model – since it is not affected by any
-interaction terms:</p>
+<p>Since <code>INT</code> is an endogenous variable, its quadratic term
+(i.e., an interaction effect with itself) would involve two endogenous
+variables. As a result, we would normally not be able to estimate this
+model using the <code>lms</code> or <code>qml</code> approaches.
+However, we can split the model into two parts: one linear and one
+non-linear.</p>
+<p>While <code>INT</code> is an endogenous variable, it can be expressed
+in a linear model since it is not affected by any interaction terms:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>tpb_linear <span class="ot">&lt;-</span> <span class="st">&#39;INT ~ PBC + ATT + SN&#39;</span></span></code></pre></div>
-<p>We could then remove this part from the original model, giving
-us:</p>
+<p>We can then remove this part from the original model, giving us:</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>tpb_nonlinear <span class="ot">&lt;-</span> <span class="st">&#39; </span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="st"># Outer Model (Based on Hagger et al., 2007)</span></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="st">  ATT =~ att1 + att2 + att3 + att4 + att5</span></span>
@@ -406,18 +408,22 @@ us:</p>
 <span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH ~ INT + PBC </span></span>
 <span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH ~ INT:INT</span></span>
 <span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span></code></pre></div>
-<p>We could now just estimate the non-linear model, since INT now is an
-exogenous variable. This would however not incorporate the structural
-model for INT. To address this, we can make modsem replace the
-covariance matrix (phi) of (INT, PBC, ATT, SN) with the model-implied
-covariance matrix from the linear model, whilst estimating both models
-simultaneously. To acheive this, we can use the <code>cov.syntax</code>
+<p>Now, we can estimate the non-linear model since <code>INT</code> is
+treated as an exogenous variable. However, this would not incorporate
+the structural model for <code>INT</code>. To address this, we can
+instruct <code>modsem</code> to replace the covariance matrix
+(<code>phi</code>) of (<code>INT</code>, <code>PBC</code>,
+<code>ATT</code>, <code>SN</code>) with the model-implied covariance
+matrix from the linear model while estimating both models
+simultaneously. To achieve this, we use the <code>cov.syntax</code>
 argument in <code>modsem</code>:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>est_lms <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb_nonlinear, <span class="at">data =</span> TPB, <span class="at">cov.syntax =</span> tpb_linear, <span class="at">method =</span> <span class="st">&quot;lms&quot;</span>)</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_lms)</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>est_qml <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb_nonlinear, <span class="at">data =</span> TPB, <span class="at">cov.syntax =</span> tpb_linear, <span class="at">method =</span> <span class="st">&quot;qml&quot;</span>)</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_qml)</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>est_lms <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb_nonlinear, <span class="at">data =</span> TPB, <span class="at">cov.syntax =</span> tpb_linear, </span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>                  <span class="at">method =</span> <span class="st">&quot;lms&quot;</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_lms)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>est_qml <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb_nonlinear, <span class="at">data =</span> TPB, <span class="at">cov.syntax =</span> tpb_linear, </span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>                  <span class="at">method =</span> <span class="st">&quot;qml&quot;</span>)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_qml)</span></code></pre></div>
 </div>
 
 

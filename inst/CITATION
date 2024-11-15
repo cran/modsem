@@ -1,0 +1,27 @@
+bibentry(
+  header = "To cite modsem in publications use:",
+  bibtype = "Article",
+  title   = "modsem: An R package for estimating latent interactions and quadratic effects",
+  author  = c(
+    person(given = "Kjell Solem", family = "Slupphaug"),
+    person(given = "Mehmet", family = "Mehmetoglu"),
+    person(given = "Matthias", family = "Mittner")
+  ),
+  # journal = "Structural Equation Modeling: A Multidisciplinary Journal",
+  journal = "Preprint: Open Science Foundation",
+  year    = "2024",
+  #  volume  = "XX",
+  #  number  = "X",
+  #  pages   = "AAA–BBB",
+  # doi      = "10.1080/10705511.2024.2417409",
+  doi      = "10.31219/osf.io/h3rpw",
+  textVersion = paste(
+    "Slupphaug, K. S., Mehmetoglu, M., & Mittner, M. (2024).",
+    "modsem: An R package for estimating latent interactions and quadratic effects.",
+    # "Structural Equation Modeling: A Multidisciplinary Journal", 
+    # "XX(X)", 
+    # "AAA–BBB.",
+    # "doi:10.1080/10705511.2024.2417409"
+    "https://doi.org/10.31219/osf.io/h3rpw"
+  )
+)

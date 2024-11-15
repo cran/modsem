@@ -343,32 +343,38 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(modsem)</span></code></pre></div>
 <p>There are a number of approaches for estimating interaction effects
-in SEM. In modsem(), the method = “method” argument allows you to choose
-which to use.</p>
+in SEM. In <code>modsem()</code>, the <code>method = &quot;method&quot;</code>
+argument allows you to choose which to use. Different approaches can be
+categorized into two groups: Product Indicator (PI) and Distribution
+Analytic (DA) approaches.</p>
+<div id="product-indicator-pi-approaches" class="section level2">
+<h2>Product Indicator (PI) Approaches:</h2>
 <ul>
 <li><code>&quot;ca&quot;</code> = constrained approach (Algina &amp; Moulder,
-2001)</li>
+2001)
+<ul>
+<li>Note that constraints can become quite complicated for complex
+models, particularly when there is an interaction including enodgenous
+variables. The method can therefore be quite slow.</li>
+</ul></li>
 <li><code>&quot;uca&quot;</code> = unconstrained approach (Marsh, 2004)</li>
 <li><code>&quot;rca&quot;</code> = residual centering approach (Little et al.,
-2006)
+2006)</li>
+<li><code>&quot;dblcent&quot;</code> = double centering approach (Marsh., 2013)
 <ul>
 <li>default</li>
 </ul></li>
-<li><code>&quot;dblcent&quot;</code>= double centering approach (Marsh.,
-2013)</li>
 <li><code>&quot;pind&quot;</code> = basic product indicator approach (not
 recommended)</li>
-<li><code>&quot;lms&quot;</code> = The Latent Moderated Structural equations
-approach
+</ul>
+</div>
+<div id="distribution-analytic-da-approaches" class="section level2">
+<h2>Distribution Analytic (DA) Approaches</h2>
 <ul>
-<li>note: there can not be an interaction between two endogenous
-variables.</li>
-</ul></li>
-<li><code>&quot;qml&quot;</code> = The Quasi Maximum Likelihood approach.
-<ul>
-<li>note: can only be done if you have a single endogenous (dependent)
-variable.</li>
-</ul></li>
+<li><code>&quot;lms&quot;</code> = The Latent Moderated Structural equations (LMS)
+approach, see the <a href="https://modsem.org/articles/lms_qml.html">vignette</a></li>
+<li><code>&quot;qml&quot;</code> = The Quasi Maximum Likelihood (QML) approach,
+see the <a href="https://modsem.org/articles/lms_qml.html">vignette</a></li>
 <li><code>&quot;mplus&quot;</code>
 <ul>
 <li>estimates model through Mplus, if it is installed</li>
@@ -385,13 +391,17 @@ variable.</li>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="st">Y ~ X + Z + X:Z </span></span>
 <span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
 <span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;ca&quot;</span>)</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;uca&quot;</span>)</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;rca&quot;</span>)</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;dblcent&quot;</span>)</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;mplus&quot;</span>)</span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;lms&quot;</span>)</span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;qml&quot;</span>)</span></code></pre></div>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Product Indicator Approaches</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;ca&quot;</span>)</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;uca&quot;</span>)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;rca&quot;</span>)</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;dblcent&quot;</span>)</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Distribution Analytic Approaches</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;mplus&quot;</span>)</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;lms&quot;</span>)</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="fu">modsem</span>(m1, <span class="at">data =</span> oneInt, <span class="at">method =</span> <span class="st">&quot;qml&quot;</span>)</span></code></pre></div>
+</div>
 
 
 

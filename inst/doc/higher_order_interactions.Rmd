@@ -1,0 +1,94 @@
+---
+title: "higher order interactions"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{higher order interactions}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+EVAL_DEFAULT <- FALSE
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = EVAL_DEFAULT
+)
+```
+
+```{r setup}
+library(modsem)
+```
+
+As of yet, the `modsem` package does not support using the interaction operator `:` between two higher order constructs.
+However, you can still attempt to estimate the interaction effect between two higher order constructs by specifying the interaction term in 
+models using the product indicator approaches (higher order constructs are not supported at all in the `lms` and `qml` approaches yet).
+The `modsem` package will then attempt to estimate the interaction effect between the two higher order constructs.
+
+# Interaction between two higher order constructs
+**WARNING:** Please note that the literature on higher order
+interactions in product indicator approaches is virtually non-existant, and you
+will likely need to experiment with different approaches to find one that works.
+As well as experiment with adding constraints to the model.
+
+In `modsem` there are two datasets which are variants of the Theory of Planned Behaviour (`TPB`) dataset.
+The `TPB_2SO` contains two second order constructs, 
+`INT` (intention) which is a second order construct of `ATT` (attitude) and `SN` (subjective norm), 
+and `PBC` (perceived behavioural control) which is a second order construct of 
+`PC` (perceived control) and `PB` (perceived behaviour).
+
+```{r}
+tpb <- '
+  # First order constructs
+  ATT =~ att1 + att2 + att3
+  SN  =~ sn1 + sn2 + sn3
+  PB =~ pb1 + pb2 + pb3
+  PC =~ pc1 + pc2 + pc3
+  BEH =~ b1 + b2
+
+  # Higher order constructs
+  INT =~ ATT + SN
+  PBC =~ PC + PB
+
+  # Higher order interaction
+  INTxPBC =~ ATT:PC + ATT:PB + SN:PC + SN:PB
+  
+  # Structural model
+  BEH ~ PBC + INT + INTxPBC
+'
+
+est_ca <- modsem(tpb, data = TPB_2SO, method = "ca")
+summary(est_ca)
+
+est_dblcent <- modsem(tpb, data = TPB_2SO, method = "dblcent")
+summary(est_dblcent)
+```
+
+# Interaction between a first order and a higher order construct
+In the `TPB_1SO` dataset, the `INT` construct is a second order construct of `ATT`, `SN` and `PBC`.
+In this example, we will estimate the interaction between the `INT` (higher order construct) and `PBC` (first order construct).
+
+```{r}
+tpb <- '
+  # First order constructs
+  ATT =~ att1 + att2 + att3
+  SN  =~ sn1 + sn2 + sn3
+  PBC =~ pbc1 + pbc2 + pbc3
+  BEH =~ b1 + b2
+
+  # Higher order constructs
+  INT =~ ATT + PBC + SN
+
+  # Higher order interaction
+  INTxPBC =~ ATT:PBC + SN:PBC + PBC:PBC
+  
+  # Structural model
+  BEH ~ PBC + INT + INTxPBC
+'
+
+est_ca <- modsem(tpb, data = TPB_1SO, method = "ca")
+summary(est_ca)
+
+est_dblcent  <- modsem(tpb, data = TPB_1SO, method = "dblcent")
+summary(est_dblcent)
+```

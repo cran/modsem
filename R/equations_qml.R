@@ -1,4 +1,27 @@
-logLikQml <- function(theta, model, sum = TRUE, sign = -1) {
+OptimizerInfoQML <- rlang::env(eval = 0, logLiks = 0)
+
+
+resetOptimizerInfoQML <- function() {
+  OptimizerInfoQML$eval    <- 0
+  OptimizerInfoQML$logLiks <- -Inf
+}
+
+
+incrementIterations <- function(logLik) {
+  eval    <- OptimizerInfoQML$eval + 1
+  logLiks <- c(OptimizerInfoQML$logLiks, logLik)
+  change  <- getDiffTwoMax(logLiks)
+
+  clearConsoleLine() # clear before printing
+  printf("\rEvaluations = %d, LogLik = %.2f, Change = %.3f", 
+         OptimizerInfoQML$eval, logLik, change)
+  
+  OptimizerInfoQML$eval    <- eval
+  OptimizerInfoQML$logLiks <- logLiks
+}
+
+
+logLikQml <- function(theta, model, sum = TRUE, sign = -1, verbose = FALSE) {
   modelFilled <- fillModel(model, theta, method = "qml")
   numXi       <- model$info$numXis
   numEta      <- model$info$numEtas
@@ -33,14 +56,14 @@ logLikQml <- function(theta, model, sum = TRUE, sign = -1) {
     m$L2 <- -m$subThetaEpsilon %*% t(m$Beta) %*% invRER
     m$fullL2[m$selectSubL2] <- m$L2
 
-    m$Sigma2ThetaEpsilon <- m$subThetaEpsilon - m$subThetaEpsilon ^ 2 %*% 
-      t(m$Beta) %*% invRER %*% m$Beta 
-    
-    m$fullSigma2ThetaEpsilon[m$selectSubSigma2ThetaEpsilon] <- 
+    m$Sigma2ThetaEpsilon <- m$subThetaEpsilon - m$subThetaEpsilon ^ 2 %*%
+      t(m$Beta) %*% invRER %*% m$Beta
+
+    m$fullSigma2ThetaEpsilon[m$selectSubSigma2ThetaEpsilon] <-
       m$Sigma2ThetaEpsilon
   }
-  
-  m$Sigma2ThetaEpsilon <- m$fullSigma2ThetaEpsilon 
+
+  m$Sigma2ThetaEpsilon <- m$fullSigma2ThetaEpsilon
   m$L2     <- m$fullL2
   m$u      <- m$fullU
   m$LXPLX  <- m$lambdaX %*% m$phi %*% t(m$lambdaX) + m$thetaDelta
@@ -53,17 +76,21 @@ logLikQml <- function(theta, model, sum = TRUE, sign = -1) {
   Ey            <- muQmlCpp(m, t)
   sigmaEpsilon  <- sigmaQmlCpp(m, t)
   sigmaXU       <- calcSigmaXU(m)
-  
+
   normalInds    <- colnames(sigmaXU)
   indsY         <- colnames(m$y)
-  nonNormalInds <- indsY[!indsY %in% normalInds] 
+  nonNormalInds <- indsY[!indsY %in% normalInds]
 
   f2 <- probf2(matrices = m, normalInds = normalInds, sigma = sigmaXU)
   f3 <- probf3(matrices = m, nonNormalInds = nonNormalInds, expected = Ey,
                sigma = sigmaEpsilon, t = t, numEta = numEta)
-  
-  if (sum) return(sign * sum(f2 + f3))
-  sign * (f2 + f3)
+
+  if (sum) logLik <- sum(f2 + f3)
+  else     logLik <- (f2 + f3)
+
+  if (verbose) incrementIterations(logLik)
+
+  sign * logLik
 }
 
 
@@ -83,8 +110,8 @@ probf2 <- function(matrices, normalInds, sigma) {
 probf3 <- function(matrices, nonNormalInds, expected, sigma, t, numEta) {
   if (numEta == 1) {
     return(dnormCpp(matrices$y[, 1], mu = expected, sigma = sqrt(sigma)))
-  } 
-  rep_dmvnorm(matrices$y[, nonNormalInds], expected = expected, 
+  }
+  rep_dmvnorm(matrices$y[, nonNormalInds], expected = expected,
               sigma = sigma, t = t)
 }
 
@@ -95,11 +122,12 @@ centerIndicators <- function(X, tau) {
 }
 
 
-gradientLogLikQml <- function(theta, model, epsilon = 1e-8, sign = -1) {
-  baseLL <- logLikQml(theta, model, sign = sign)
+gradientLogLikQml <- function(theta, model, epsilon = 1e-8, sign = -1, data=NULL) {
+  if (!is.null(data)) model$data <- data
+  baseLL <- logLikQml(theta, model, sign = sign, verbose = FALSE)
   vapply(seq_along(theta), FUN.VALUE = numeric(1L), FUN = function(i) {
     theta[[i]] <- theta[[i]] + epsilon
-    (logLikQml(theta, model, sign = sign) - baseLL) / epsilon
+    (logLikQml(theta, model, sign = sign, verbose = FALSE) - baseLL) / epsilon
   })
 }
 
@@ -107,7 +135,7 @@ gradientLogLikQml <- function(theta, model, epsilon = 1e-8, sign = -1) {
 # log likelihood for each observation -- not all
 # wrapper fro logLikQml(sum = FALSE)
 logLikQml_i <- function(theta, model, sign = -1) {
-  logLikQml(theta, model, sum = FALSE, sign = sign)
+  logLikQml(theta, model, sum = FALSE, sign = sign, verbose = FALSE)
 }
 
 
@@ -121,19 +149,19 @@ gradientLogLikQml_i <- function(theta, model, sign = -1, epsilon = 1e-8) {
 }
 
 
-mstepQml <- function(model, 
+mstepQml <- function(model,
                      theta,
-                     max.iter = 500, 
+                     max.iter = 500,
                      verbose = FALSE,
                      convergence = 1e-6,
                      control = list(),
-                     optimizer = "nlminb", 
+                     optimizer = "nlminb",
                      epsilon = 1e-8,
                      ...) {
-  gradient <- function(theta, model, sign) 
-    gradientLogLikQml(theta = theta, model = model, epsilon = epsilon, sign = sign)  
-  
-  if (verbose) cat("Starting M-step\n")
+  resetOptimizerInfoQML()
+
+  gradient <- function(theta, model, sign, ...) # use ... to capture unused args
+    gradientLogLikQml(theta = theta, model = model, epsilon = epsilon, sign = sign)
 
   if (optimizer == "nlminb") {
     control$iter.max <- max.iter
@@ -141,7 +169,7 @@ mstepQml <- function(model,
     control$rel.tol  <- convergence
 
     est <- stats::nlminb(start = theta, objective = logLikQml, model = model,
-                         gradient = gradient, sign = -1,
+                         gradient = gradient, sign = -1, verbose = verbose,
                          upper = model$info$bounds$upper,
                          lower = model$info$bounds$lower, control = control, ...)
 
@@ -149,13 +177,15 @@ mstepQml <- function(model,
     control$factr <- convergence
     control$maxit <- max.iter
 
-    est <- stats::optim(par = theta, fn = logLikQml, model = model, 
+    est <- stats::optim(par = theta, fn = logLikQml, model = model,
                         gr = gradient, method = optimizer, sign = -1,
                         control = control, ...)
 
     est$objective  <- est$value
     est$iterations <- est$counts[["function"]]
   } else stop2("Unrecognized optimizer, must be either 'nlminb' or 'L-BFGS-B'")
-  
+
+  if (verbose) cat("\n")
+
   est
 }

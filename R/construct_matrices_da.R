@@ -1,14 +1,14 @@
-# Functions for constructing matrices for LMS and QML. 
+# Functions for constructing matrices for LMS and QML.
 # Last updated: 06.06.2024
 setMatrixConstraints <- function(X, parTable, op, RHS, LHS, type, nonFreeParams) {
-  fillConstExprs(X, parTable = parTable, op = op, RHS = RHS, LHS = LHS, 
+  fillConstExprs(X, parTable = parTable, op = op, RHS = RHS, LHS = LHS,
                  type = type, nonFreeParams = nonFreeParams) |>
     fillDynExprs(parTable = parTable, op = op, RHS = RHS, LHS = LHS, type = type)
 }
 
 
 fillConstExprs <- function(X, parTable, op, RHS, LHS, type, nonFreeParams = TRUE) {
-  constExprs <- parTable[parTable$op == op & 
+  constExprs <- parTable[parTable$op == op &
                          parTable$rhs %in% RHS &
                          parTable$lhs %in% LHS &
                          canBeNumeric(parTable$mod, includeNA = !nonFreeParams), ]
@@ -25,12 +25,12 @@ fillConstExprs <- function(X, parTable, op, RHS, LHS, type, nonFreeParams = TRUE
   if (type == "symmetric") X[upper.tri(X)] <- 0
   X
 }
-  
+
 
 fillDynExprs <- function(X, parTable, op, RHS, LHS, type) {
   # dynamic exprs need a corresponding matrix of labels
   labelX <- as.character.matrix(X, empty = TRUE)
-  dynamicExprs <- parTable[parTable$op == op & 
+  dynamicExprs <- parTable[parTable$op == op &
                            parTable$rhs %in% RHS &
                            parTable$lhs %in% LHS &
                            !canBeNumeric(parTable$mod,
@@ -46,13 +46,13 @@ fillDynExprs <- function(X, parTable, op, RHS, LHS, type) {
     X      <- setVal(X = X, rhs = rhs, lhs = lhs, val = 0)
     labelX <- setVal(X = labelX, rhs = rhs, lhs = lhs, val = mod)
   }
-  
+
   list(numeric = X, label = labelX)
 }
 
 
 getSetValFunc <- function(type) {
-  switch(type, 
+  switch(type,
          rhs       = setValRhsFirst,
          lhs       = setValLhsFirst,
          symmetric = setValSymmetric,
@@ -84,34 +84,41 @@ getEmptyPhi <- function(phi) {
 }
 
 
+notFilledLambda <- function(ind, lambda) {
+  !any(is.na(lambda[ind, ])) && all(lambda[ind, ] == 0)
+}
+
+
 constructLambda <- function(lVs, indsLVs, parTable, auto.constraints = TRUE) {
-  numLVs        <- length(lVs) 
+  numLVs        <- length(lVs)
   indsLVs       <- indsLVs[lVs] # make sure it is sorted
-  numIndsLVs    <- lapply(indsLVs, FUN = length)
-  allIndsLVs    <- unlist(indsLVs)
+  allIndsLVs    <- unique(unlist(indsLVs))
   numAllIndsLVs <- length(allIndsLVs)
   firstVal      <- ifelse(auto.constraints, 1, NA)
 
-  lastRowPreviousLV <- 0
   lambda <- matrix(0, nrow = numAllIndsLVs, ncol = numLVs,
                    dimnames = list(allIndsLVs, lVs))
 
-  for (i in seq_along(lVs)) {
-    rowIndices            <- seq_len(numIndsLVs[[i]]) + lastRowPreviousLV
-    lambda[rowIndices, i] <- c(firstVal, rep(NA, numIndsLVs[[i]] - 1))
-    lastRowPreviousLV     <- lastRowPreviousLV + numIndsLVs[[i]]
+  for (lV in lVs) {
+    firstFilled <- FALSE
+    for (ind in indsLVs[[lV]]) {
+      # TODO: make this work when duplicates appear seperately in lambdaY and lambdaX
+      if (!firstFilled && auto.constraints && notFilledLambda(ind, lambda)) {
+        lambda[ind, lV] <- firstVal
+        firstFilled <- TRUE
+      } else lambda[ind, lV] <- NA
+    }
   }
-  
-  setMatrixConstraints(X = lambda, parTable = parTable, op = "=~", 
-                       RHS = allIndsLVs, LHS = lVs, type = "rhs", 
+
+  setMatrixConstraints(X = lambda, parTable = parTable, op = "=~",
+                       RHS = allIndsLVs, LHS = lVs, type = "rhs",
                        nonFreeParams = TRUE) # first params are by default set to 1
 }
 
 
 constructTau <- function(lVs, indsLVs, parTable, mean.observed = TRUE) {
   indsLVs       <- indsLVs[lVs] # make sure it is sorted
-  numIndsLVs    <- lapply(indsLVs, FUN = length)
-  allIndsLVs    <- unlist(indsLVs)
+  allIndsLVs    <- unique(unlist(indsLVs))
   numAllIndsLVs <- length(allIndsLVs)
   default       <- ifelse(mean.observed, NA, 0)
   lavOptimizerSyntaxAdditions <- ""
@@ -129,7 +136,7 @@ constructTau <- function(lVs, indsLVs, parTable, mean.observed = TRUE) {
     }
   }
 
-  c(setMatrixConstraints(X = tau, parTable = parTable, op = "~1", 
+  c(setMatrixConstraints(X = tau, parTable = parTable, op = "~1",
                          RHS = "", LHS = allIndsLVs, type = "lhs",
                          nonFreeParams = FALSE),
     list(syntaxAdditions = lavOptimizerSyntaxAdditions))
@@ -137,10 +144,10 @@ constructTau <- function(lVs, indsLVs, parTable, mean.observed = TRUE) {
 
 
 constructTheta <- function(lVs, indsLVs, parTable, auto.constraints = TRUE) {
-  numLVs        <- length(lVs) 
+  numLVs        <- length(lVs)
   indsLVs       <- indsLVs[lVs] # make sure it is sorted
   numIndsLVs    <- lapply(indsLVs, FUN = length)
-  allIndsLVs    <- unlist(indsLVs)
+  allIndsLVs    <- unique(unlist(indsLVs))
   numAllIndsLVs <- length(allIndsLVs)
 
   theta <- matrix(0, nrow = numAllIndsLVs, ncol = numAllIndsLVs,
@@ -154,7 +161,7 @@ constructTheta <- function(lVs, indsLVs, parTable, auto.constraints = TRUE) {
     }
   }
 
-  setMatrixConstraints(X = theta, parTable = parTable, op = "~~", 
+  setMatrixConstraints(X = theta, parTable = parTable, op = "~~",
                        RHS = allIndsLVs, LHS = allIndsLVs, type = "symmetric",
                        nonFreeParams = FALSE)
 }
@@ -165,7 +172,7 @@ constructGamma <- function(DVs, IVs, parTable) {
   numDVs <- length(DVs)
   numIVs <- length(IVs)
   gamma  <- matrix(0, nrow = numDVs, ncol = numIVs, dimnames = list(DVs, IVs))
-  
+
   setMatrixConstraints(X = gamma, parTable = exprsGamma, op = "~", RHS = IVs,
                        LHS = DVs, type = "lhs", nonFreeParams = FALSE)
 }
@@ -174,23 +181,23 @@ constructGamma <- function(DVs, IVs, parTable) {
 constructPsi <- function(etas, parTable) {
   numEtas   <- length(etas)
   psi       <- matrix(0, nrow = numEtas, ncol = numEtas,
-                      dimnames = list(etas, etas)) 
+                      dimnames = list(etas, etas))
   diag(psi) <- NA
 
-  setMatrixConstraints(X = psi, parTable = parTable, op = "~~", 
+  setMatrixConstraints(X = psi, parTable = parTable, op = "~~",
                        RHS = etas, LHS = etas, type = "symmetric",
                        nonFreeParams = FALSE)
 }
 
 
-constructPhi <- function(xis, method = "lms", cov.syntax = NULL, 
+constructPhi <- function(xis, method = "lms", cov.syntax = NULL,
                          parTable) {
   numXis <- length(xis)
   phi    <- matrix(0, nrow = numXis, ncol = numXis,
                    dimnames = list(xis, xis))
   if (method != "lms" && is.null(cov.syntax)) {
     phi[lower.tri(phi, diag = TRUE)] <- NA
-    setMatrixConstraints(X = phi, parTable = parTable, op = "~~", 
+    setMatrixConstraints(X = phi, parTable = parTable, op = "~~",
                          RHS = xis, LHS = xis, type = "symmetric",
                          nonFreeParams = FALSE)
   } else getEmptyPhi(phi = phi)
@@ -204,7 +211,7 @@ constructA <- function(xis, method = "lms", cov.syntax = NULL,
                    dimnames = list(xis, xis))
   if (method == "lms" && is.null(cov.syntax)) {
     A[lower.tri(A, diag = TRUE)] <- NA
-    setMatrixConstraints(X = A, parTable = parTable, op = "~~", 
+    setMatrixConstraints(X = A, parTable = parTable, op = "~~",
                          RHS = xis, LHS = xis, type = "symmetric",
                          nonFreeParams = FALSE)
   } else getEmptyPhi(phi = A)
@@ -215,10 +222,10 @@ constructAlpha <- function(etas, parTable, auto.constraints = TRUE,
                            mean.observed = TRUE) {
   numEtas <- length(etas)
   if (auto.constraints && mean.observed) default <- 0 else default <- NA
-  alpha <- matrix(default, nrow = numEtas, ncol = 1, 
+  alpha <- matrix(default, nrow = numEtas, ncol = 1,
                   dimnames = list(etas, "1"))
 
-  setMatrixConstraints(X = alpha, parTable = parTable, op = "~1", 
+  setMatrixConstraints(X = alpha, parTable = parTable, op = "~1",
                        RHS = "", LHS = etas, type = "lhs",
                        nonFreeParams = FALSE)
 }
@@ -226,8 +233,8 @@ constructAlpha <- function(etas, parTable, auto.constraints = TRUE,
 
 selectScalingY <- function(lambdaY, method = "qml") {
   if (method != "qml") return(NULL)
-  matrix(apply(lambdaY, MARGIN = 2, FUN = isScalingY), 
-         nrow = nrow(lambdaY), ncol = ncol(lambdaY), 
+  matrix(apply(lambdaY, MARGIN = 2, FUN = isScalingY),
+         nrow = nrow(lambdaY), ncol = ncol(lambdaY),
          dimnames = dimnames(lambdaY))
 }
 
@@ -236,7 +243,7 @@ selectBetaRows <- function(lambdaY, method = "qml") {
   if (method != "qml") return(NULL)
   scalingYs <- selectScalingY(lambdaY, method = "qml")
   matrix(apply(scalingYs, MARGIN = 1, FUN = function(x )!all(x)),
-         nrow = nrow(lambdaY), ncol = 1, 
+         nrow = nrow(lambdaY), ncol = 1,
          dimnames = list(rownames(lambdaY), "1"))
 }
 
@@ -245,19 +252,19 @@ constructR <- function(etas, indsEtas, lambdaY, method = "qml") {
   if (method != "qml") return(NULL)
   hasMultipleInds <- vapply(indsEtas, FUN = function(x) length(x) > 1,
                             FUN.VALUE = logical(1L))
-  etas <- names(indsEtas)[hasMultipleInds] 
-  indsEtas <- indsEtas[etas] 
+  etas <- names(indsEtas)[hasMultipleInds]
+  indsEtas <- indsEtas[etas]
   if (length(etas) == 0) return(NULL)
 
   numEtas <- length(etas)
   numIndsEtas <- lapply(indsEtas, FUN = length)
-  allIndsEtas <- unlist(indsEtas)
+  allIndsEtas <- unique(unlist(indsEtas))
   numAllIndsEtas <- length(allIndsEtas)
   selectBetaRows <- selectBetaRows(lambdaY, method = method)
   rowNamesR <- rownames(lambdaY)[selectBetaRows]
-  
-  R <- matrix(0, nrow = numAllIndsEtas - numEtas, 
-              ncol = numAllIndsEtas, 
+
+  R <- matrix(0, nrow = numAllIndsEtas - numEtas,
+              ncol = numAllIndsEtas,
               dimnames = list(rowNamesR[seq_len(numAllIndsEtas - numEtas)],
                               allIndsEtas))
 
@@ -265,9 +272,9 @@ constructR <- function(etas, indsEtas, lambdaY, method = "qml") {
   for (i in seq_len(numEtas)) {
     nInds <- numIndsEtas[[etas[[i]]]] - 1
     if (nInds == 0) stop2("Etas in QML must have at least two indicators")
-    # free params 
+    # free params
     R[seq_len(nInds) + lastRow, lastCol + 1] <- NA
-    R[seq_len(nInds) + lastRow, 
+    R[seq_len(nInds) + lastRow,
       seq_len(nInds) + lastCol + 1] <- diag(nInds)
     lastRow <- lastRow + nInds
     lastCol <- lastCol + nInds + 1
@@ -287,17 +294,20 @@ getLatentEtasQml <- function(indsEtas, method = "qml") {
 
 
 getColsU <- function(etas, indsEtas, lambdaY, method = "qml") {
-  numEtas <- length(etas)
-  numIndsEtas <- lapply(indsEtas, FUN = length)
-  allIndsEtas <- unlist(indsEtas)
-  numAllIndsEtas <- length(allIndsEtas)
-  selectBetaRows <- selectBetaRows(lambdaY, method = "qml")
-  rowNamesR <- rownames(lambdaY)[selectBetaRows]
+  numEtas         <- length(etas)
+  numIndsEtas     <- lapply(indsEtas, FUN = length)
+  allIndsEtas     <- unique(unlist(indsEtas))
+  numAllIndsEtas  <- length(allIndsEtas)
+  selectBetaRows  <- selectBetaRows(lambdaY, method = "qml")
+  rowNamesR       <- rownames(lambdaY)[selectBetaRows]
+
   hasMultipleInds <- vapply(indsEtas, FUN = function(x) length(x) > 1,
                             FUN.VALUE = logical(1L))
-  if (sum(hasMultipleInds) == 0) return(NULL) 
+  if (sum(hasMultipleInds) == 0) return(NULL)
+
   colsU <- rowNamesR[seq_len(numAllIndsEtas - sum(hasMultipleInds))]
   colsU[is.na(colsU)] <- paste0("__FILL__ZERO__", seq_len(sum(is.na(colsU))))
+
   colsU
 }
 
@@ -323,10 +333,10 @@ constructFullR <- function(etas, indsEtas, lambdaY, method = "qml") {
   rowNamesR <- rownames(lambdaY)[selectBetaRows]
   hasMultipleInds <- vapply(indsEtas, FUN = function(x) length(x) > 1,
                             FUN.VALUE = logical(1L))
-  if (sum(hasMultipleInds) == 0) return(NULL) 
+  if (sum(hasMultipleInds) == 0) return(NULL)
 
-  matrix(0, nrow = numAllIndsEtas - sum(hasMultipleInds), 
-         ncol = numAllIndsEtas, 
+  matrix(0, nrow = numAllIndsEtas - sum(hasMultipleInds),
+         ncol = numAllIndsEtas,
          dimnames = list(rowNamesR[seq_len(numAllIndsEtas - sum(hasMultipleInds))],
                                            allIndsEtas))
 
@@ -335,16 +345,16 @@ constructFullR <- function(etas, indsEtas, lambdaY, method = "qml") {
 
 constructFullSigma2ThetaEpsilon <- function(psi, method = "qml") {
   if (method != "qml") return(NULL)
-  matrix(0, nrow = nrow(psi), ncol = ncol(psi), 
+  matrix(0, nrow = nrow(psi), ncol = ncol(psi),
          dimnames = dimnames(psi))
 }
 
 
-getSelectSubSigma2ThetaEpsilon <- function(fullSigma2ThetaEpsilon, 
+getSelectSubSigma2ThetaEpsilon <- function(fullSigma2ThetaEpsilon,
                                            latentEtas, method = "qml") {
   if (method != "qml") return(NULL)
-  select <- as.logical.matrix(fullSigma2ThetaEpsilon) 
-  select[TRUE] <- FALSE 
+  select <- as.logical.matrix(fullSigma2ThetaEpsilon)
+  select[TRUE] <- FALSE
   select[latentEtas, latentEtas] <- TRUE
   select
 }
@@ -352,7 +362,7 @@ getSelectSubSigma2ThetaEpsilon <- function(fullSigma2ThetaEpsilon,
 
 constructFullL2 <- function(colsU, etas, method = "qml") {
   if (method != "qml") return(NULL)
-  
+
   if (is.null(colsU)) nCols <- length(etas)
   else nCols <- length(colsU)
   matrix(0, nrow = length(etas), ncol = nCols,
@@ -371,7 +381,7 @@ getSelectSubL2 <- function(fullL2, colsU, latentEtas, method = "qml") {
 
 getScalingInds <- function(indsEtas, R, latentEtas, method = "qml") {
   if (method != "qml") return(NULL)
-  allIndsEtas <- unlist(indsEtas[latentEtas])
+  allIndsEtas <- unique(unlist(indsEtas[latentEtas]))
   scalingInds <- allIndsEtas[!allIndsEtas %in% rownames(R)]
   scalingInds
 }
@@ -390,10 +400,9 @@ selectThetaEpsilon <- function(indsEtas, thetaEpsilon, scalingInds,
 constructSubThetaEpsilon <- function(indsEtas, thetaEpsilon, scalingInds,
                                      method = "qml") {
   if (method != "qml") return(NULL)
-  subThetaEpsilon <- matrix(0, nrow = length(scalingInds), 
-                            ncol = length(scalingInds), 
-                            dimnames = list(scalingInds, 
-                                            scalingInds))
+  subThetaEpsilon <- matrix(0, nrow = length(scalingInds),
+                            ncol = length(scalingInds),
+                            dimnames = list(scalingInds, scalingInds))
   diag(subThetaEpsilon) <- NA
   subThetaEpsilon
 }
@@ -403,27 +412,28 @@ getScalingLambdaY <- function(lambdaY, indsEtas, etas, method = "qml") {
   if (method != "qml") return(NULL)
   hasMultipleInds <- vapply(indsEtas, FUN = function(x) length(x) > 1,
                             FUN.VALUE = logical(1L))
-  latentEtas <- names(indsEtas)[hasMultipleInds] 
+  latentEtas <- names(indsEtas)[hasMultipleInds]
   indsLatentEtas <- unlist(indsEtas[latentEtas])
   lambdaY[indsLatentEtas, latentEtas]
 }
 
 
-sortXisConstructOmega <- function(xis, varsInts, etas, intTerms, 
+sortXisConstructOmega <- function(xis, varsInts, etas, intTerms,
                                   method = "lms", double = FALSE) {
-  listSortedXis  <- sortXis(xis = xis, varsInts = varsInts, etas = etas, 
+  checkVarsIntsDA(varsInts, lVs = c(etas, xis))
+  listSortedXis  <- sortXis(xis = xis, varsInts = varsInts, etas = etas,
                             intTerms = intTerms, double = double)
   sortedXis    <- listSortedXis$sortedXis
   nonLinearXis <- listSortedXis$nonLinearXis
 
-  omegaXiXi <- constructOmegaXiXi(xis = xis, etas = etas, 
-                                  sortedXis = sortedXis, 
-                                  nonLinearXis = nonLinearXis, 
+  omegaXiXi <- constructOmegaXiXi(xis = xis, etas = etas,
+                                  sortedXis = sortedXis,
+                                  nonLinearXis = nonLinearXis,
                                   varsInts = varsInts,
                                   intTerms = intTerms)
   omegaEtaXi <- constructOmegaEtaXi(xis = xis, etas = etas,
-                                    sortedXis = sortedXis, 
-                                    nonLinearXis = nonLinearXis, 
+                                    sortedXis = sortedXis,
+                                    nonLinearXis = nonLinearXis,
                                     varsInts = varsInts,
                                     intTerms = intTerms)
 
@@ -433,7 +443,7 @@ sortXisConstructOmega <- function(xis, varsInts, etas, intTerms,
 
 
 sortXis <- function(xis, varsInts, etas, intTerms, double) {
-  # allVarsInInts should be sorted according to which variables 
+  # allVarsInInts should be sorted according to which variables
   # occur in the most interaction terms (makes it more efficient)
   allVarsInInts <- unique(unlist(varsInts))
   freqInIntTerms <- lapply(varsInts, FUN = unique) |> unlist() |>
@@ -468,7 +478,7 @@ sortXis <- function(xis, varsInts, etas, intTerms, double) {
 constructOmegaEtaXi <- function(xis, etas, sortedXis, nonLinearXis,
                                 varsInts, intTerms) {
   omega      <- NULL
-  labelOmega <- NULL 
+  labelOmega <- NULL
 
   for (eta in etas) {
     subOmega <- matrix(0, nrow = length(xis), ncol = length(etas),
@@ -481,9 +491,9 @@ constructOmegaEtaXi <- function(xis, etas, sortedXis, nonLinearXis,
       whichXi  <- which(!row %in% etas)
       whichEta <- which(row %in% etas)
 
-      subOmega[row[[whichXi]], row[[whichEta]]] <- 
+      subOmega[row[[whichXi]], row[[whichEta]]] <-
         getFreeOrConstIntTerms(row, eta, intTerms)
-      subLabelOmega[row[[whichXi]], row[[whichEta]]] <- 
+      subLabelOmega[row[[whichXi]], row[[whichEta]]] <-
         getLabelIntTerms(row, eta, intTerms)
     }
 
@@ -508,8 +518,8 @@ constructOmegaXiXi <- function(xis, etas, sortedXis, nonLinearXis,
 
        whichRow <- which(row %in% nonLinearXis)[[1]] # if quadratic term pick first
        whichCol <- ifelse(whichRow == 1, 2, 1)
-       
-       subOmega[row[[whichRow]], row[[whichCol]]] <- 
+
+       subOmega[row[[whichRow]], row[[whichCol]]] <-
          getFreeOrConstIntTerms(row, eta, intTerms)
        subLabelOmega[row[[whichRow]], row[[whichCol]]] <-
          getLabelIntTerms(row, eta, intTerms)

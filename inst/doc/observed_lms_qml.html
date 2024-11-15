@@ -345,40 +345,42 @@ approach</h1>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(modsem)</span></code></pre></div>
 <div id="the-latent-moderated-structural-equations-lms-and-the-quasi-maximum-likelihood-qml-approach" class="section level1">
 <h1>The Latent Moderated Structural Equations (LMS) and the Quasi
-Maximum Likelihood (QML) approach</h1>
-<p>In contrast to the other approaches, the LMS and QML approaches are
-designed to handle latent variables only. Thus observed variables cannot
-be as easily used, as in the other approaches. One way of getting around
-this is by specifying your observed variable as a latent variable with a
-single indicator. <code>modsem()</code> will by default constrain the
-factor loading to <code>1</code>, and the residual variance of the
-indicator to <code>0</code>. Then, the only difference between the
-latent variable and its indicator, is that (assuming that it is an
-exogenous variable) it has a zero-mean. This will work for both the LMS-
-and QML approach in most cases, except for two exceptions.</p>
+Maximum Likelihood (QML) Approach</h1>
+<p>In contrast to the other approaches, the <code>LMS</code> and
+<code>QML</code> approaches are designed to handle latent variables
+only. Thus, observed variables cannot be used as easily as in the other
+approaches. One way to get around this is by specifying your observed
+variable as a latent variable with a single indicator.
+<code>modsem()</code> will, by default, constrain the factor loading to
+<code>1</code> and the residual variance of the indicator to
+<code>0</code>. The only difference between the latent variable and its
+indicator, assuming it is an exogenous variable, is that it has a
+zero-mean. This approach works for both the <code>LMS</code> and
+<code>QML</code> methods in most cases, with two exceptions.</p>
 <div id="the-lms-approach" class="section level2">
-<h2>The LMS approach</h2>
-<p>For the LMS approach you can use the above mentioned approach in
-almost all cases, except in the case where you wish to use an observed
-variable as a moderating variable. In the LMS approach, you will usually
-select one variable in an interaction term as a moderator. The
-interaction effect is then estimated via numerical integration, at
-<code>n</code> quadrature nodes of the moderating variable. This process
-however, requires that the moderating variable has an error-term, as the
-distribution of the moderating variable is modelled as <span class="math inline">\(X \sim N(Az, \varepsilon)\)</span>, where <span class="math inline">\(Az\)</span> is the expected value of <span class="math inline">\(X\)</span> at quadrature point <code>k</code>, and
+<h2>The LMS Approach</h2>
+<p>For the <code>LMS</code> approach, you can use the above-mentioned
+method in almost all cases, except when using an observed variable as a
+moderating variable. In the <code>LMS</code> approach, you typically
+select one variable in an interaction term as the moderator. The
+interaction effect is then estimated via numerical integration at
+<code>n</code> quadrature nodes of the moderating variable. However,
+this process requires that the moderating variable has an error term, as
+the distribution of the moderating variable is modeled as <span class="math inline">\(X \sim N(Az, \varepsilon)\)</span>, where <span class="math inline">\(Az\)</span> is the expected value of <span class="math inline">\(X\)</span> at quadrature point <code>k</code>, and
 <span class="math inline">\(\varepsilon\)</span> is the error term. If
-the error-term is zero, the probability of observing a given value of
-<span class="math inline">\(X\)</span> will not be computable. In most
-instances the first variable in the interaction term, is chosen as the
-moderator. For example, if the interaction term is <code>&quot;X:Z&quot;</code>,
-<code>&quot;X&quot;</code> will usually be chosen as the moderator. Thus if only
-one of the variables are latent, you should put the latent variable
-first in the interaction term. If both are observed, you have to specify
-a measurement error (e.g., “x1 ~~ 0.1 * x1”) for the indicator of the
-first variable in the interaction term.</p>
+the error term is zero, the probability of observing a given value of
+<span class="math inline">\(X\)</span> will not be computable.</p>
+<p>In most instances, the first variable in the interaction term is
+chosen as the moderator. For example, if the interaction term is
+<code>&quot;X:Z&quot;</code>, <code>&quot;X&quot;</code> will usually be chosen as the
+moderator. Therefore, if only one of the variables is latent, you should
+place the latent variable first in the interaction term. If both
+variables are observed, you must specify a measurement error (e.g.,
+<code>&quot;x1 ~~ 0.1 * x1&quot;</code>) for the indicator of the first variable
+in the interaction term.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(modsem)</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># interaction effect between a latent and an observed variable</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Interaction effect between a latent and an observed variable</span></span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>m1 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="st"># Outer Model</span></span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="st">  X =~ x1 # X is observed</span></span>
@@ -392,27 +394,28 @@ first variable in the interaction term.</p>
 <span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>lms1 <span class="ot">&lt;-</span> <span class="fu">modsem</span>(m1, oneInt, <span class="at">method =</span> <span class="st">&quot;lms&quot;</span>)</span>
 <span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="co"># interaction effect between two observed variables</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Interaction effect between two observed variables</span></span>
 <span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>m2 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
 <span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="st"># Outer Model</span></span>
 <span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="st">  X =~ x1 # X is observed</span></span>
 <span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="st">  Z =~ z1 # Z is observed</span></span>
 <span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a><span class="st">  Y =~ y1 # Y is observed</span></span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="st">  x1 ~~ 0.1 * x1 # specify a variance for the measurement error</span></span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a><span class="st"># Inner model</span></span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a><span class="st">  Y ~ X + Z</span></span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a><span class="st">  Y ~ X:Z</span></span>
-<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
-<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>lms2 <span class="ot">&lt;-</span> <span class="fu">modsem</span>(m1, oneInt, <span class="at">method =</span> <span class="st">&quot;lms&quot;</span>)</span>
-<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(lms2)</span></code></pre></div>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="st">  x1 ~~ 0.1 * x1 # Specify a variance for the measurement error</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a><span class="st"># Inner model</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a><span class="st">  Y ~ X + Z</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a><span class="st">  Y ~ X:Z</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>lms2 <span class="ot">&lt;-</span> <span class="fu">modsem</span>(m2, oneInt, <span class="at">method =</span> <span class="st">&quot;lms&quot;</span>)</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(lms2)</span></code></pre></div>
 </div>
 <div id="the-qml-approach" class="section level2">
-<h2>The QML approach</h2>
-<p>The estimation of the QML approach is different from the LMS
-approach, and you do not have the same issue as in the LMS approach.
-Thus you don’t have to specify a measurement error for moderating
-variables.</p>
+<h2>The QML Approach</h2>
+<p>The estimation process for the <code>QML</code> approach differs from
+the <code>LMS</code> approach, and you do not encounter the same issue
+as in the <code>LMS</code> approach. Therefore, you don’t need to
+specify a measurement error for moderating variables.</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>m3 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="st"># Outer Model</span></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="st">  X =~ x1 # X is observed</span></span>

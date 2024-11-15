@@ -2,11 +2,17 @@ Package: modsem
 Type: Package
 Title: Latent Interaction (and Moderation) Analysis in Structural
         Equation Models (SEM)
-Version: 1.0.3
+Version: 1.0.4
 Authors@R: 
-    person(given = "Kjell", family = "Solem Slupphaug", 
-           email = "slupphaugkjell@gmail.com", role = c("aut", "cre"),
-           comment = c(ORCID = "0009-0005-8324-2834"))
+    c(person(given = "Kjell", family = "Solem Slupphaug", 
+             email = "slupphaugkjell@gmail.com", role = c("aut", "cre"),
+             comment = c(ORCID = "0009-0005-8324-2834")),
+      person(given = "Mehmet", family="Mehmetoglu",
+             email = "mehmetm@ntnu.no", role=c("ctb"),
+             comment = c(ORCID="0000-0002-6092-8551")),
+      person(given = "Matthias", family="Mittner",
+             email = "matthias.mittner@uit.no", role=c("ctb"),
+             comment = c(ORCID="0000-0003-0205-7353")))
 Maintainer: Kjell Solem Slupphaug <slupphaugkjell@gmail.com>
 Description: 
     Estimation of interaction (i.e., moderation) effects between latent variables
@@ -54,13 +60,15 @@ RoxygenNote: 7.3.2
 LinkingTo: Rcpp, RcppArmadillo
 Imports: Rcpp, purrr, stringr, lavaan, rlang, MplusAutomation, nlme,
         dplyr, mvnfast, stats, fastGHQuad, mvtnorm, ggplot2, parallel
-Depends: R (>= 3.50)
-URL: https://github.com/Kss2k/modsem
+Depends: R (>= 3.5.0)
+URL: https://modsem.org
 Suggests: knitr, rmarkdown
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2024-09-23 10:45:36 UTC; kss
+Packaged: 2024-11-15 14:51:37 UTC; kss
 Author: Kjell Solem Slupphaug [aut, cre]
-    (<https://orcid.org/0009-0005-8324-2834>)
+    (<https://orcid.org/0009-0005-8324-2834>),
+  Mehmet Mehmetoglu [ctb] (<https://orcid.org/0000-0002-6092-8551>),
+  Matthias Mittner [ctb] (<https://orcid.org/0000-0003-0205-7353>)
 Repository: CRAN
-Date/Publication: 2024-09-23 11:50:08 UTC
+Date/Publication: 2024-11-15 15:20:01 UTC

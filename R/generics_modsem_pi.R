@@ -1,12 +1,27 @@
+printModsemPIHeader <- function(approach) {
+  cat(paste0("modsem (version ", PKG_INFO$version, ", approach = ",
+             approach, "):\n"))
+}
+
+
 #' summary for modsem objects
 #'
 #' @param object modsem object to summarized
 #' @param ... arguments passed to lavaan::summary()
 #' @rdname summary
-#' @export 
+#' @export
 summary.modsem_pi <- function(object, ...) {
-  cat("modsem: \nMethod =", attributes(object)$method, "\n")
-  lavaan::summary(object$lavaan, ...)
+  structure(list(lavaan = lavaan::summary(object$lavaan, ...),
+                 info   = list(version = PKG_INFO$version,
+                               approach = attributes(object)$method)),
+            class = c("summary_modsem_pi", "list"))
+}
+
+
+#' @export
+print.summary_modsem_pi <- function(x, ...) {
+  printModsemPIHeader(x$info$approach)
+  print(x$lavaan)
 }
 
 
@@ -16,34 +31,34 @@ parameter_estimates.modsem_pi <- function(object, ...) {
 }
 
 
-#' @export 
+#' @export
 standardized_estimates.modsem_pi <- function(object, ...) {
   lavaan::standardizedSolution(object$lavaan, ...)
 }
 
 
-#' @export 
+#' @export
 modsem_inspect.modsem_pi <- function(object, what = NULL, ...) {
   if (is.null(what)) what <- "free"
   lavaan::lavInspect(object$lavaan, what = what, ...)
 }
 
 
-#' @export 
+#' @export
 #' @importFrom stats vcov
 vcov.modsem_pi <- function(object, ...) {
   lavaan::vcov(object$lavaan, ...)
 }
 
 
-#' @export 
+#' @export
 #' @importFrom stats coef
 coef.modsem_pi <- function(object, ...) {
   lavaan::coef(object$lavaan, ...)
 }
 
 
-#' @export 
+#' @export
 #' @importFrom stats coefficients
 coefficients.modsem_pi <- function(object, ...) {
   lavaan::coef(object$lavaan, ...)
@@ -54,4 +69,11 @@ coefficients.modsem_pi <- function(object, ...) {
 #' @importFrom stats nobs
 nobs.modsem_pi <- function(object, ...) {
   lavaan::nobs(object$lavaan, ...)
+}
+
+
+#' @export
+print.modsem_pi <- function(x, ...) {
+  printModsemPIHeader(attributes(x)$method)
+  print(x$lavaan)
 }

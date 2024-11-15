@@ -10,7 +10,7 @@
 \method{summary}{modsem_da}(
   object,
   H0 = TRUE,
-  verbose = TRUE,
+  verbose = interactive(),
   r.squared = TRUE,
   adjusted.stat = FALSE,
   digits = 3,
@@ -20,7 +20,7 @@
   loadings = TRUE,
   regressions = TRUE,
   covariances = TRUE,
-  intercepts = TRUE,
+  intercepts = !standardized,
   variances = TRUE,
   var.interaction = FALSE,
   ...

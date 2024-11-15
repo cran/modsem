@@ -10,12 +10,18 @@ Estimation of interaction (i.e., moderation) effects between latent variables in
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/Kss2k/modsem}
+  \item \url{https://modsem.org}
 }
 
 }
 \author{
 \strong{Maintainer}: Kjell Solem Slupphaug \email{slupphaugkjell@gmail.com} (\href{https://orcid.org/0009-0005-8324-2834}{ORCID})
+
+Other contributors:
+\itemize{
+  \item Mehmet Mehmetoglu \email{mehmetm@ntnu.no} (\href{https://orcid.org/0000-0002-6092-8551}{ORCID}) [contributor]
+  \item Matthias Mittner \email{matthias.mittner@uit.no} (\href{https://orcid.org/0000-0003-0205-7353}{ORCID}) [contributor]
+}
 
 }
 \keyword{internal}

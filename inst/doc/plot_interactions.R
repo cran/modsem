@@ -1,7 +1,8 @@
 ## ----include = FALSE----------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  eval = TRUE
 )
 
 ## ----setup--------------------------------------------------------------------
@@ -15,12 +16,11 @@ m1 <- "
   Z =~ z1 + z2 + z3
   Y =~ y1 + y2 + y3
 
-# Inner model
+# Inner Model
   Y ~ X + Z + X:Z
 "
 est1 <- modsem(m1, data = oneInt)
-plot_interaction("X", "Z", "Y", "X:Z", -3:3, c(-0.2, 0), est1)
-
+plot_interaction("X", "Z", "Y", "X:Z", vals_z = -3:3, range_y = c(-0.2, 0), model = est1)
 
 ## -----------------------------------------------------------------------------
 tpb <- "
