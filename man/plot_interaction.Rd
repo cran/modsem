@@ -13,6 +13,7 @@ plot_interaction(
   vals_z,
   model,
   alpha_se = 0.15,
+  digits = 2,
   ...
 )
 }
@@ -26,14 +27,18 @@ plot_interaction(
 \item{xz}{The name of the interaction term. If the interaction term is not specified, it
 will be created using \code{x} and \code{z}.}
 
-\item{vals_x}{The values of the \code{x} variable to plot, the more values the smoother the std.error-area will be}
+\item{vals_x}{The values of the \code{x} variable to plot, the more values the smoother the std.error-area will be.
+NOTE: \code{vals_x} are measured relative to the mean of \code{x}. The correct values will show up in the plot.}
 
 \item{vals_z}{The values of the moderator variable to plot. A separate regression
+NOTE: \code{vals_z} are measured relative to the mean of \code{z}. The correct values will show up in the plot.
 line (\code{y ~ x | z}) will be plotted for each value of the moderator variable}
 
 \item{model}{An object of class \code{\link{modsem_pi}}, \code{\link{modsem_da}}, or \code{\link{modsem_mplus}}}
 
 \item{alpha_se}{The alpha level for the std.error area}
+
+\item{digits}{The number of digits to round the mean-shifted values of \code{z}}
 
 \item{...}{Additional arguments passed to other functions}
 }

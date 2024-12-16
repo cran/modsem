@@ -5,11 +5,14 @@
 #' @param y The name of the outcome variable
 #' @param xz The name of the interaction term. If the interaction term is not specified, it
 #' will be created using \code{x} and \code{z}.
-#' @param vals_x The values of the \code{x} variable to plot, the more values the smoother the std.error-area will be
+#' @param vals_x The values of the \code{x} variable to plot, the more values the smoother the std.error-area will be.
+#' NOTE: \code{vals_x} are measured relative to the mean of \code{x}. The correct values will show up in the plot.
 #' @param vals_z The values of the moderator variable to plot. A separate regression
+#' NOTE: \code{vals_z} are measured relative to the mean of \code{z}. The correct values will show up in the plot.
 #' line (\code{y ~ x | z}) will be plotted for each value of the moderator variable
 #' @param model An object of class \code{\link{modsem_pi}}, \code{\link{modsem_da}}, or \code{\link{modsem_mplus}}
 #' @param alpha_se The alpha level for the std.error area
+#' @param digits The number of digits to round the mean-shifted values of \code{z}
 #' @param ... Additional arguments passed to other functions
 #' @return A \code{ggplot} object
 #' @export
@@ -51,10 +54,9 @@
 #'                  vals_z = c(-0.5, 0.5), model = est2)
 #' }
 plot_interaction <- function(x, z, y, xz = NULL, vals_x = seq(-3, 3, .001) ,
-                             vals_z, model, alpha_se = 0.15, ...) {
-  if (!isModsemObject(model) && !isLavaanObject(model)) {
-    stop2("model must be of class 'modsem_pi', 'modsem_da', 'modsem_mplus' or 'lavaan'")
-  }
+                             vals_z, model, alpha_se = 0.15, digits = 2, ...) {
+  stopif(!isModsemObject(model) && !isLavaanObject(model), "model must be of class ",
+         "'modsem_pi', 'modsem_da', 'modsem_mplus' or 'lavaan'")
 
   if (is.null(xz)) xz <- paste(x, z, sep = ":")
   xz <- c(xz, reverseIntTerm(xz))
@@ -81,35 +83,44 @@ plot_interaction <- function(x, z, y, xz = NULL, vals_x = seq(-3, 3, .001) ,
                     parTable$lhs == y, ]
   vars <- parTable[parTable$op == "~~" & parTable$rhs %in% lVs &
              parTable$lhs == parTable$rhs, ]
-  gamma_x <- coefs[coefs$rhs == x, "est"]
-  var_x <- calcCovParTable(x, x, parTable)
-  gamma_z <- coefs[coefs$rhs == z, "est"]
-  var_z <- calcCovParTable(z, z, parTable)
+  gamma_x  <- coefs[coefs$rhs == x, "est"]
+  var_x    <- calcCovParTable(x, x, parTable)
+  gamma_z  <- coefs[coefs$rhs == z, "est"]
+  var_z    <- calcCovParTable(z, z, parTable)
   gamma_xz <- coefs[coefs$rhs %in% xz, "est"]
-  sd <- sqrt(vars[vars$rhs == y, "est"]) # residual std.error
+  sd       <- sqrt(vars[vars$rhs == y, "est"]) # residual std.error
 
-  if (length(gamma_x) == 0) stop2("coefficient for x not found in model")
-  if (length(var_x) == 0) stop2("variance of x not found in model")
-  if (length(gamma_z) == 0) stop2("coefficient for z not found in model")
-  if (length(var_z) == 0) stop2("variance of z not found in model")
-  if (length(gamma_xz) == 0) stop2("coefficient for xz not found in model")
-  if (length(sd) == 0) stop2("residual std.error of y not found in model")
+  stopif(!length(gamma_x),  "coefficient for x not found in model")
+  stopif(!length(var_x),    "variance of x not found in model")
+  stopif(!length(gamma_z),  "coefficient for z not found in model")
+  stopif(!length(var_z),    "variance of z not found in model")
+  stopif(!length(gamma_xz), "coefficient for xz not found in model")
+  stopif(!length(sd),       "residual std.error of y not found in model")
+
+  # offset by mean
+  mean_x <- getMean(x, parTable = parTable)
+  mean_z <- getMean(z, parTable = parTable)
+  vals_x <- vals_x + mean_x
+  vals_z <- round(vals_z + mean_z, digits)
 
   # creating margins
-  df <- expand.grid(x = vals_x, z = vals_z)
-  df$se_x <- calc_se(df$x, var = var_x, n = n, s = sd)
+  df        <- expand.grid(x = vals_x, z = vals_z)
+  df$se_x   <- calc_se(df$x, var = var_x, n = n, s = sd)
   df$proj_y <- gamma_x * df$x + gamma_z + df$z + df$z * df$x * gamma_xz
-  df$cat_z <- as.factor(df$z)
+  df$cat_z  <- as.factor(df$z)
 
-  se_x <- df$se_x
+  se_x   <- df$se_x
   proj_y <- df$proj_y
-  cat_z <- df$cat_z
+  cat_z  <- df$cat_z
+
   # plotting margins
-  ggplot2::ggplot(df, ggplot2::aes(x = x, y = proj_y, colour = cat_z, group = cat_z,)) +
+  ggplot2::ggplot(df, ggplot2::aes(x = x, y = proj_y, colour = cat_z, group = cat_z)) +
     ggplot2::geom_smooth(method = "lm", formula = "y ~ x", se = FALSE) +
-    ggplot2::geom_ribbon(ggplot2::aes(ymin = proj_y - 1.96 * se_x, ymax = proj_y + 1.96 * se_x),
+    ggplot2::geom_ribbon(ggplot2::aes(ymin = proj_y - 1.96 * se_x, ymax = proj_y + 1.96 * se_x, fill = cat_z),
                          alpha = alpha_se, linewidth = 0, linetype = "blank") +
-    ggplot2::labs(x = x, y = y, colour = z)
+    ggplot2::labs(x = x, y = y, colour = z, fill = z) + 
+    ggplot2::ggtitle(sprintf("Marginal Effects of %s on %s, Given %s", x, y, z)) + 
+    ggplot2::theme_bw()
 }
 
 
@@ -122,4 +133,271 @@ calc_se <- function(x, var, n, s) {
   # s = residual std.error of model
   SSx <- (n - 1) * var # sum of squares of x
   s * sqrt(1 / n + x ^ 2 / SSx)
+}
+
+#' Plot Interaction Effect Using the Johnson-Neyman Technique
+#'
+#' This function plots the simple slopes of an interaction effect across different values of a moderator variable using the Johnson-Neyman technique. It identifies regions where the effect of the predictor on the outcome is statistically significant.
+#'
+#' @param x The name of the predictor variable (as a character string).
+#' @param z The name of the moderator variable (as a character string).
+#' @param y The name of the outcome variable (as a character string).
+#' @param xz The name of the interaction term. If not specified, it will be created using \code{x} and \code{z}.
+#' @param model A fitted model object of class \code{modsem_da}, \code{modsem_mplus}, \code{modsem_pi}, or \code{lavaan}.
+#' @param min_z The minimum value of the moderator variable \code{z} to be used in the plot (default is -3). It is relative to the mean of z.
+#' @param max_z The maximum value of the moderator variable \code{z} to be used in the plot (default is 3). It is relative to the mean of z.
+#' @param sig.level The significance level for the confidence intervals (default is 0.05).
+#' @param alpha alpha setting used in `ggplot` (i.e., the opposite of opacity)
+#' @param detail The number of generated data points to use for the plot (default is 1000). You can increase this value for smoother plots.
+#' @param sd.line A thick black line showing \code{+/- sd.line * sd(z)}. NOTE: This line will be truncated by \code{min_z} and \code{max_z} if 
+#' the sd.line falls outside of \code{[min_z, max_z]}.
+#' @param ... Additional arguments (currently not used).
+#' @return A \code{ggplot} object showing the interaction plot with regions of significance.
+#' @details
+#' The function calculates the simple slopes of the predictor variable \code{x} on the outcome variable \code{y} at different levels of the moderator variable \code{z}. It uses the Johnson-Neyman technique to identify the regions of \code{z} where the effect of \code{x} on \code{y} is statistically significant.
+#'
+#' It extracts the necessary coefficients and variance-covariance information from the fitted model object. The function then computes the critical t-value and solves the quadratic equation derived from the t-statistic equation to find the Johnson-Neyman points.
+#'
+#' The plot displays:
+#' \itemize{
+#'   \item The estimated simple slopes across the range of \code{z}.
+#'   \item Confidence intervals around the slopes.
+#'   \item Regions where the effect is significant (shaded areas).
+#'   \item Vertical dashed lines indicating the Johnson-Neyman points.
+#'   \item Text annotations providing the exact values of the Johnson-Neyman points.
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' library(modsem)
+#'
+#' m1 <-  ' 
+#'   visual  =~ x1 + x2 + x3 
+#'   textual =~ x4 + x5 + x6
+#'   speed   =~ x7 + x8 + x9
+#' 
+#'   visual ~ speed + textual + speed:textual
+#' '
+#' 
+#' est <- modsem(m1, data = lavaan::HolzingerSwineford1939, method = "ca")
+#' plot_jn(x = "speed", z = "textual", y = "visual", model = est, max_z = 6)
+#' }
+#' @importFrom ggplot2 ggplot aes geom_line geom_ribbon geom_vline annotate scale_fill_manual labs theme_minimal
+#' @export
+plot_jn <- function(x, z, y, xz = NULL, model, min_z = -3, max_z = 3, 
+                    sig.level = 0.05, alpha = 0.2, detail = 1000, 
+                    sd.line = 2, ...) {
+  # Check if model is a valid object
+  stopif(!inherits(model, c("modsem_da", "modsem_mplus", "modsem_pi", "lavaan")),
+         "model must be of class 'modsem_pi', 'modsem_da', 'modsem_mplus', or 'lavaan'")
+
+  # If interaction term is not specified, create it
+  if (is.null(xz)) xz <- paste(x, z, sep = ":")
+  xz <- c(xz, reverseIntTerm(xz))
+  if (!inherits(model, c("modsem_da", "modsem_mplus")) && !inherits(model, "lavaan")) {
+    xz <- stringr::str_remove_all(xz, ":")
+  }
+
+  # Extract parameter estimates
+  parTable <- parameter_estimates(model)
+  parTable <- getMissingLabels(parTable)
+
+  # mean and sd x
+  mean_z <- getMean(z, parTable = parTable)
+  sd_z   <- sqrt(calcCovParTable(x = z, y = z, parTable = parTable))
+  min_z  <- min_z + mean_z
+  max_z  <- max_z + mean_z
+
+  # Extract coefficients
+  beta_x <- parTable[parTable$lhs == y & parTable$rhs == x & parTable$op == "~", "est"]
+  beta_xz <- parTable[parTable$lhs == y & parTable$rhs %in% xz & parTable$op == "~", "est"]
+
+  stopif(length(beta_x) == 0, "Coefficient for x not found in model")
+  stopif(length(beta_xz) == 0, "Coefficient for interaction term not found in model")
+
+  # Extract variance-covariance matrix
+  VCOV <- vcov(model)
+
+  label_beta_x  <- parTable[parTable$lhs == y & parTable$rhs == x & parTable$op == "~", "label"]
+  label_beta_xz <- parTable[parTable$lhs == y & parTable$rhs %in% xz & parTable$op == "~", "label"]
+
+  # Extract variances and covariances
+  var_beta_x         <- VCOV[label_beta_x, label_beta_x]
+  var_beta_xz        <- VCOV[label_beta_xz, label_beta_xz]
+  cov_beta_x_beta_xz <- VCOV[label_beta_x, label_beta_xz]
+
+  nobs <- nobs(model)
+  npar <- length(coef(model))
+
+  df_resid <- nobs - npar
+  
+  if (df_resid < 1) {
+    warning2("Degrees of freedom for residuals must be greater than 0. ",
+             "The model may have fewer observations than parameters.\n",
+             "Using sample size instead of degrees of freedom")
+    df_resid <- nobs
+  }
+
+  # Critical t-value
+  t_crit <- stats::qt(1 - sig.level / 2, df_resid)
+
+  # Quadratic equation components
+  A <- beta_xz^2 - t_crit^2 * var_beta_xz
+  B <- 2 * beta_x * beta_xz - 2 * t_crit^2 * cov_beta_x_beta_xz
+  C <- beta_x^2 - t_crit^2 * var_beta_x
+
+  discriminant <- B^2 - 4 * A * C
+
+  if (A == 0) {
+    # Linear case
+    if (B != 0) {
+      z_jn <- -C / B
+      significant_everywhere <- FALSE
+      z_lower <- z_jn
+      z_upper <- z_jn
+    } else {
+      message("No regions where the effect transitions between significant and non-significant.")
+      significant_everywhere <- TRUE
+    }
+  } else if (discriminant < 0) {
+    message("No regions where the effect transitions between significant and non-significant.")
+    significant_everywhere <- TRUE
+
+  } else if (discriminant == 0) {
+    # One real root
+    z_jn <- -B / (2 * A)
+    significant_everywhere <- FALSE
+    z_lower <- z_jn
+    z_upper <- z_jn
+  } else {
+    # Two real roots
+    z1 <- (-B + sqrt(discriminant)) / (2 * A)
+    z2 <- (-B - sqrt(discriminant)) / (2 * A)
+    z_lower <- min(z1, z2)
+    z_upper <- max(z1, z2)
+    significant_everywhere <- FALSE
+  }
+
+  z_range <- seq(min_z, max_z, length.out = detail)
+
+  # if not defined here (as opposed to only in the dataframe) we will get 
+  # some bogus notes in the R CMD check
+  slope         <- beta_x + beta_xz * z_range
+  SE_slope      <- sqrt(var_beta_x + z_range ^ 2 * var_beta_xz + 2 * z_range * cov_beta_x_beta_xz)
+  t_value       <- slope / SE_slope
+  p_value       <- 2 * (1 - stats::pt(abs(t_value), df_resid))
+  significant   <- p_value < sig.level
+  lower_all     <- slope - t_crit * SE_slope
+  upper_all     <- slope + t_crit * SE_slope
+  lower_sig     <- ifelse(significant,  lower_all, NA)
+  upper_sig     <- ifelse(significant,  upper_all, NA)
+  lower_sig     <- ifelse(significant, lower_all, NA)
+  upper_sig     <- ifelse(significant, upper_all, NA)
+  lower_nsig    <- ifelse(!significant, lower_all, NA)
+  upper_nsig    <- ifelse(!significant, upper_all, NA)
+  significance  <- ifelse(significant, sprintf("p < %s", sig.level), "n.s.")
+  line_segments <- cumsum(c(0, diff(as.numeric(significant)) != 0))
+
+  # Create the data frame
+  df_plot <- data.frame(
+      z            = z_range,
+      slope        = slope,
+      SE           = SE_slope,
+      t            = t_value,
+      p            = p_value,
+      significant  = significant,
+      upper_all    = upper_all,
+      lower_all    = lower_all,
+      upper_sig    = upper_sig,
+      lower_sig    = lower_sig,
+      upper_nsig   = upper_nsig,
+      lower_nsig   = lower_nsig,
+      Significance = significance,
+      # Really f***ing ugly, but works... (if not the line will sometimes be 
+      # on color...)
+      line_segments = line_segments
+  )
+  
+  # get info for thick line segment
+  x_start <- mean_z - sd.line * sd_z
+  x_end   <- mean_z + sd.line * sd_z
+
+  if (x_start < min_z && x_end > max_z) {
+    warning2("Truncating SD-range on the right and left!")
+  } else if (x_start < min_z) {
+    warning2("Truncating SD-range on the left!")
+  } else if (x_end > max_z) {
+    warning2("Truncating SD-range on the right!")
+  }
+
+  x_start     <- max(x_start, min_z)
+  x_end       <- min(x_end, max_z)
+  y_start     <- y_end <- 0
+  hline_label <- sprintf("+/- %s SDs of %s", sd.line, z)
+
+  data_hline <- data.frame(x_start = x_start, x_end = x_end, 
+                           y_start = y_start, y_end = y_end,
+                           hline_label = hline_label)
+
+  siglabel <- sprintf("p < %s", sig.level)
+  breaks   <- c(siglabel, "n.s.", hline_label)
+  values   <- structure(c("cyan3", "red", "black"), names = breaks)
+
+  p <- ggplot2::ggplot(df_plot, ggplot2::aes(x = z, y = slope)) +
+    ggplot2::geom_line(ggplot2::aes(color = significance, group = line_segments), linewidth = 1) +
+    ggplot2::geom_ribbon(ggplot2::aes(ymin = lower_nsig, ymax = upper_nsig, fill = "n.s."), alpha = alpha) +
+    ggplot2::geom_ribbon(ggplot2::aes(ymin = lower_sig, ymax = upper_sig, fill = sprintf("p < %s", sig.level)), alpha = alpha) +
+    ggplot2::labs(x = z, y = paste("Slope of", x, "on", y)) +
+    ggplot2::geom_hline(yintercept = 0, color="black", linewidth = 0.5) + 
+    suppressWarnings(ggplot2::geom_segment(
+        mapping = aes(x = x_start, xend = x_end, y = y_start, yend = y_end, 
+                      color = hline_label, fill = hline_label), 
+        data = data_hline, linewidth = 1.5)
+    ) + 
+    ggplot2::ggtitle("Johnson-Neyman Plot") +
+    ggplot2::scale_fill_manual(name = "", values = values, breaks = breaks) +
+    ggplot2::scale_color_manual(name = "", values = values, breaks = breaks) +
+    ggplot2::guides(fill = ggplot2::guide_legend(title = ""),
+                    color = ggplot2::guide_legend(title = "")) +
+    ggplot2::theme_minimal()
+
+
+  if (!significant_everywhere) {
+    if (exists("z_jn")) {
+      # Single JN point
+      if (z_jn >= min_z && z_jn <= max_z) {
+        p <- p + ggplot2::geom_vline(xintercept = z_jn, linetype = "dashed", color = "red") +
+          ggplot2::annotate("text", x = z_jn, y = max(df_plot$slope), label = paste("JN point:", round(z_jn, 2)),
+                            hjust = -0.1, vjust = 1, color = "black")
+      }
+    } else {
+      # Two JN points
+      if (z_lower >= min_z && z_lower <= max_z) {
+        p <- p +
+          ggplot2::geom_vline(xintercept = z_lower, linetype = "dashed", color = "red") +
+          ggplot2::annotate("text", x = z_lower, y = max(df_plot$slope), label = paste("JN point:", round(z_lower, 2)),
+                            hjust = -0.1, vjust = 1, color = "black")
+      }
+      if (z_upper >= min_z && z_upper <= max_z) {
+        p <- p +
+          ggplot2::geom_vline(xintercept = z_upper, linetype = "dashed", color = "red") +
+          ggplot2::annotate("text", x = z_upper, y = max(df_plot$slope), label = paste("JN point:", round(z_upper, 2)),
+                            hjust = -0.1, vjust = 1, color = "black")
+      }
+    }
+  }
+
+  p
+}
+
+
+# Helper function to reverse interaction term
+reverseIntTerm <- function(xz) {
+  if (grepl(":", xz)) {
+    vars <- strsplit(xz, ":")[[1]]
+    rev_xz <- paste(rev(vars), collapse = ":")
+  } else {
+    rev_xz <- xz
+  }
+  rev_xz
 }

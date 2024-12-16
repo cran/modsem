@@ -61,7 +61,7 @@ createTheta <- function(model, start = NULL) {
   lavLabels <- combineLavLabels(lavLabelsMain = lavLabelsMain,
                                 lavLabelsCov = lavLabelsCov,
                                 currentLabels = allLabels)
-
+  
   list(theta = theta, lenThetaMain = length(thetaMain),
        lenThetaLabel = length(thetaLabel),
        totalLenThetaLabel = length(totalThetaLabel),
@@ -208,14 +208,10 @@ fillSymmetric <- function(mat, values) {
 
 
 # Set bounds for parameters to (0, Inf)
-getParamBounds <- function(model, lowest = 1e-6) {
-  namePattern <- paste0("lambdaX[0-9]*$|lambdaY[0-9]*$|",
-                        "thetaDelta[0-9]*$|thetaEpsilon[0-9]*$|",
-                        "phi[0-9]*$|psi[0-9]*$")
+getParamBounds <- function(model, lowest = 0, varParams=NULL) {
   lower <- rep(-Inf, model$freeParams)
   upper <- rep(Inf, model$freeParams)
   names(lower) <- names(upper) <- names(model$theta)
-  lower[grepl(namePattern, names(lower))] <- lowest
   list(lower = lower, upper = upper)
 }
 

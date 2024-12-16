@@ -20,10 +20,9 @@ warnif <- function(cond, ...) {
 
 # utils for all methods
 calcCovParTable <- function(x, y, parTable, measurement.model = FALSE) {
-  parTable$mod <- as.character(parTable$est)
+  parTable$mod <- paste0("(", as.character(parTable$est), ")")
   parTable <- parTable[c("lhs", "op", "rhs", "mod")]
-  eval(parse(text = trace_path(parTable, x, y,
-                              measurement.model = measurement.model)))
+  eval(parse(text = trace_path(parTable, x, y, measurement.model = measurement.model)))
 }
 
 
@@ -263,6 +262,14 @@ getMean <- function(x, parTable) {
 }
 
 
+getMeans <- function(x, parTable) {
+  out <- vapply(x, FUN.VALUE = numeric(1L), FUN = function(x_i)
+                getMean(x_i, parTable = parTable))
+  names(out) <- x
+  out
+}
+
+
 centerInteraction <- function(parTable) {
   rows <- getIntTermRows(parTable)
   for (i in NROW(rows)) {
@@ -346,5 +353,14 @@ getDiffTwoMax <- function(x) {
 stripColonsParTable <- function(parTable) {
   parTable$lhs <- stringr::str_remove_all(parTable$lhs, ":")
   parTable$rhs <- stringr::str_remove_all(parTable$rhs, ":")
+  parTable
+}
+
+
+getMissingLabels <- function(parTable) {
+  if (!"label" %in% colnames(parTable)) parTable$label <- ""
+  missing <- is.na(parTable$label) | parTable$label == ""
+  labels <- sprintf("%s%s%s", parTable$lhs, parTable$op, parTable$rhs)
+  parTable[missing, "label"] <- labels[missing]
   parTable
 }
