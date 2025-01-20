@@ -1,139 +1,142 @@
-#' Plot Interaction Effects
+#' Plot Interaction Effects in a SEM Model
 #'
-#' @param x The name of the variable on the x-axis
-#' @param z The name of the moderator variable
-#' @param y The name of the outcome variable
-#' @param xz The name of the interaction term. If the interaction term is not specified, it
-#' will be created using \code{x} and \code{z}.
-#' @param vals_x The values of the \code{x} variable to plot, the more values the smoother the std.error-area will be.
-#' NOTE: \code{vals_x} are measured relative to the mean of \code{x}. The correct values will show up in the plot.
-#' @param vals_z The values of the moderator variable to plot. A separate regression
-#' NOTE: \code{vals_z} are measured relative to the mean of \code{z}. The correct values will show up in the plot.
-#' line (\code{y ~ x | z}) will be plotted for each value of the moderator variable
-#' @param model An object of class \code{\link{modsem_pi}}, \code{\link{modsem_da}}, or \code{\link{modsem_mplus}}
-#' @param alpha_se The alpha level for the std.error area
-#' @param digits The number of digits to round the mean-shifted values of \code{z}
-#' @param ... Additional arguments passed to other functions
-#' @return A \code{ggplot} object
+#' This function creates an interaction plot of the outcome variable (\code{y}) as a function
+#' of a focal predictor (\code{x}) at multiple values of a moderator (\code{z}). It is
+#' designed for use with structural equation modeling (SEM) objects (e.g., those from
+#' \code{\link{modsem}}). Predicted means (or predicted individual values) are calculated
+#' via \code{\link{simple_slopes}}, and then plotted with \code{ggplot2} to display
+#' multiple regression lines and confidence/prediction bands.
+#'
+#' @param x A character string specifying the focal predictor (x-axis variable).
+#' @param z A character string specifying the moderator variable.
+#' @param y A character string specifying the outcome (dependent) variable.
+#' @param xz A character string specifying the interaction term (\code{x:z}).
+#'   If \code{NULL}, the term is created automatically as \code{paste(x, z, sep = ":")}.
+#'   Some SEM backends may handle the interaction term differently (for instance, by
+#'   removing or modifying the colon), and this function attempts to reconcile that
+#'   internally.
+#' @param vals_x A numeric vector of values at which to compute and plot the focal
+#'   predictor \code{x}. The default is \code{seq(-3, 3, .001)}, which provides a
+#'   relatively fine grid for smooth lines. If \code{rescale=TRUE}, these values
+#'   are in standardized (mean-centered and scaled) units, and will be converted back
+#'   to the original metric in the internal computation of predicted means.
+#' @param vals_z A numeric vector of values of the moderator \code{z} at which to draw
+#'   separate regression lines. Each distinct value in \code{vals_z} defines a separate
+#'   group (plotted with a different color). If \code{rescale=TRUE}, these values
+#'   are also assumed to be in standardized units.
+#' @param model An object of class \code{\link{modsem_pi}}, \code{\link{modsem_da}}, 
+#'   \code{\link{modsem_mplus}}, or possibly a \code{lavaan} object. Must be a fitted
+#'   SEM model containing paths for \code{y ~ x + z + x:z}.
+#' @param alpha_se A numeric value in \([0, 1]\) specifying the transparency of
+#'   the confidence/prediction interval ribbon. Default is \code{0.15}.
+#' @param digits An integer specifying the number of decimal places to which the
+#'   moderator values (\code{z}) are rounded for labeling/grouping in the plot.
+#' @param ci_width A numeric value in \((0,1)\) indicating the coverage of the
+#'   confidence (or prediction) interval. The default is \code{0.95} for a 95\%
+#'   interval.
+#' @param ci_type A character string specifying whether to compute
+#'   \code{"confidence"} intervals (for the mean of the predicted values, default)
+#'   or \code{"prediction"} intervals (which include residual variance).
+#' @param rescale Logical. If \code{TRUE} (default), \code{vals_x} and \code{vals_z}
+#'   are interpreted as standardized units, which are mapped back to the raw scale
+#'   before computing predictions. If \code{FALSE}, \code{vals_x} and \code{vals_z}
+#'   are taken as raw-scale values directly.
+#' @param ... Additional arguments passed on to \code{\link{simple_slopes}}.
+#'
+#' @details
+#' \strong{Computation Steps:}
+#' \enumerate{
+#'   \item Calls \code{\link{simple_slopes}} to compute the predicted values of \code{y}
+#'         at the specified grid of \code{x} and \code{z} values.
+#'   \item Groups the resulting predictions by unique \code{z}-values (rounded to
+#'         \code{digits}) to create colored lines.
+#'   \item Plots these lines using \code{ggplot2}, adding ribbons for confidence
+#'         (or prediction) intervals, with transparency controlled by \code{alpha_se}.
+#' }
+#'
+#' \strong{Interpretation:}
+#' Each line in the plot corresponds to the regression of \code{y} on \code{x} at
+#' a given level of \code{z}. The shaded region around each line (ribbon) shows
+#' either the confidence interval for the predicted mean (if \code{ci_type =
+#' "confidence"}) or the prediction interval for individual observations (if
+#' \code{ci_type = "prediction"}). Where the ribbons do not overlap, there is
+#' evidence that the lines differ significantly over that range of \code{x}.
+#'
+#' @return A \code{ggplot} object that can be further customized (e.g., with
+#'   additional \code{+ theme(...)} layers). By default, it shows lines for each
+#'   moderator value and a shaded region corresponding to the interval type
+#'   (confidence or prediction).
+#'
 #' @export
+#'
 #' @examples
-#' library(modsem)
 #' \dontrun{
+#' library(modsem)
+#'
+#' # Example 1: Interaction of X and Z in a simple SEM
 #' m1 <- "
 #' # Outer Model
-#'   X =~ x1
-#'   X =~ x2 + x3
+#'   X =~ x1 + x2 + x3
 #'   Z =~ z1 + z2 + z3
 #'   Y =~ y1 + y2 + y3
 #'
-#' # Inner model
+#' # Inner Model
 #'   Y ~ X + Z + X:Z
 #' "
 #' est1 <- modsem(m1, data = oneInt)
-#' plot_interaction("X", "Z", "Y", "X:Z", -3:3, c(-0.2, 0), est1)
 #'
+#' # Plot interaction using a moderate range of X and two values of Z
+#' plot_interaction(x = "X", z = "Z", y = "Y", xz = "X:Z",
+#'                  vals_x = -3:3, vals_z = c(-0.2, 0), model = est1)
+#'
+#' # Example 2: Interaction in a theory-of-planned-behavior-style model
 #' tpb <- "
-#' # Outer Model (Based on Hagger et al., 2007)
+#' # Outer Model
 #'   ATT =~ att1 + att2 + att3 + att4 + att5
-#'   SN =~ sn1 + sn2
+#'   SN  =~ sn1 + sn2
 #'   PBC =~ pbc1 + pbc2 + pbc3
 #'   INT =~ int1 + int2 + int3
 #'   BEH =~ b1 + b2
 #'
-#' # Inner Model (Based on Steinmetz et al., 2011)
-#'   # Causal Relationsships
+#' # Inner Model
 #'   INT ~ ATT + SN + PBC
 #'   BEH ~ INT + PBC
-#'   # BEH ~ ATT:PBC
 #'   BEH ~ PBC:INT
-#'   # BEH ~ PBC:PBC
 #' "
+#' est2 <- modsem(tpb, data = TPB, method = "lms")
 #'
-#' est2 <- modsem(tpb, TPB, method = "lms")
-#' plot_interaction(x = "INT", z = "PBC", y = "BEH", xz = "PBC:INT",
-#'                  vals_z = c(-0.5, 0.5), model = est2)
+#' # Plot with custom Z values and a denser X grid
+#' plot_interaction(x = "INT", z = "PBC", y = "BEH",
+#'                  xz = "PBC:INT",
+#'                  vals_x = seq(-3, 3, 0.01),
+#'                  vals_z = c(-0.5, 0.5),
+#'                  model = est2)
 #' }
-plot_interaction <- function(x, z, y, xz = NULL, vals_x = seq(-3, 3, .001) ,
-                             vals_z, model, alpha_se = 0.15, digits = 2, ...) {
-  stopif(!isModsemObject(model) && !isLavaanObject(model), "model must be of class ",
-         "'modsem_pi', 'modsem_da', 'modsem_mplus' or 'lavaan'")
+plot_interaction <- function(x, z, y, xz = NULL, vals_x = seq(-3, 3, .001),
+                             vals_z, model, alpha_se = 0.15, digits = 2, 
+                             ci_width = 0.95, ci_type = "confidence", rescale = TRUE, ...) {
+  df <- simple_slopes(x = x, z = z, y = y, model = model, vals_x = vals_x, vals_z = vals_z, 
+                      rescale = rescale, ci_width = ci_width, ci_type = ci_type, ...)
+  df$cat_z <- as.factor(round(df$vals_z, digits))
 
-  if (is.null(xz)) xz <- paste(x, z, sep = ":")
-  xz <- c(xz, reverseIntTerm(xz))
-  if (!inherits(model, c("modsem_da", "modsem_mplus")) &&
-      !isLavaanObject(model)) {
-    xz <- stringr::str_remove_all(xz, ":")
-  }
-
-  parTable <- parameter_estimates(model)
-  gamma_x <- parTable[parTable$lhs == x & parTable$op == "~", "est"]
-
-  if (isLavaanObject(model)) {
-    # this won't work for multigroup models
-    nobs <- unlist(model@Data@nobs)
-    if (length(nobs) > 1) warning2("plot_interaction is not intended for multigroup models")
-    n <- nobs[[1]]
-
-  } else {
-    n <- nrow(model$data)
-  }
-
-  lVs <- c(x, z, y, xz)
-  coefs <- parTable[parTable$op == "~" & parTable$rhs %in% lVs &
-                    parTable$lhs == y, ]
-  vars <- parTable[parTable$op == "~~" & parTable$rhs %in% lVs &
-             parTable$lhs == parTable$rhs, ]
-  gamma_x  <- coefs[coefs$rhs == x, "est"]
-  var_x    <- calcCovParTable(x, x, parTable)
-  gamma_z  <- coefs[coefs$rhs == z, "est"]
-  var_z    <- calcCovParTable(z, z, parTable)
-  gamma_xz <- coefs[coefs$rhs %in% xz, "est"]
-  sd       <- sqrt(vars[vars$rhs == y, "est"]) # residual std.error
-
-  stopif(!length(gamma_x),  "coefficient for x not found in model")
-  stopif(!length(var_x),    "variance of x not found in model")
-  stopif(!length(gamma_z),  "coefficient for z not found in model")
-  stopif(!length(var_z),    "variance of z not found in model")
-  stopif(!length(gamma_xz), "coefficient for xz not found in model")
-  stopif(!length(sd),       "residual std.error of y not found in model")
-
-  # offset by mean
-  mean_x <- getMean(x, parTable = parTable)
-  mean_z <- getMean(z, parTable = parTable)
-  vals_x <- vals_x + mean_x
-  vals_z <- round(vals_z + mean_z, digits)
-
-  # creating margins
-  df        <- expand.grid(x = vals_x, z = vals_z)
-  df$se_x   <- calc_se(df$x, var = var_x, n = n, s = sd)
-  df$proj_y <- gamma_x * df$x + gamma_z + df$z + df$z * df$x * gamma_xz
-  df$cat_z  <- as.factor(df$z)
-
-  se_x   <- df$se_x
-  proj_y <- df$proj_y
-  cat_z  <- df$cat_z
+  # declare within the scope, to not get notes in R CMD check
+  std.error <- df$std.error
+  predicted <- df$predicted
+  cat_z     <- df$cat_z
+  vals_x    <- df$vals_x
+  ci.lower  <- df$ci.lower
+  ci.upper  <- df$ci.upper
 
   # plotting margins
-  ggplot2::ggplot(df, ggplot2::aes(x = x, y = proj_y, colour = cat_z, group = cat_z)) +
+  ggplot2::ggplot(df, ggplot2::aes(x = vals_x, y = predicted, colour = cat_z, group = cat_z)) +
     ggplot2::geom_smooth(method = "lm", formula = "y ~ x", se = FALSE) +
-    ggplot2::geom_ribbon(ggplot2::aes(ymin = proj_y - 1.96 * se_x, ymax = proj_y + 1.96 * se_x, fill = cat_z),
+    ggplot2::geom_ribbon(ggplot2::aes(ymin = ci.lower, ymax = ci.upper, fill = cat_z),
                          alpha = alpha_se, linewidth = 0, linetype = "blank") +
     ggplot2::labs(x = x, y = y, colour = z, fill = z) + 
     ggplot2::ggtitle(sprintf("Marginal Effects of %s on %s, Given %s", x, y, z)) + 
     ggplot2::theme_bw()
 }
 
-
-# function for calculating std.error of predicted value
-calc_se <- function(x, var, n, s) {
-  # x = values of x (predictor),
-    # this function assumes that 'mean(x) = 0'
-  # var = variance of x
-  # n = sample size
-  # s = residual std.error of model
-  SSx <- (n - 1) * var # sum of squares of x
-  s * sqrt(1 / n + x ^ 2 / SSx)
-}
 
 #' Plot Interaction Effect Using the Johnson-Neyman Technique
 #'
@@ -196,6 +199,12 @@ plot_jn <- function(x, z, y, xz = NULL, model, min_z = -3, max_z = 3,
   xz <- c(xz, reverseIntTerm(xz))
   if (!inherits(model, c("modsem_da", "modsem_mplus")) && !inherits(model, "lavaan")) {
     xz <- stringr::str_remove_all(xz, ":")
+  }
+    
+  if (inherits(model, "lavaan")) {
+    vcov <- lavaan::vcov
+    coef <- lavaan::coef
+    nobs <- lavaan::nobs
   }
 
   # Extract parameter estimates
@@ -388,6 +397,138 @@ plot_jn <- function(x, z, y, xz = NULL, model, min_z = -3, max_z = 3,
   }
 
   p
+}
+
+
+#' Plot Surface for Interaction Effects
+#'
+#' Generates a 3D surface plot to visualize the interaction effect of two variables (`x` and `z`) on an outcome (`y`)
+#' using parameter estimates from a supported model object (e.g., `lavaan` or `modsem`).
+#' The function allows specifying ranges for `x` and `z` in standardized z-scores, which are then transformed
+#' back to the original scale based on their means and standard deviations.
+#'
+#' @param x A character string specifying the name of the first predictor variable.
+#' @param z A character string specifying the name of the second predictor variable.
+#' @param y A character string specifying the name of the outcome variable.
+#' @param xz Optional. A character string or vector specifying the interaction term between `x` and `z`.
+#'   If `NULL`, the interaction term is constructed as `paste(x, z, sep = ":")` and adjusted for specific model classes.
+#' @param model A model object of class `'modsem_pi'`, `'modsem_da'`, `'modsem_mplus'`, or `'lavaan'`. The model should
+#'   include paths for the predictors (`x`, `z`, and `xz`) to the outcome (`y`).
+#' @param min_x Numeric. Minimum value of `x` in z-scores. Default is -3.
+#' @param max_x Numeric. Maximum value of `x` in z-scores. Default is 3.
+#' @param min_z Numeric. Minimum value of `z` in z-scores. Default is -3.
+#' @param max_z Numeric. Maximum value of `z` in z-scores. Default is 3.
+#' @param detail Numeric. Step size for the grid of `x` and `z` values, determining the resolution of the surface.
+#'   Smaller values increase plot resolution. Default is `1e-2`.
+#' @param ... Additional arguments passed to `plotly::plot_ly`.
+#'
+#' @details
+#' The input `min_x`, `max_x`, `min_z`, and `max_z` define the range of `x` and `z` values in z-scores.
+#' These are scaled by the standard deviations and shifted by the means of the respective variables, obtained
+#' from the model parameter table. The resulting surface shows the predicted values of `y` over the grid of `x` and `z`.
+#'
+#' The function supports models of class `modsem` (with subclasses `modsem_pi`, `modsem_da`, `modsem_mplus`) and `lavaan`.
+#' For `lavaan` models, it is not designed for multigroup models, and a warning will be issued if multiple groups are detected.
+#'
+#' @return A `plotly` surface plot object displaying the predicted values of `y` across the grid of `x` and `z` values.
+#'   The color bar shows the values of `y`.
+#'
+#' @note
+#' The interaction term (`xz`) may need to be manually specified for some models. For non-`lavaan` models,
+#' interaction terms may have their separator (`:`) removed based on circumstances.
+#'
+#' @examples
+#' \dontrun{
+#' m1 <- "
+#' # Outer Model
+#'   X =~ x1
+#'   X =~ x2 + x3
+#'   Z =~ z1 + z2 + z3
+#'   Y =~ y1 + y2 + y3
+#'
+#' # Inner model
+#'   Y ~ X + Z + X:Z
+#' "
+#' est1 <- modsem(m1, data = oneInt)
+#' plot_surface("X", "Z", "Y", model = est1)
+#'
+#' tpb <- "
+#' # Outer Model (Based on Hagger et al., 2007)
+#'   ATT =~ att1 + att2 + att3 + att4 + att5
+#'   SN =~ sn1 + sn2
+#'   PBC =~ pbc1 + pbc2 + pbc3
+#'   INT =~ int1 + int2 + int3
+#'   BEH =~ b1 + b2
+#'
+#' # Inner Model (Based on Steinmetz et al., 2011)
+#'   # Causal Relationsships
+#'   INT ~ ATT + SN + PBC
+#'   BEH ~ INT + PBC
+#'   # BEH ~ ATT:PBC
+#'   BEH ~ PBC:INT
+#'   # BEH ~ PBC:PBC
+#' "
+#'
+#' est2 <- modsem(tpb, TPB, method = "lms")
+#' plot_surface(x = "INT", z = "PBC", y = "BEH", model = est1)
+#' }
+#'
+#' @export
+plot_surface <- function(x, z, y, xz = NULL, model, 
+                         min_x = -3, max_x = 3, 
+                         min_z = -3, max_z = 3,
+                         detail = 1e-2, ...) {
+  stopif(!isModsemObject(model) && !isLavaanObject(model), "model must be of class ",
+         "'modsem_pi', 'modsem_da', 'modsem_mplus' or 'lavaan'")
+
+  if (is.null(xz)) xz <- paste(x, z, sep = ":")
+  xz <- c(xz, reverseIntTerm(xz))
+  if (!inherits(model, c("modsem_da", "modsem_mplus")) &&
+      !isLavaanObject(model)) {
+    xz <- stringr::str_remove_all(xz, ":")
+  }
+
+  parTable <- parameter_estimates(model)
+
+  if (isLavaanObject(model)) {
+    # this won't work for multigroup models
+    nobs <- unlist(model@Data@nobs)
+    warnif(length(nobs) > 1, "plot_interaction is not intended for multigroup models")
+    n <- nobs[[1]]
+
+  } else {
+    n <- nrow(model$data)
+  }
+
+  lVs <- c(x, z, y, xz)
+  coefs <- parTable[parTable$op == "~" & parTable$rhs %in% lVs &
+                    parTable$lhs == y, ]
+  gamma_x  <- coefs[coefs$rhs == x, "est"]
+  sd_x     <- sqrt(calcCovParTable(x, x, parTable))
+  gamma_z  <- coefs[coefs$rhs == z, "est"]
+  sd_z     <- sqrt(calcCovParTable(z, z, parTable))
+  gamma_xz <- coefs[coefs$rhs %in% xz, "est"]
+
+  stopif(!length(gamma_x),  "coefficient for x not found in model")
+  stopif(!length(sd_x),    "variance of x not found in model")
+  stopif(!length(gamma_z),  "coefficient for z not found in model")
+  stopif(!length(sd_z),    "variance of z not found in model")
+  stopif(!length(gamma_xz), "coefficient for xz not found in model")
+
+  # offset by mean
+  mean_x <- getMean(x, parTable = parTable)
+  mean_z <- getMean(z, parTable = parTable)
+  vals_x <- sd_x * seq(min_x, max_x, by = detail) + mean_x
+  vals_z <- sd_z * seq(min_z, max_z, by = detail) + mean_z
+
+  proj_y <- outer(vals_x, vals_z, \(x, z) gamma_x * x + gamma_z + z + z * x * gamma_xz)
+
+  plotly::plot_ly(z = ~proj_y, x = ~vals_x, y = ~vals_z, type = "surface",
+                  colorbar = list(title = y)) |>
+    plotly::layout(title = sprintf("Surface Plot of Interaction Effect between %s and %s, on %s", x, z, y),
+                   scene = list(xaxis = list(title = x),
+                                zaxis = list(title = y),
+                                yaxis = list(title = z)))
 }
 
 

@@ -2,7 +2,7 @@ Package: modsem
 Type: Package
 Title: Latent Interaction (and Moderation) Analysis in Structural
         Equation Models (SEM)
-Version: 1.0.5
+Version: 1.0.6
 Authors@R: 
     c(person(given = "Kjell", family = "Solem Slupphaug", 
              email = "slupphaugkjell@gmail.com", role = c("aut", "cre"),
@@ -26,7 +26,7 @@ Description:
       The quasi-maximum likelihood (QML) approach (Klein & Muthén, 2007) (temporarily unavailable)
     The constrained- unconstrained, residual- and double centering- approaches
     are estimated via 'lavaan' (Rosseel, 2012), whilst the LMS- and QML- approaches
-    are estimated via by modsem it self. Alternatively model can be
+    are estimated via 'modsem' it self. Alternatively model can be
     estimated via 'Mplus' (Muthén & Muthén, 1998-2017).
     References:
     Algina, J., & Moulder, B. C. (2001). 
@@ -48,7 +48,7 @@ Description:
       <doi:10.1037/1082-989X.9.3.275>.
       "Structural equation models of latent interactions: evaluation of alternative estimation strategies and indicator construction."
     Muthén, L.K. and Muthén, B.O. (1998-2017).  
-      "'Mplus' User’s Guide.  Eighth Edition."
+      "'Mplus' User’s Guide. Eighth Edition."
       <https://www.statmodel.com/>.
     Rosseel Y (2012). 
       <doi:10.18637/jss.v048.i02>.
@@ -59,16 +59,17 @@ LazyData: true
 RoxygenNote: 7.3.2
 LinkingTo: Rcpp, RcppArmadillo
 Imports: Rcpp, purrr, stringr, lavaan, rlang, MplusAutomation, nlme,
-        dplyr, mvnfast, stats, fastGHQuad, mvtnorm, ggplot2, parallel
+        dplyr, mvnfast, stats, fastGHQuad, mvtnorm, ggplot2, parallel,
+        plotly
 Depends: R (>= 3.5.0)
 URL: https://modsem.org
 Suggests: knitr, rmarkdown
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2024-12-16 13:38:17 UTC; kss
+Packaged: 2025-01-20 14:19:22 UTC; kss
 Author: Kjell Solem Slupphaug [aut, cre]
     (<https://orcid.org/0009-0005-8324-2834>),
   Mehmet Mehmetoglu [ctb] (<https://orcid.org/0000-0002-6092-8551>),
   Matthias Mittner [ctb] (<https://orcid.org/0000-0003-0205-7353>)
 Repository: CRAN
-Date/Publication: 2024-12-16 14:10:01 UTC
+Date/Publication: 2025-01-20 14:40:02 UTC
