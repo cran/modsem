@@ -8,8 +8,10 @@
 `modsem` is an `R`-package for estimating interaction (i.e., moderation) effects between latent variables
 in structural equation models (SEMs). See https://www.modsem.org for a tutorial.
 
-# To Install 
-```
+# Installation
+`modsem` is available on `CRAN` and `GitHub`, and can be installed as follows:
+
+```R
 # From CRAN 
 install.packages("modsem")
 
@@ -17,6 +19,11 @@ install.packages("modsem")
 install.packages("devtools")
 devtools::install_github("kss2k/modsem", build_vignettes = TRUE)
 ```
+
+**Note**: The package needs to be compiled from source on `macOS` and `Linux`.
+If you have issues installing the package on `macOS`, you might need to install the `gfortran` compiler.
+A `C++` compiler is also required, but should be installed by default on most systems.
+See the [R for macOs](https://cran.r-project.org/bin/macosx/tools/) page for more information.
 
 # Methods/Approaches
 
@@ -45,7 +52,7 @@ Product Indicator (PI) and Distribution Analytic (DA) approaches.
 # Examples 
 
 ## Elementary Interaction Model (Kenny & Judd, 1984; Jaccard & Wan, 1995)
-```
+```R
 library(modsem)
 m1 <- '
   # Outer Model
@@ -75,7 +82,7 @@ summary(est1_lms)
 ```
 
 ## Theory Of Planned Behavior
-```
+```R
 tpb <- "
 # Outer Model (Based on Hagger et al., 2007)
   ATT =~ att1 + att2 + att3 + att4 + att5
@@ -108,13 +115,13 @@ est_tpb_qml <- modsem(tpb, data = TPB, method = "qml")
 summary(est_tpb_qml, standardized = TRUE)
 ```
 ## Interactions between two observed variables
-```
+```R
 est2 <- modsem('y1 ~ x1 + z1 + x1:z1', data = oneInt, method = "pind")
 summary(est2)
 ```
 
 ## Interaction between an obsereved and a latent variable 
-```
+```R
 m3 <- '
   # Outer Model
   X =~ x1 + x2 +x3
