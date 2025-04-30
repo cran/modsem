@@ -76,14 +76,32 @@ estepLms <- function(model, theta, data, ...) {
   # probability of observing the data given the nodes, and what is the probability
   # of observing the given nodes (i.e., w). Sum the row probabilities = 1
   P <- matrix(0, nrow = nrow(data), ncol = length(w))
-  sapply(seq_along(w), FUN = function(i) {
-    P[, i] <<- w[[i]] * dmvn(data,
-      mean = muLmsCpp(model = modFilled, z = V[i, ]),
-      sigma = sigmaLmsCpp(model = modFilled, z = V[i, ]),
-      log = FALSE
-    )
-  })
-  P / rowSums(P)
+
+  for (i in seq_along(w)) {
+    P[, i] <- dmvn(data, mean = muLmsCpp(model = modFilled, z = V[i, ]),
+                   sigma = sigmaLmsCpp(model = modFilled, z = V[i, ]),
+                   log = FALSE) * w[[i]]
+  }
+
+  P <- P / rowSums(P)
+  
+  wMeans <- vector("list", length = length(w))
+  wCovs  <- vector("list", length = length(w))
+  tGamma <- vector("list", length = length(w))
+
+  for (i in seq_along(w)) {
+    p    <- P[, i]
+    wm   <- colSums(data * p) / sum(p)
+    X    <- data - matrix(wm, nrow=nrow(data), ncol=ncol(data), byrow=TRUE)
+    wcov <- t(X) %*% (X * p)
+
+    P[, i]      <- p
+    wMeans[[i]] <- wm
+    wCovs[[i]]  <- wcov
+    tGamma[[i]] <- sum(p)
+  }
+
+  list(P = P, mean = wMeans, cov = wCovs, tgamma = tGamma)
 }
 
 
@@ -91,17 +109,22 @@ logLikLms <- function(theta, model, data, P, sign = -1, ...) {
   modFilled <- fillModel(model = model, theta = theta, method = "lms")
   k <- model$quad$k
   V <- modFilled$quad$n
+  n <- nrow(data)
+  d <- ncol(data)
   # summed log probability of observing the data given the parameters
   # weighted my the posterior probability calculated in the E-step
   r <- vapply(seq_len(nrow(V)), FUN.VALUE = numeric(1L), FUN = function(i) {
-    lls <- sum(dmvn(data,
-      mean = muLmsCpp(model = modFilled, z = V[i, ]),
-      sigma = sigmaLmsCpp(model = modFilled, z = V[i, ]),
-      log = TRUE
-    ) * P[, i])
-    lls
-  }) |> sum()
-  sign * r
+    if (P$tgamma[[i]] < .Machine$double.xmin) return(0)
+
+    totalDmvnWeightedCpp(mu=muLmsCpp(model=modFilled, z=V[i, ]),
+                         sigma=sigmaLmsCpp(model=modFilled, z=V[i, ]), 
+                         nu=P$mean[[i]], S=P$cov[[i]], tgamma=P$tgamma[[i]], 
+                         n = n, d = d)
+
+  })
+
+  
+  sign * sum(r)
 }
 
 
@@ -119,15 +142,15 @@ logLikLms_i <- function(theta, model, data, P, sign = -1, ...) {
   modFilled <- fillModel(model = model, theta = theta, method = "lms")
   k <- model$quad$k
   V <- modFilled$quad$n
+  P <- P$P
   # summed log probability of observing the data given the parameters
   # weighted my the posterior probability calculated in the E-step
   r <- lapplyMatrix(seq_len(nrow(V)), FUN = function(i) {
-    lls <- dmvn(data,
+    dmvn(data,
       mean = muLmsCpp(model = modFilled, z = V[i, ]),
       sigma = sigmaLmsCpp(model = modFilled, z = V[i, ]),
       log = TRUE
     ) * P[, i]
-    lls
   }, FUN.VALUE = numeric(nrow(data)))
 
   sign * apply(r, MARGIN = 1, FUN = sum)

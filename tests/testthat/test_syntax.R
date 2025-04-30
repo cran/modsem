@@ -108,3 +108,21 @@ for (est in estimates) {
   modsemEst[is.na(modsemEst)] <- -999
   testthat::expect_equal(lavaanEst, modsemEst)
 }
+
+
+testthat::expect_error(modsemify('X =~ x1 x2 + x3'), regexp = "Unexpected token.*")
+testthat::expect_error(modsemify('X =~ 1.0 1.0'),
+                       regexp = "Unexpected token.*")
+testthat::expect_error(modsemify('X =~ x1 + x2 + +x3'),
+                       regexp = "Expected token before .*")
+testthat::expect_error(modsemify('X =~ x1 + x2 +'),
+                       regexp = "Expected token after .*")
+testthat::expect_error(modsemify('X =~ x1 + x2 =~ x3'),
+                       regexp = "Unexpected operator .*")
+
+m <- '
+X =~ x1 + x2 +
++x3
+'
+rebuiltLine <- paste0(getLines(m)[[2]], collapse="") # check that `+\n+` -> `+ +`, not `++`
+testthat::expect_true(!any(grepl("\\+\\+", rebuiltLine)))

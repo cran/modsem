@@ -66,8 +66,15 @@ fit_modsem_da <- function(model, chisq = TRUE) {
     chisqValue <- NULL
     chisqP     <- NULL
     df         <- NULL
-    RMSEA      <- NULL
     muHat      <- NULL
+    RMSEA      <- list(
+      RMSEA          = NULL, 
+      RMSEA.lower    = NULL, 
+      RMSEA.upper    = NULL, 
+      RMSEA.ci.level = NULL,
+      RMSEA.pvalue   = NULL, 
+      RMSEA.close.h0 = NULL
+    )
   }
 
   AIC  <- calcAIC(logLik, k = k)
@@ -75,24 +82,67 @@ fit_modsem_da <- function(model, chisq = TRUE) {
   BIC  <- calcBIC(logLik, k = k, N = N)
   aBIC <- calcAdjBIC(logLik, k = k, N = N)
 
-  list(sigma.observed = O, sigma.expected = E,
-       mu.observed = mu, mu.expected = muHat,
-       chisq.value = chisqValue, chisq.pvalue = chisqP, chisq.df = df,
-       AIC = AIC, AICc = AICc, BIC = BIC, aBIC = aBIC, RMSEA = RMSEA)
+  list(
+    sigma.observed = O, 
+    sigma.expected = E,
+    mu.observed    = mu,
+    mu.expected    = muHat,
+    
+    chisq.value  = chisqValue, 
+    chisq.pvalue = chisqP,
+    chisq.df     = df,
+
+    AIC  = AIC,
+    AICc = AICc,
+    BIC  = BIC,
+    aBIC = aBIC, 
+
+    RMSEA          = RMSEA$rmsea,
+    RMSEA.lower    = RMSEA$lower,
+    RMSEA.upper    = RMSEA$upper,
+    RMSEA.ci.level = RMSEA$ci.level,
+    RMSEA.pvalue   = RMSEA$pvalue, 
+    RMSEA.close.h0 = RMSEA$close.h0
+  )
 }
 
 
 calcChiSqr <- function(O, E, N, p, mu, muHat) {
   diff_mu <- mu - muHat
   Einv    <- solve(E)
-  (N - 1) * (t(diff_mu) %*% Einv %*% diff_mu +
-             tr(O %*% Einv) - log(det(O %*% Einv)) - p)
+  as.vector(
+    (N - 1) * (t(diff_mu) %*% Einv %*% diff_mu +
+               tr(O %*% Einv) - log(det(O %*% Einv)) - p)
+  )
 }
 
 
-calcRMSEA <- function(chi.sq, df, N) {
-  ncp <- max(0, chi.sq - df)
-  sqrt(ncp / ((N - df) * (N - df)))
+tryCatchUniroot <- function(f, lower, upper, errorVal = NA) {
+  tryCatch(
+    stats::uniroot(f, lower = lower, upper = upper)$root,
+    error = function(e) errorVal
+  )
+}
+
+
+calcRMSEA <- function(chi.sq, df, N, ci.level = 0.90, close.h0=0.05) {
+  alpha  <- 1 - ci.level
+
+  fLower <- \(lambda) stats::pchisq(chi.sq, df, ncp=lambda) - (1 - alpha/2)
+  fUpper <- \(lambda) stats::pchisq(chi.sq, df, ncp=lambda) - (    alpha/2)
+  fRMSEA <- \(lambda) sqrt(max(lambda, 0) / (df * (N - 1)))
+
+  point <- chi.sq - df
+  lower <- tryCatchUniroot(fLower, lower=0, upper=chi.sq, errorVal=0)
+  upper <- tryCatchUniroot(fUpper, lower=0, upper=10*chi.sq, errorVal=df * (N - 1)) # i.e., RMSEA.upper = 1
+
+  rmseaLower  <- fRMSEA(lower)
+  rmseaUpper  <- fRMSEA(upper)
+  rmseaHat    <- fRMSEA(point)
+  rmseaPvalue <- 1 - stats::pchisq(chi.sq, df=df, ncp=df*(N-1)*close.h0^2)
+
+  list(rmsea = rmseaHat, lower = rmseaLower, upper = rmseaUpper, 
+       ci.level = ci.level, pvalue = rmseaPvalue, close.h0 = close.h0)
 }
 
 

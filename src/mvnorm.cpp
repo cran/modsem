@@ -1,6 +1,7 @@
 // [[Rcpp::depends("RcppArmadillo")]]
 #include <RcppArmadillo.h>
 #include "mvnorm.h"
+#include <cfloat>
 
 
 static double const log2pi = std::log(2.0 * M_PI);
@@ -62,4 +63,39 @@ arma::vec dmvnrm_arma_mc(arma::mat const &x,
     if (logd)
       return out;
     return exp(out);
+}
+
+
+// [[Rcpp::export]]
+double totalDmvnWeightedCpp(const arma::vec& mu,
+                            const arma::mat& sigma,
+                            const arma::vec& nu,
+                            const arma::mat& S,
+                            double tgamma,
+                            int n,
+                            int d) {
+  if (!sigma.is_finite()) return NA_REAL;
+
+  if (arma::any(arma::diagvec(sigma) <= 0)) return NA_REAL;
+
+  arma::mat L;
+  if (!arma::chol(L, sigma, "lower")) return NA_REAL;
+
+  double log_det_sigma = 2.0 * arma::sum(log(L.diag()));
+  arma::mat sigma_inv = arma::inv_sympd(sigma);
+  if (!sigma_inv.is_finite()) return NA_REAL;
+
+  arma::vec diff = nu - mu;
+  double mahalanobis_term = tgamma * arma::as_scalar(diff.t() * sigma_inv * diff);
+
+  double trace_term = arma::accu(sigma_inv % S);
+
+  double log_likelihood = -0.5 * (
+    tgamma * d * std::log(2.0 * M_PI) +
+    tgamma * log_det_sigma +
+    trace_term +
+    mahalanobis_term
+  );
+
+  return log_likelihood;
 }
