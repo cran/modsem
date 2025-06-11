@@ -20,7 +20,15 @@
 #' where data is non-normal, it might be better to use the \code{qml} approach instead. For large
 #' numbers of nodes, you might want to change the \code{'quad.range'} argument.
 #'
-#' @param convergence convergence criterion. Lower values give better estimates but slower computation.
+#' @param convergence.abs Absolute convergence criterion. 
+#'   Lower values give better estimates but slower computation. Not relevant when
+#'   using the QML approach. For the LMS approach the EM-algorithm stops whenever
+#'   the relative or absolute convergence criterion is reached.
+#'
+#' @param convergence.rel Relative convergence criterion. 
+#'   Lower values give better estimates but slower computation.
+#'   For the LMS approach the EM-algorithm stops whenever
+#'   the relative or absolute convergence criterion is reached.
 #'
 #' @param optimizer optimizer to use, can be either \code{"nlminb"} or \code{"L-BFGS-B"}. For LMS, \code{"nlminb"} is recommended.
 #' For QML, \code{"L-BFGS-B"} may be faster if there is a large number of iterations, but slower if there are few iterations.
@@ -31,7 +39,7 @@
 #' \code{standardize} if \code{standardize} is set to \code{TRUE}.
 #'
 #' \strong{NOTE}: It is recommended that you estimate the model normally and then standardize the output using
-#' \code{\link{standardized_estimates}}.
+#' \code{\link{standardize_model}} \code{\link{standardized_estimates}}, \code{summary(<modsem_da-object>, standardize=TRUE)}
 #'
 #' @param standardize.out should output be standardized (note will alter the relationships of
 #' parameter constraints since parameters are scaled unevenly, even if they
@@ -82,22 +90,34 @@
 #'
 #' @param max.step maximum steps for the M-step in the EM algorithm (LMS).
 #'
-#' @param fix.estep if \code{TRUE}, the E-step will be fixed, and the prior probabilities will be set to the best prior probabilities,
-#' if the log-likelihood decreases for more than 30 iterations.
-#'
 #' @param start starting parameters.
 #'
 #' @param epsilon finite difference for numerical derivatives.
 #'
-#' @param quad.range range in z-scores to perform numerical integration in LMS using
-#' Gaussian-Hermite Quadratures. By default \code{Inf}, such that \code{f(t)} is integrated from -Inf to Inf,
+#' @param quad.range range in z-scores to perform numerical integration in LMS using, 
+#' when using quasi-adaptive Gaussian-Hermite Quadratures. By default \code{Inf}, such that \code{f(t)} is integrated from -Inf to Inf,
 #' but this will likely be inefficient and pointless at a large number of nodes. Nodes outside
 #' \code{+/- quad.range} will be ignored.
+#' 
+#' @param adaptive.quad should a quasi adaptive quadrature be used? If \code{TRUE}, the quadrature nodes will be adapted to the data.
+#' If \code{FALSE}, the quadrature nodes will be fixed. Default is \code{FALSE}. The adaptive quadrature does not fit an adaptive 
+#' quadrature to each participant, but instead tries to place more nodes where posterior distribution is highest. Compared with a 
+#' fixed Gauss Hermite quadrature this usually means that less nodes are placed at the tails of the distribution.
+#'
+#' @param adaptive.frequency How often should the quasi-adaptive quadrature be calculated? Defaults to 3, meaning 
+#' that it is recalculated every third EM-iteration.
 #'
 #' @param n.threads number of cores to use for parallel processing. If \code{NULL}, it will use <= 2 threads.
 #' If an integer is specified, it will use that number of threads (e.g., \code{n.threads = 4} will use 4 threads).
 #' If \code{"default"}, it will use the default number of threads (2).
 #' If \code{"max"}, it will use all available threads, \code{"min"} will use 1 thread.
+#'
+#' @param algorithm algorithm to use for the EM algorithm. Can be either \code{"EM"} or \code{"EMA"}. 
+#' \code{"EM"} is the standard EM algorithm. \code{"EMA"} is an
+#' accelerated EM procedure that uses Quasi-Newton and Fisher Scoring
+#' optimization steps when needed. Default is \code{"EM"}.
+#'
+#' @param em.control a list of control parameters for the EM algorithm. See \code{\link{default_settings_da}} for defaults.
 #'
 #' @param ... additional arguments to be passed to the estimation function.
 #'
@@ -166,7 +186,8 @@ modsem_da <- function(model.syntax = NULL,
                       verbose = NULL,
                       optimize = NULL,
                       nodes = NULL,
-                      convergence = NULL,
+                      convergence.abs = NULL,
+                      convergence.rel = NULL,
                       optimizer = NULL,
                       center.data = NULL,
                       standardize.data = NULL,
@@ -184,11 +205,14 @@ modsem_da <- function(model.syntax = NULL,
                       R.max = NULL,
                       max.iter = NULL,
                       max.step = NULL,
-                      fix.estep = NULL,
                       start = NULL,
                       epsilon = NULL,
                       quad.range = NULL,
+                      adaptive.quad = NULL,
+                      adaptive.frequency = NULL,
                       n.threads = NULL,
+                      algorithm = NULL,
+                      em.control = NULL,
                       ...) {
   if (is.null(model.syntax)) {
     stop2("No model.syntax provided")
@@ -204,6 +228,11 @@ modsem_da <- function(model.syntax = NULL,
     data <- as.data.frame(data)
   }
 
+  if ("convergence" %in% names(list(...))) {
+    convergence.rel <- list(...)$convergence
+    warning2("Argument 'convergence' is deprecated, use 'convergence.rel' instead.")
+  }
+
   args <-
     getMethodSettingsDA(method,
       args =
@@ -211,7 +240,8 @@ modsem_da <- function(model.syntax = NULL,
           verbose = verbose,
           optimize = optimize,
           nodes = nodes,
-          convergence = convergence,
+          convergence.abs = convergence.abs,
+          convergence.rel = convergence.rel,
           optimizer = optimizer,
           center.data = center.data,
           standardize.data = standardize.data,
@@ -228,10 +258,13 @@ modsem_da <- function(model.syntax = NULL,
           R.max = R.max,
           max.iter = max.iter,
           max.step = max.step,
-          fix.estep = fix.estep,
           epsilon = epsilon,
           quad.range = quad.range,
-          n.threads = n.threads
+          adaptive.quad = adaptive.quad,
+          adaptive.frequency = adaptive.frequency,
+          n.threads = n.threads,
+          algorithm = algorithm,
+          em.control = em.control
         )
     )
 
@@ -251,7 +284,9 @@ modsem_da <- function(model.syntax = NULL,
     cov.syntax = cov.syntax,
     mean.observed = args$mean.observed,
     double = args$double,
-    quad.range = args$quad.range
+    quad.range = args$quad.range,
+    adaptive.quad = args$adaptive.quad,
+    adaptive.frequency = args$adaptive.frequency
   )
 
   if (args$optimize) {
@@ -277,7 +312,7 @@ modsem_da <- function(model.syntax = NULL,
   est <- tryCatch(switch(method,
     "qml" = estQml(model,
       verbose = args$verbose,
-      convergence = args$convergence,
+      convergence = args$convergence.rel,
       calc.se = args$calc.se,
       FIM = args$FIM,
       EFIM.S = args$EFIM.S,
@@ -292,7 +327,8 @@ modsem_da <- function(model.syntax = NULL,
     ),
     "lms" = emLms(model,
       verbose = args$verbose,
-      convergence = args$convergence,
+      convergence.abs = args$convergence.abs,
+      convergence.rel = args$convergence.rel,
       calc.se = args$calc.se,
       FIM = args$FIM,
       EFIM.S = args$EFIM.S,
@@ -303,8 +339,11 @@ modsem_da <- function(model.syntax = NULL,
       max.step = args$max.step,
       epsilon = args$epsilon,
       optimizer = args$optimizer,
-      fix.estep = args$fix.estep,
       R.max = args$R.max,
+      em.control = args$em.control,
+      algorithm = args$algorithm,
+      adaptive.quad = args$adaptive.quad,
+      quad.range = args$quad.range,
       ...
   )),
   error = function(e) {
@@ -317,14 +356,11 @@ modsem_da <- function(model.syntax = NULL,
   
 
   class(est) <- c("modsem_da", "modsem")
-  if (args$standardize.out) {
-    est$type.estimates <- "standardized"
-    est$parTable <- standardized_estimates(est)
-  }
 
   # clean up
   resetThreads()
 
   est$args <- args
-  est
+    
+  if (args$standardize.out) standardize_model(est) else est
 }

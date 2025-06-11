@@ -1,8 +1,9 @@
 # Functions for tracing paths in SEMs, used both for calculating (co-)variances,
 # as well as calculating formulas for (co-)variances.
-prepParTable <- function(parTable, addCovPt = TRUE, maxlen = 100) {
+prepParTable <- function(parTable, addCovPt = TRUE, maxlen = 100, paramCol = "mod") {
   # Remove any potential ':' from the model
-  parTable <- lapplyDf(parTable, stringr::str_remove_all, pattern = ":")
+  parTable <- lapplyDf(parTable, strRemovIfString, pattern = ":")
+  parTable <- parTable[c("lhs", "op", "rhs", paramCol)]
 
   # get relevant variables
   structuralVars <- parTable[parTable$op == "~", c("lhs", "rhs")] |>
@@ -15,13 +16,15 @@ prepParTable <- function(parTable, addCovPt = TRUE, maxlen = 100) {
   if (any(parTable$op == "=~")) parTable <- redefineMeasurementModel(parTable)
 
   # add missing labels
-  labels <- apply(parTable[parTable$mod == "", c("lhs", "op", "rhs")],
-                  MARGIN = 1, FUN = stringr::str_c, collapse = "")
-  parTable[parTable$mod == "", "mod"] <- labels
+  if (paramCol %in% c("mod", "label")) {
+    labels <- apply(parTable[parTable[[paramCol]] == "", c("lhs", "op", "rhs")],
+                    MARGIN = 1, FUN = stringr::str_c, collapse = "")
+    parTable[parTable[[paramCol]] == "", paramCol] <- labels
+  }
 
   if (addCovPt) {
     reversedCovPaths <- parTable[parTable$lhs != parTable$rhs & parTable$op == "~~", ]
-    colnames(reversedCovPaths) <- c("rhs", "op", "lhs", "mod")
+    colnames(reversedCovPaths) <- c("rhs", "op", "lhs", paramCol)
     parTable <- rbind(parTable, reversedCovPaths)
   }
 
@@ -29,8 +32,9 @@ prepParTable <- function(parTable, addCovPt = TRUE, maxlen = 100) {
 }
 
 
-tracePathsRecurively = function(x, y, pt, maxlen, currentPath = c(),
-                                covCount = 0, from = "lhs", depth = 1) {
+tracePathsRecursively = function(x, y, pt, maxlen, currentPath = c(),
+                                 covCount = 0, from = "lhs", depth = 1, 
+                                 paramCol = "mod") {
   if (depth > maxlen) {
     warning2("Encountered a non-recursive model (infinite loop) when tracing paths")
     return(NULL)
@@ -55,13 +59,14 @@ tracePathsRecurively = function(x, y, pt, maxlen, currentPath = c(),
       nextFrom <- ifelse(from == "lhs", yes = "rhs", no = "lhs")
     }
 
-    newPaths <- tracePathsRecurively(x = nextVar, y = y, pt = pt, maxlen = maxlen,
-                                     currentPath = c(currentPath, branch$mod),
-                                     covCount = nextCovCount,
-                                     from = nextFrom, depth = depth + 1)
+    newPaths <- tracePathsRecursively(x = nextVar, y = y, pt = pt, maxlen = maxlen,
+                                      currentPath = c(currentPath, branch[[paramCol]]),
+                                      covCount = nextCovCount, from = nextFrom, 
+                                      depth = depth + 1, paramCol = paramCol)
     paths <- c(paths, newPaths)
 
   }
+
   paths
 }
 
@@ -82,9 +87,9 @@ cleanTracedPaths <- function(paths) {
 }
 
 
-generateSyntax <- function(x, y, pt, maxlen = 100, parenthesis = TRUE, ...) {
-  pt    <- prepParTable(pt, ...)
-  paths <- tracePathsRecurively(x = x, y = y, pt = pt, maxlen = maxlen)
+generateSyntax <- function(x, y, pt, maxlen = 100, parenthesis = TRUE, paramCol = "mod",...) {
+  pt    <- prepParTable(pt, paramCol = paramCol, ...)
+  paths <- tracePathsRecursively(x = x, y = y, pt = pt, maxlen = maxlen, paramCol = paramCol)
 
   if (!length(paths)) return(NA)
   cleaned <- cleanTracedPaths(paths)
@@ -93,7 +98,7 @@ generateSyntax <- function(x, y, pt, maxlen = 100, parenthesis = TRUE, ...) {
 }
 
 
-addMissingCovariances <- function(pt) {
+addMissingCovariances <- function(pt, paramCol = "mod") {
   pt <- pt[!pt$op %in% c("=~", "~1"), ]
 
   xis  <- getXis(pt, checkAny = FALSE, isLV = FALSE)
@@ -114,7 +119,7 @@ addMissingCovariances <- function(pt) {
   covs <- rbind(psi, phi)
   for (i in seq_len(nrow(covs))) {
     row <- covs[i, , drop = FALSE]
-    if (isRowInParTable(row = row, pt = pt, ignore = "mod")) next
+    if (isRowInParTable(row = row, pt = pt, ignore = paramCol)) next
     pt <- rbind(pt, row)
   }
 
@@ -131,6 +136,7 @@ addMissingCovariances <- function(pt) {
 #' @param missing.cov If \code{TRUE}, covariances missing from the model syntax will be added
 #' @param measurement.model If \code{TRUE}, the function will use the measurement model
 #' @param maxlen Maximum length of a path before aborting
+#' @param paramCol The column name in \code{pt} that contains the parameter labels
 #' @param ... Additional arguments passed to \link{trace_path}
 #'
 #' @return A string with the estimated path (simplified if possible)
@@ -155,8 +161,15 @@ addMissingCovariances <- function(pt) {
 #' pt <- modsemify(m1)
 #' trace_path(pt, x = "Y", y = "Y", missing.cov = TRUE) # variance of Y
 trace_path <- function(pt, x, y, parenthesis = TRUE, missing.cov = FALSE,
-                       measurement.model = FALSE, maxlen = 100, ...) {
+                       measurement.model = FALSE, maxlen = 100, 
+                       paramCol = "mod", ...) {
   if (measurement.model) pt <- redefineMeasurementModel(pt)
-  if (missing.cov) pt <- addMissingCovariances(pt)
-  generateSyntax(x = x, y = y, pt = pt, maxlen = maxlen, parenthesis = parenthesis, ...)
+  if (missing.cov) pt <- addMissingCovariances(pt, paramCol = paramCol)
+  generateSyntax(x = x, y = y, pt = pt, maxlen = maxlen, 
+                 parenthesis = parenthesis, paramCol = paramCol, ...)
+}
+
+
+getCovEqExpr <- function(x, y, parTable, paramCol = "label", ...) {
+  parse(text=trace_path(x = x, y = y, pt = parTable, paramCol = paramCol, ...))
 }

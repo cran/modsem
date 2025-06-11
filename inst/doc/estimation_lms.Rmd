@@ -1,0 +1,79 @@
+---
+title: "estimation alternatives using the LMS approach"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{estimation alternatives using the LMS approach}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+EVAL_DEFAULT <- FALSE
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = EVAL_DEFAULT
+)
+```
+
+```{r setup}
+library(modsem)
+```
+
+# Accelerated EM and Adaptive Quadrature
+By default (as of `v1.0.9`) the LMS approach uses an accelerated EM procedure (`"EMA"`) that uses Quasi-Newton and Fisher
+Scoring optimization steps when needed. If desireable, this can be switched to the standard Expectation-Maximization (EM)
+algorithm, by setting `algorithm = "EM"`.
+
+By default the LMS approach also uses a fixed Gauss-Hermite quadrature, to estimate a numerical 
+approximation of the log-likelihood. Instead of a fixed quadrature, it is possible to use a
+quasi-adaptive quadrature instead. Due to performance reasons, the adaptive quadrature does not fit an
+individual quadrature to each participant, but instead one for the entire sample (at each EM iteration), 
+based on the whole sample densities of the likelihood function. It essentially works by 
+removing irrelevant nodes which don't contribute to the integral, and increasing the number of nodes 
+which actually contribute to the integral. This usually means that more nodes are placed towards the
+center of the distribution, compared to a standard fixed Gauss-Hermite quadrature.
+Using the EMA and adaptive quadrature might yield estimates that are closer to results from `Mplus`.
+
+If the model struggles to converge, you can try changing the EM procedure by setting `algorithm = "EMA"`,
+or `algorithm = "EM"`, and `adaptive.quad = TRUE` in the `modsem()` function. Additionally it is possible to tweak these parameters:
+
+- `max.iter`: Maximum number of iterations for the EM algorithm (default is 500).
+- `max.step`: Maximum number of steps used in the Maximization step of the EM algorithm (default is 1).
+- `convergence.rel`: Relative convergence criterion for the EM algorithm.
+- `convergence.abs`: Absolute convergence criterion for the EM algorithm.
+- `nodes`: Number of nodes for numerical integration (default is 24). Increasing this number can improve the accuracy of the estimates, especially for complex models.
+- `quad.range`: Integration range for quadrature. Smaller ranges means that the integral is more focused. Applies to only when using a quasi-adaptive quadrature.
+- `adaptive.frequency`: How often should the quasi-adaptive quadrature be calculated? Defaults to every third EM iteration.
+
+Here we can see an example using the `TPB_UK` dataaset, which is more troublesome to
+estimate than the simulated `TPB` dataset.
+
+```{r}
+tpb_uk <- "
+# Outer Model (Based on Hagger et al., 2007)
+  ATT =~ att3 + att2 + att1 + att4
+  SN =~ sn4 + sn2 + sn3 + sn1
+  PBC =~ pbc2 + pbc1 + pbc3 + pbc4
+  INT =~ int2 + int1 + int3 + int4
+  BEH =~ beh3 + beh2 + beh1 + beh4
+
+# Inner Model (Based on Steinmetz et al., 2011)
+  INT ~ ATT + SN + PBC
+  BEH ~ INT + PBC
+  BEH ~ INT:PBC
+"
+
+fit <- modsem(tpb_uk, 
+              data = TPB_UK, 
+              method = "lms", 
+              nodes = 32, # Number of nodes for numerical integration
+              adaptive.quad = TRUE, # Use quasi-adaptive quadrature
+              adaptive.frequency = 3, # Update the quasi-adaptive quadrature every third EM-iteration
+              algorithm ="EMA", # Use accelerated EM algorithm (Default)
+              convergence.abs = 1e-4, # Relative convergence criterion
+              convergence.rel = 1e-10, # Relative convergence criterion
+              max.iter = 500, # Maximum number of iterations
+              max.step = 1) # Maximum number of steps in the maximization step
+summary(fit)
+```

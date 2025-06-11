@@ -11,7 +11,8 @@ modsem_da(
   verbose = NULL,
   optimize = NULL,
   nodes = NULL,
-  convergence = NULL,
+  convergence.abs = NULL,
+  convergence.rel = NULL,
   optimizer = NULL,
   center.data = NULL,
   standardize.data = NULL,
@@ -29,11 +30,14 @@ modsem_da(
   R.max = NULL,
   max.iter = NULL,
   max.step = NULL,
-  fix.estep = NULL,
   start = NULL,
   epsilon = NULL,
   quad.range = NULL,
+  adaptive.quad = NULL,
+  adaptive.frequency = NULL,
   n.threads = NULL,
+  algorithm = NULL,
+  em.control = NULL,
   ...
 )
 }
@@ -58,7 +62,15 @@ the number of nodes should be at least 32, but practically (e.g., ordinal/skewed
 where data is non-normal, it might be better to use the \code{qml} approach instead. For large
 numbers of nodes, you might want to change the \code{'quad.range'} argument.}
 
-\item{convergence}{convergence criterion. Lower values give better estimates but slower computation.}
+\item{convergence.abs}{Absolute convergence criterion. 
+Lower values give better estimates but slower computation. Not relevant when
+using the QML approach. For the LMS approach the EM-algorithm stops whenever
+the relative or absolute convergence criterion is reached.}
+
+\item{convergence.rel}{Relative convergence criterion. 
+Lower values give better estimates but slower computation.
+For the LMS approach the EM-algorithm stops whenever
+the relative or absolute convergence criterion is reached.}
 
 \item{optimizer}{optimizer to use, can be either \code{"nlminb"} or \code{"L-BFGS-B"}. For LMS, \code{"nlminb"} is recommended.
 For QML, \code{"L-BFGS-B"} may be faster if there is a large number of iterations, but slower if there are few iterations.}
@@ -69,7 +81,7 @@ For QML, \code{"L-BFGS-B"} may be faster if there is a large number of iteration
 \code{standardize} if \code{standardize} is set to \code{TRUE}.
 
 \strong{NOTE}: It is recommended that you estimate the model normally and then standardize the output using
-\code{\link{standardized_estimates}}.}
+\code{\link{standardize_model}} \code{\link{standardized_estimates}}, \code{summary(<modsem_da-object>, standardize=TRUE)}}
 
 \item{standardize.out}{should output be standardized (note will alter the relationships of
 parameter constraints since parameters are scaled unevenly, even if they
@@ -120,22 +132,34 @@ fischer information matrix.}
 
 \item{max.step}{maximum steps for the M-step in the EM algorithm (LMS).}
 
-\item{fix.estep}{if \code{TRUE}, the E-step will be fixed, and the prior probabilities will be set to the best prior probabilities,
-if the log-likelihood decreases for more than 30 iterations.}
-
 \item{start}{starting parameters.}
 
 \item{epsilon}{finite difference for numerical derivatives.}
 
-\item{quad.range}{range in z-scores to perform numerical integration in LMS using
-Gaussian-Hermite Quadratures. By default \code{Inf}, such that \code{f(t)} is integrated from -Inf to Inf,
+\item{quad.range}{range in z-scores to perform numerical integration in LMS using, 
+when using quasi-adaptive Gaussian-Hermite Quadratures. By default \code{Inf}, such that \code{f(t)} is integrated from -Inf to Inf,
 but this will likely be inefficient and pointless at a large number of nodes. Nodes outside
 \code{+/- quad.range} will be ignored.}
+
+\item{adaptive.quad}{should a quasi adaptive quadrature be used? If \code{TRUE}, the quadrature nodes will be adapted to the data.
+If \code{FALSE}, the quadrature nodes will be fixed. Default is \code{FALSE}. The adaptive quadrature does not fit an adaptive 
+quadrature to each participant, but instead tries to place more nodes where posterior distribution is highest. Compared with a 
+fixed Gauss Hermite quadrature this usually means that less nodes are placed at the tails of the distribution.}
+
+\item{adaptive.frequency}{How often should the quasi-adaptive quadrature be calculated? Defaults to 3, meaning 
+that it is recalculated every third EM-iteration.}
 
 \item{n.threads}{number of cores to use for parallel processing. If \code{NULL}, it will use <= 2 threads.
 If an integer is specified, it will use that number of threads (e.g., \code{n.threads = 4} will use 4 threads).
 If \code{"default"}, it will use the default number of threads (2).
 If \code{"max"}, it will use all available threads, \code{"min"} will use 1 thread.}
+
+\item{algorithm}{algorithm to use for the EM algorithm. Can be either \code{"EM"} or \code{"EMA"}. 
+\code{"EM"} is the standard EM algorithm. \code{"EMA"} is an
+accelerated EM procedure that uses Quasi-Newton and Fisher Scoring
+optimization steps when needed. Default is \code{"EM"}.}
+
+\item{em.control}{a list of control parameters for the EM algorithm. See \code{\link{default_settings_da}} for defaults.}
 
 \item{...}{additional arguments to be passed to the estimation function.}
 }

@@ -3,7 +3,8 @@ getMethodSettingsDA <- function(method, args = NULL) {
         lms = list(verbose = interactive(),
                    optimize = TRUE,
                    nodes = 24,
-                   convergence = 1e-4,
+                   convergence.abs = 1e-4,
+                   convergence.rel = 1e-10,
                    optimizer = "nlminb",
                    center.data = FALSE,
                    standardize.data = FALSE,
@@ -12,7 +13,7 @@ getMethodSettingsDA <- function(method, args = NULL) {
                    mean.observed = TRUE,
                    double = FALSE,
                    calc.se = TRUE,
-                   FIM = "expected",
+                   FIM = "observed",
                    OFIM.hessian = TRUE,
                    EFIM.S = 100,
                    EFIM.parametric = TRUE,
@@ -20,14 +21,18 @@ getMethodSettingsDA <- function(method, args = NULL) {
                    R.max = 1e5,
                    max.iter = 500,
                    max.step = 1,
-                   fix.estep = TRUE,
                    epsilon = 1e-4,
                    quad.range = Inf,
-                   n.threads = NULL),
+                   adaptive.quad = FALSE,
+                   adaptive.frequency = 3,
+                   n.threads = NULL,
+                   algorithm = "EMA",
+                   em.control = list()),
         qml = list(verbose = interactive(),
                    optimize = TRUE,
                    nodes = 0,
-                   convergence = 1e-6,
+                   convergence.rel = 1e-6,
+                   convergence.abs = NULL, # not relevant
                    optimizer = "nlminb",
                    center.data = FALSE,
                    standardize = FALSE,
@@ -44,10 +49,15 @@ getMethodSettingsDA <- function(method, args = NULL) {
                    R.max = 1e5,
                    max.iter = 500,
                    max.step = NULL,
-                   fix.estep = NULL,
                    epsilon = 1e-8,
                    quad.range = Inf,
-                   n.threads = NULL)
+                   adaptive.quad = FALSE,
+                   n.threads = NULL,
+                   adaptive.quad = FALSE,
+                   adaptive.frequency = NULL,
+                   em.control = NULL,
+                   algorithm = NULL
+        )
     )
 
     if (is.null(args)) return(settings[method])
@@ -57,9 +67,7 @@ getMethodSettingsDA <- function(method, args = NULL) {
     isMissing <- vapply(args, FUN.VALUE = logical(1L), FUN = is.null)
     missingArgs <- settingNames[isMissing]
 
-    if  (!method %in% names(settings)) {
-        stop2("Unrecognized method")
-    }
+    stopif(!method %in% names(settings), "Unrecognized method")
 
     args.out <- c(settings[[method]][missingArgs], args[!isMissing])
 

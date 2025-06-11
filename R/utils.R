@@ -1,10 +1,10 @@
-warning2 <- function(...) {
-  warning(..., call. = FALSE, immediate. = TRUE)
+warning2 <- function(..., call. = FALSE, immediate. = TRUE) {
+  warning(..., call. = call., immediate. = immediate.)
 }
 
 
-stop2 <- function(...) {
-  stop(..., call. = FALSE)
+stop2 <- function(..., call. = FALSE) {
+  stop(..., call. = call.)
 }
 
 
@@ -19,10 +19,32 @@ warnif <- function(cond, ...) {
 
 
 # utils for all methods
-calcCovParTable <- function(x, y, parTable, measurement.model = FALSE) {
-  parTable$mod <- paste0("(", as.character(parTable$est), ")")
-  parTable <- parTable[c("lhs", "op", "rhs", "mod")]
-  eval(parse(text = trace_path(parTable, x, y, measurement.model = measurement.model)))
+calcCovParTable <- function(x, y, parTable, measurement.model = FALSE, maxlen = 100) {
+  if (measurement.model) {
+    parTable <- redefineMeasurementModel(parTable)
+  }
+  
+  parTable <- prepParTable(parTable[c("lhs", "op", "rhs", "est")], paramCol = "est")
+
+  stopif(length(x) != length(y), "x and y must be the same length")
+
+  covs <- structure(numeric(length(x)), names = paste0(x, "~~", y))
+
+  for (i in seq_along(x)) {
+    paths <- tracePathsRecursively(x = x[i], y = y[i], pt = parTable, 
+                                   paramCol = "est", maxlen = maxlen)
+
+    covs[i] <- sum(vapply(paths, FUN.VALUE = numeric(1L), FUN = prod))
+  }
+
+  covs
+}
+
+
+calcVarParTable <- function(x, parTable, measurement.model = FALSE, maxlen = 100) {
+  var <- calcCovParTable(x = x, y = x, parTable = parTable, 
+                         measurement.model = measurement.model, maxlen = maxlen)
+  structure(var, names = x)
 }
 
 
@@ -363,4 +385,47 @@ getMissingLabels <- function(parTable) {
   labels <- sprintf("%s%s%s", parTable$lhs, parTable$op, parTable$rhs)
   parTable[missing, "label"] <- labels[missing]
   parTable
+}
+
+
+strRemovIfString <- function(x, pattern) {
+  if (is.character(x)) stringr::str_remove_all(x, pattern=pattern) else x
+}
+
+
+getParTableLabels <- function(parTable, labelCol="label") {
+  ifelse(parTable[[labelCol]] == "", 
+         yes = paste0(parTable$lhs, parTable$op, parTable$rhs),
+         no = parTable[[labelCol]])
+}
+
+
+CI_WIDTH <- qnorm(.975)
+
+
+padCharMatrix <- function(X, n=1) {
+  pad <- strrep(" ", n)
+  matrix(paste0(pad, X), nrow = nrow(X), ncol = ncol(X), 
+         dimnames = dimnames(X))
+}
+
+
+timeExpr <- function(x) {
+  start <- Sys.time()
+  out <-x
+  end <- Sys.time()
+  print(end - start)
+  out
+}
+
+
+formatParameters <- function(...) {
+  pad <- "  "
+
+  args <- as.character(substitute(list(...)))[-1]
+  names <- format(args, justify = "left")
+  values <- format(c(...), justify = "right")
+
+  paste0(sprintf("%s%s = %s\n", pad, names, values), 
+         collapse = "")
 }

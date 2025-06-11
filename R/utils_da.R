@@ -1,5 +1,9 @@
-# Utils for lms approach
-# Last updated: 31.07.2024
+OP_REPLACEMENTS <- c("~~" = "___COVARIANCE___",
+                     "=~" = "___MEASUREMENT___",
+                     ":=" = "___CUSTOM___",
+                     "~"  = "___REGRESSION___",
+                     ":"  = "___INTERACTION___")
+OP_REPLACEMENTS_INV <- structure(names(OP_REPLACEMENTS), names = OP_REPLACEMENTS)
 
 
 getFreeParams <- function(model) {
@@ -400,4 +404,66 @@ getEtaRowLabelOmega <- function(label) {
 
 getXiRowLabelOmega <- function(label) {
   stringr::str_split_1(label, "~")[[2]]
+}
+
+
+expandVCOV <- function(vcov, labels) {
+  labels_vcov <- colnames(vcov)
+  labels_vv <- intersect(labels, labels_vcov) 
+  labels_zz <- setdiff(labels, labels_vcov)
+
+  m <- length(labels_vv)
+  k <- length(labels_zz)
+
+  Vvv <- vcov[labels_vv, labels_vv]
+  Vzz <- matrix(0, nrow = k, ncol = k, dimnames = list(labels_zz, labels_zz))
+  Vvz <- matrix(0, nrow = m, ncol = k, dimnames = list(labels_vv, labels_zz))
+
+  V <- rbind(cbind(Vvv, Vvz), cbind(t(Vvz), Vzz))
+  V[labels, labels] # sort
+}
+
+
+getLabelVarXZ <- function(intTerm) {
+  XZ   <- stringr::str_split_fixed(intTerm, ":", 2)
+  X    <- XZ[[1]]
+  Z    <- XZ[[2]]
+
+  labelXZ <- paste0(X, Z, OP_REPLACEMENTS[[":"]], X, Z)
+  paste0(labelXZ, OP_REPLACEMENTS[["~~"]], labelXZ)
+}
+
+
+var_interactions_COEFS <- function(parTable, COEFS) {
+  parTable <- removeInteractionVariances(parTable)
+  intTerms <- unique(parTable[grepl(":", parTable$rhs) &
+                     parTable$op == "~", "rhs"])
+  
+  for (intTerm in intTerms) { # remove interaction variances from COEFS
+    labelVarXZ <- getLabelVarXZ(intTerm)
+    COEFS[[labelVarXZ]] <- NULL
+  }
+
+  for (intTerm in intTerms) {
+    XZ   <- stringr::str_split_fixed(intTerm, ":", 2)
+    X    <- XZ[[1]]
+    Z    <- XZ[[2]]
+
+    labelVarXZ <- getLabelVarXZ(intTerm)
+  
+    # since the interaction term has been standardized there is no need
+    # to worry about the means of X and Z, and hence the covariances between XZ~~X and XZ~~Z
+    eqVarX  <- getCovEqExpr(x=X, y=X, parTable=parTable)
+    eqVarZ  <- getCovEqExpr(x=Z, y=Z, parTable=parTable)
+    eqCovXZ <- getCovEqExpr(x=X, y=Z, parTable=parTable)
+
+    varX <- eval(eqVarX, envir = COEFS)
+    varZ <- eval(eqVarZ, envir = COEFS)
+    covXZ <- eval(eqCovXZ, envir = COEFS)
+
+    varXZ <- varX * varZ + covXZ ^ 2
+    COEFS[[labelVarXZ]] <- varXZ
+  }
+
+  COEFS
 }

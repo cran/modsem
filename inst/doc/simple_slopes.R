@@ -21,7 +21,7 @@ knitr::opts_chunk$set(
 #    Y ~ X + Z + X:Z
 #  "
 #  est1 <- modsem(m1, data = oneInt)
-#  plot_interaction(x = "X", z = "Z", y = "Y", vals_z = c(0, 1), model = est1)
+#  plot_interaction(x = "X", z = "Z", y = "Y", vals_z = c(-1, 1), model = est1)
 
 ## -----------------------------------------------------------------------------
 #  m1 <- "
@@ -36,7 +36,7 @@ knitr::opts_chunk$set(
 #  "
 #  
 #  est1 <- modsem(m1, data = oneInt)
-#  simple_slopes(x = "X", z = "Z", y = "Y", vals_z = c(0, 1), model = est1)
+#  simple_slopes(x = "X", z = "Z", y = "Y", vals_z = c(-1, 1), model = est1)
 
 ## -----------------------------------------------------------------------------
 #  m1 <- "

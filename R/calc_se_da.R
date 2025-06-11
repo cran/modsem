@@ -22,11 +22,11 @@ calcFIM_da <- function(model,
      lms =
        switch(FIM,
           observed = calcOFIM_LMS(model, theta = theta, data = data,
-                                  epsilon = epsilon, hessian = hessian),
+                                  epsilon = epsilon, hessian = hessian, P = P),
           expected = calcEFIM_LMS(model, finalModel = finalModel, theta = theta, 
                                   data = data, epsilon = epsilon, S = EFIM.S, 
                                   parametric = EFIM.parametric, verbose = verbose,
-                                  R.max = R.max),
+                                  R.max = R.max, P = P),
           stop2("FIM must be either expected or observed")),
      qml =
        switch(FIM,
@@ -46,7 +46,7 @@ calcFIM_da <- function(model,
            "'robust.se = TRUE' should not be paired with ",
            "'EFIM.hessian = TRUE' && 'FIM = \"observed\"'")
     H <- calcHessian(model, theta = theta, data = data, method = method,
-                     epsilon = epsilon)
+                     epsilon = epsilon, P = P)
     invH <- solveFIM(H, NA__ = NA__)
 
     vcov <- invH %*% I %*% invH
@@ -82,9 +82,9 @@ fdHESS <- function(pars, ...) {
 
 
 calcHessian <- function(model, theta, data, method = "lms",
-                        epsilon = 1e-8) {
+                        epsilon = 1e-8, P = NULL) {
   if (method == "lms") {
-    P <- estepLms(model, theta = theta, data = data)
+    if (is.null(P)) P <- estepLms(model, theta = theta, data = data)
     # negative hessian (sign = -1)
     H <- fdHESS(pars = theta, fun = logLikLms, model = model,
                 data = data, P = P, sign = -1,
@@ -135,32 +135,42 @@ calcSE_da <- function(calc.se = TRUE, vcov, rawLabels, NA__ = -999) {
 
 
 calcOFIM_LMS <- function(model, theta, data, hessian = FALSE,
-                         epsilon = 1e-6) {
+                         epsilon = 1e-6, P = NULL) {
+  if (is.null(P)) P <- estepLms(model, theta = theta, data = data)
+
   N <- nrow(data)
-  P <- estepLms(model, theta = theta, data = data)
   if (hessian) {
     # negative hessian (sign = -1)
-    I <- fdHESS(pars = theta, fun = logLikLms, model = model,
+    I <- fdHESS(pars = theta, fun = obsLogLikLms, model = model,
                 data = data, P = P, sign = -1,
                 .relStep = .Machine$double.eps^(1/5))
     return(I)
   }
-  J <- gradientLogLikLms_i(theta, model = model, data = data,
-                           P = P, sign = 1, epsilon = epsilon)
+
+  J <- gradientObsLogLikLms_i(theta, model = model, data = data,
+                              P = P, sign = 1, epsilon = epsilon)
   I <- matrix(0, nrow = length(theta), ncol = length(theta))
 
   for (i in seq_len(N)) {
     J_i <- J[i,]
-    I <- I + J %*% t(J)
+    I <- I + J_i %*% t(J_i)
   }
 
   I
 }
 
 
-calcEFIM_LMS <- function(model, finalModel = NULL, theta, data, S = 3e4,
+calcEFIM_LMS <- function(model, finalModel = NULL, theta, data, S = 100,
                          parametric = TRUE, epsilon = 1e-6, verbose = FALSE,
-                         R.max = 1e6) {
+                         R.max = 1e6, P = NULL) {
+  lastQuad <- if (!is.null(P)) P$lastQuad else NULL
+  k <- length(theta)
+
+  if (S <= k) {
+    warning2("`EFIM.S` is lower than the number of free parameters! Increasing `EFIM.S` to ", 2 * k)
+    S <- 2 * k
+  }
+
   N      <- nrow(model$data)
   R.ceil <- N * S > R.max
   R      <- ifelse(R.ceil, yes = R.max, no = N * S) 
@@ -169,7 +179,7 @@ calcEFIM_LMS <- function(model, finalModel = NULL, theta, data, S = 3e4,
     warning2("Population size is smaller than sample size, please increase it using the `R.max` argument!")
     R <- N
   }
-
+  
   if (parametric) {
     if (is.null(finalModel)) stop2("finalModel must be included in calcEFIM_LMS")
     parTable   <- modelToParTable(finalModel, method = "lms")
@@ -183,7 +193,7 @@ calcEFIM_LMS <- function(model, finalModel = NULL, theta, data, S = 3e4,
 
   } else population <- data[sample(R, N, replace = TRUE), ]
 
-  I <- matrix(0, nrow = length(theta), ncol = length(theta))
+  I <- matrix(0, nrow = k, ncol = k)
 
   for (i in seq_len(S)) {
     if (verbose) printf("\rMonte-Carlo: Iteration = %d/%d", i, S)
@@ -194,9 +204,10 @@ calcEFIM_LMS <- function(model, finalModel = NULL, theta, data, S = 3e4,
       sub <- n1:nn
     } else sub <- sample(R, N)
 
-    P <- estepLms(model = model, theta=theta, data = population[sub, ])
-    J <- gradientLogLikLms(theta = theta, model = model, data = population[sub, ],
-                                  P = P, sign = 1, epsilon = epsilon)
+    P <- estepLms(model = model, theta = theta, data = population[sub, ], 
+                  recalcQuad = FALSE, lastQuad = lastQuad)
+    J <- gradientObsLogLikLms(theta = theta, model = model, data = population[sub, ],
+                              P = P, sign = 1, epsilon = epsilon)
 
     I <- I + J %*% t(J)
   }
@@ -206,7 +217,7 @@ calcEFIM_LMS <- function(model, finalModel = NULL, theta, data, S = 3e4,
     if (S <= 100) message("Consider increasing the Monte-Carlo Monte-Carloiterations, using the `EFIM.S` argument!")
   }
 
-  I / S
+  I / (S - k) # divide by degrees of freedom
 }
 
 
@@ -236,6 +247,13 @@ calcOFIM_QML <- function(model, theta, data, hessian = FALSE,
 calcEFIM_QML <- function(model, finalModel = NULL, theta, data, S = 100,
                          parametric = TRUE, epsilon = 1e-8, verbose = FALSE,
                          R.max = 1e6) {
+  k <- length(theta)
+  
+  if (S <= k) {
+    warning2("`EFIM.S` is lower than the number of free parameters! Increasing `EFIM.S` to ", 2 * k)
+    S <- 2 * k
+  }
+
   N      <- nrow(model$data)
   R.ceil <- N * S > R.max
   R      <- ifelse(R.ceil, yes = R.max, no = N * S) 
@@ -244,7 +262,7 @@ calcEFIM_QML <- function(model, finalModel = NULL, theta, data, S = 100,
     warning2("Population size is smaller than sample size, please increase it using the `R.max` argument!")
     R <- N
   }
-
+  
   if (parametric) {
     if (is.null(finalModel)) stop2("finalModel must be included in calcEFIM_QML")
     parTable <- modelToParTable(finalModel, method = "qml")
@@ -260,7 +278,7 @@ calcEFIM_QML <- function(model, finalModel = NULL, theta, data, S = 100,
   } else population <- data[sample(R, N, replace = TRUE), ]
 
 
-  I <- matrix(0, nrow = length(theta), ncol = length(theta))
+  I <- matrix(0, nrow = k, ncol = k)
   for (i in seq_len(S)) {
     if (verbose) printf("\rMonte-Carlo: Iteration = %d/%d", i, S)
    
@@ -280,7 +298,7 @@ calcEFIM_QML <- function(model, finalModel = NULL, theta, data, S = 100,
     if (S <= 100) message("Consider increasing the Monte-Carlo iterations, using the `EFIM.S` argument!")
   }
 
-  I / S
+  I / (S - k) # divide by degrees of freedom
 }
 
 

@@ -13,7 +13,7 @@ names(ests) <- methods
 for (method in methods) {
   if (method == "lms") {
     ests[[method]] <- modsem(m1, data = oneInt, method = method, 
-                             convergence = 1e-3)
+                             convergence.abs = 1e-3)
   } else {
     ests[[method]] <- modsem(m1, data = oneInt, method = method)
   }
@@ -26,7 +26,7 @@ SC =~ academic1 + academic2 + academic3 + academic4 + academic5 + academic6
 CAREER ~ ENJ + SC + ENJ:ENJ + SC:SC + ENJ:SC
 '
 
-est_qml2 <- modsem(nlsemModel, data = jordan, method = "qml", 
-                   mean.observed = FALSE, convergence = 1e-2)
+est_qml2 <- modsem(nlsemModel, data = jordan, method = "qml", adaptive.quad=TRUE,
+                   nodes = 15, mean.observed = FALSE, convergence.rel = 1e-2)
 est_rca2 <- modsem(nlsemModel, data = jordan, method = "rca")
 est_dblcent2 <- modsem(nlsemModel, data = jordan, method = "dblcent")

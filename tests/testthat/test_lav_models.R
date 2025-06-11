@@ -83,6 +83,8 @@ testthat::expect_warning({
 # testing plot function 
 plot_interaction(x = "ind60", z = "dem60", y = "dem65", xz = "ind60:dem60", 
                  vals_z = c(-0.5, 0.5), model = estimates[[1]][["rca"]])
+plot_interaction(x = "ind60", z = "dem60", y = "dem65", xz = "ind60:dem60", 
+                 vals_z = c(-0.5, 0.5), model = estimates[[1]][["rca"]], standardized=TRUE)
 plot_interaction(x = "speed", z = "textual", y = "visual", 
                  vals_z = c(-0.5, 0.5), model = estimates[[2]][["ca"]])
 
@@ -91,9 +93,11 @@ testthat::expect_warning(
           max_z = 10, min_z = -10), regex = "Degrees of freedom .*"
 )
 plot_jn(x = "speed", z = "textual", y = "visual", model = estimates[[2]][["ca"]],
+        max_z = 6, standardized=TRUE)
+plot_jn(x = "speed", z = "textual", y = "visual", model = estimates[[2]][["ca"]],
         max_z = 6)
 
-print(summary(estimates[[1]][["rca"]]))
+print(summary(estimates[[1]][["rca"]], H0=FALSE))
 print(estimates[[1]][["rca"]])
 
-testthat::expect_true(summary(estimates[[1]][["rca"]])$info$version != "??")
+testthat::expect_true(summary(estimates[[1]][["rca"]], H0=FALSE)$info$version != "??")

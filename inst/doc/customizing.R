@@ -40,9 +40,9 @@ library(modsem)
 ## -----------------------------------------------------------------------------
 #  m3 <- '
 #  # Outer Model
-#  X =~ x1 + x2
-#  Y =~ y1 + y2
-#  Z =~ z1 + z2
+#  X =~ x1 + x2 + x3
+#  Y =~ y1 + y2 + y3
+#  Z =~ z1 + z2 + z3
 #  
 #  # Inner model
 #  Y ~ X + Z + X:Z
@@ -53,4 +53,11 @@ library(modsem)
 ## -----------------------------------------------------------------------------
 #  data <- get_pi_data(m3, oneInt)
 #  head(data)
+
+## -----------------------------------------------------------------------------
+#  library(lavaan)
+#  fit <- sem(syntax, data = data, fixed.x = FALSE,
+#             std.lv = TRUE, auto.fix.first = TRUE,
+#             auto.var = TRUE, auto.cov.lv.x = TRUE)
+#  summary(fit)
 

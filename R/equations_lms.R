@@ -64,17 +64,50 @@ sigmaLms <- function(model, z1) { # for testing purposes
 }
 
 
-estepLms <- function(model, theta, data, ...) {
+densitySingleLms <- function(z, modFilled, data) {
+  mu <- muLmsCpp(model = modFilled, z = z)
+  sigma <- sigmaLmsCpp(model = modFilled, z = z)
+  dmvn(data, mean = mu, sigma = sigma)
+}
+
+
+densityLms <- function(z, modFilled, data) {
+  if (is.null(dim(z))) z <- matrix(z, ncol = modFilled$quad$k)
+
+  lapplyMatrix(seq_len(nrow(z)), FUN.VALUE = numeric(NROW(data)), FUN = function(i) {
+    densitySingleLms(z = z[i, , drop=FALSE], modFilled = modFilled, data = data)
+  })
+}
+
+
+estepLms <- function(model, theta, data, lastQuad = NULL, recalcQuad = FALSE, ...) {
   modFilled <- fillModel(model = model, theta = theta, method = "lms")
-  V <- modFilled$quad$n # matrix of node vectors m x k
-  w <- modFilled$quad$w # weights
-  # the probability of each observation is derived as the sum of the probabilites
-  # of observing the data given the parameters at each point in the k dimensional
-  # space of the distribution of the non-linear latent variables. To approximate
-  # this we use individual nodes sampled from the k-dimensional space with a
-  # corresponding probability (weight w) for each node appearing. I.e., whats the
-  # probability of observing the data given the nodes, and what is the probability
-  # of observing the given nodes (i.e., w). Sum the row probabilities = 1
+
+  if (model$quad$adaptive && (recalcQuad || is.null(lastQuad))) {
+    m <- model$quad$m
+    a <- model$quad$a
+    b <- model$quad$b
+    m <- model$quad$m
+    k <- model$quad$k
+
+    if (!is.null(lastQuad)) m.ceil <- lastQuad$m.ceil 
+    else if (k > 1) m.ceil <- m
+    else m.ceil <- round(estMForNodesInRange(m, a = -5, b = 5))
+
+    quad <- adaptiveGaussQuadrature(
+      fun = densityLms, collapse = \(x) sum(log(rowSums(x))),
+      modFilled = modFilled, data = data, a = a, b = b, m = m, 
+      k = k, m.ceil = m.ceil
+    )
+
+  } else if (model$quad$adaptive) {
+    quad <- lastQuad
+
+  } else quad <- model$quad
+
+  V <- quad$n
+  w <- quad$w
+
   P <- matrix(0, nrow = nrow(data), ncol = length(w))
 
   for (i in seq_along(w)) {
@@ -83,7 +116,9 @@ estepLms <- function(model, theta, data, ...) {
                    log = FALSE) * w[[i]]
   }
 
-  P <- P / rowSums(P)
+  density        <- rowSums(P)
+  observedLogLik <- sum(log(density))
+  P              <- P / density
   
   wMeans <- vector("list", length = length(w))
   wCovs  <- vector("list", length = length(w))
@@ -101,14 +136,15 @@ estepLms <- function(model, theta, data, ...) {
     tGamma[[i]] <- sum(p)
   }
 
-  list(P = P, mean = wMeans, cov = wCovs, tgamma = tGamma)
+  list(P = P, mean = wMeans, cov = wCovs, tgamma = tGamma, V = V, w = w, 
+       obsLL = observedLogLik, quad = quad)
 }
 
 
 logLikLms <- function(theta, model, data, P, sign = -1, ...) {
   modFilled <- fillModel(model = model, theta = theta, method = "lms")
   k <- model$quad$k
-  V <- modFilled$quad$n
+  V <- P$V
   n <- nrow(data)
   d <- ncol(data)
   # summed log probability of observing the data given the parameters
@@ -141,8 +177,8 @@ gradientLogLikLms <- function(theta, model, data, P, sign = -1, epsilon = 1e-4) 
 logLikLms_i <- function(theta, model, data, P, sign = -1, ...) {
   modFilled <- fillModel(model = model, theta = theta, method = "lms")
   k <- model$quad$k
-  V <- modFilled$quad$n
-  P <- P$P
+  V <- P$V
+
   # summed log probability of observing the data given the parameters
   # weighted my the posterior probability calculated in the E-step
   r <- lapplyMatrix(seq_len(nrow(V)), FUN = function(i) {
@@ -150,20 +186,10 @@ logLikLms_i <- function(theta, model, data, P, sign = -1, ...) {
       mean = muLmsCpp(model = modFilled, z = V[i, ]),
       sigma = sigmaLmsCpp(model = modFilled, z = V[i, ]),
       log = TRUE
-    ) * P[, i]
+    ) * P$P[, i]
   }, FUN.VALUE = numeric(nrow(data)))
 
   sign * apply(r, MARGIN = 1, FUN = sum)
-}
-
-
-# gradient function of logLikLms_i
-gradientLogLikLms_i <- function(theta, model, data, P, sign = -1, epsilon = 1e-4) {
-  baseLL <- logLikLms_i(theta, model, data = data, P = P, sign = sign)
-  lapplyMatrix(seq_along(theta), FUN = function(i) {
-    theta[[i]] <- theta[[i]] + epsilon
-    (logLikLms_i(theta, model, data = data, P = P, sign = sign) - baseLL) / epsilon
-  }, FUN.VALUE = numeric(nrow(data)))
 }
 
 

@@ -11,13 +11,40 @@ m1 <- "
   Y ~~ Y
   Y ~ b * X:Z + 0.05 * X:X
   b == a * 1.2
+
+  coef := sqrt(a * 2 + b^2)
 "
 
 est1 <- modsem(m1, oneInt, method = "lms", optimize = TRUE, verbose = TRUE,
-               convergence = 1e-2, R.max = 50000)
-plot_interaction("X", "Z", "Y", "X:Z", -3:3, c(-0.5, 0.5), est1)
+               convergence.abs = 1e-2, R.max = 50000)
+plot_interaction("X", "Z", "Y", "X:Z", -3:3, c(-0.5, 0.5), est1, standardized=TRUE)
 print(summary(est1, adjusted.stat = TRUE))
 plot_surface(x = "X", z = "Z", y = "Y", model = est1)
+standardize_model(est1, monte.carlo=TRUE)
+standardize_model(est1, monte.carlo=FALSE)
+
+m1 <- "
+# Outer Model
+  X =~ x1
+  Z =~ z1 
+  x1 ~~ 0.1 * x1
+  Y =~ y1
+
+# Inner model
+  Y ~ a * X + a * Z
+  X ~~ varX * X 
+  Y ~~ Y
+  Y ~ b * X:Z + 0.05 * X:X
+  b == a * 1.2
+
+  coef := sqrt(a * 2 + b^2)
+"
+
+testthat::expect_warning(
+  modsem(m1, oneInt, method = "lms"),
+  regexp = "Variances and covariances .*"
+)
+
 
 # PROBLEM:
 #   I have no clue why, but changing the ordering of how the interaction terms 
@@ -58,14 +85,22 @@ PBC ~ a * LATENT_VAR_ATT + SN
 '
 
 testthat::expect_warning({
-  est2 <- modsem(tpb, TPB, method = "lms", verbose = TRUE, convergence = 1, 
+  est2 <- modsem(tpb, TPB, method = "lms", verbose = TRUE, convergence.abs = 1, 
                  cov.syntax = covModel, nodes = 16, robust.se = TRUE)
 }, regexp = "It is recommended .* between endogenous variables .*")
+
+ust_pt <- parameter_estimates(est2)
+std_pt <- standardized_estimates(est2, monte.carlo=FALSE)
+testthat::expect_true(all(is.na(ust_pt[ust_pt$label == "p1", "std.error"])))
+
+label <- "my_custom_parameter"
+u_est <- ust_pt[ust_pt$label == label, "est"]
+s_est <- std_pt[std_pt$label == label, "est"]
+expect_true(round(u_est, 5) < round(s_est, 5))
 
 plot_interaction(x = "INT", z = "PBC", y = "BEH", vals_z = c(-0.5, 0.5), model = est2)
 print(summary(est2))
 var_interactions(est2)
-standardized_estimates(est2)
 print(vcov(est2)[8:14, 8:14])
 modsem_inspect(est2)
 print(coef(est2))
@@ -90,7 +125,7 @@ tpb2 <- '
   BEH ~ INT:PBC  
 '
 
-testthat::expect_warning(modsem(tpb, TPB, method = "lms", convergence = 1000,
+testthat::expect_warning(modsem(tpb, TPB, method = "lms", convergence.abs = 1000,
                                 nodes = 16, calc.se = FALSE),
                          regexp = "It is recommended .* between exogenous and endogenous .*")
 
@@ -126,6 +161,18 @@ testthat::expect_warning(
 modsem(tpb_uk, TPB_UK, method = "lms", nodes=32, max.iter=10, calc.se=FALSE)
 )
 
+
+m1 <- "
+# Outer Model
+  X =~ x1
+  Z =~ z1 
+  x1 ~~ 0.1 * x1
+  Y =~ y1
+
+# Inner model
+  Y ~ X + Z
+  Y ~ X:Z
+"
 
 testthat::expect_error(
   modsem(m1, oneInt, method = "lms", optimizer = "ssjj"),

@@ -17,6 +17,8 @@
   scientific = FALSE,
   ci = FALSE,
   standardized = FALSE,
+  monte.carlo = FALSE,
+  mc.reps = 10000,
   loadings = TRUE,
   regressions = TRUE,
   covariances = TRUE,
@@ -40,7 +42,16 @@
   ...
 )
 
-\method{summary}{modsem_pi}(object, ...)
+\method{summary}{modsem_pi}(
+  object,
+  H0 = TRUE,
+  r.squared = TRUE,
+  adjusted.stat = FALSE,
+  digits = 3,
+  scientific = FALSE,
+  ci = FALSE,
+  ...
+)
 }
 \arguments{
 \item{object}{modsem object to summarized}
@@ -60,6 +71,12 @@
 \item{ci}{print confidence intervals}
 
 \item{standardized}{print standardized estimates}
+
+\item{monte.carlo}{should Monte Carlo bootstrapped standard errors be used? Only 
+relevant if \code{standardized = TRUE}. If \code{FALSE} delta method is used instead.}
+
+\item{mc.reps}{number of Monte Carlo repetitions. Only relevant if \code{monte.carlo = TRUE}, 
+and \code{standardized = TRUE}.}
 
 \item{loadings}{print loadings}
 

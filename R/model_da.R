@@ -13,7 +13,9 @@ specifyModelDA <- function(syntax = NULL,
                            standardize.inp = FALSE,
                            standardize.out = FALSE,
                            checkModel = TRUE,
-                           quad.range = Inf) {
+                           quad.range = Inf,
+                           adaptive.quad = FALSE,
+                           adaptive.frequency = 3) {
   if (!is.null(syntax)) parTable <- modsemify(syntax)
   stopif(is.null(parTable), "No parTable found")
   
@@ -222,7 +224,8 @@ specifyModelDA <- function(syntax = NULL,
     omegaXiXi  = labelOmegaXiXi)
 
   k <- omegaAndSortedXis$k
-  quad <- quadrature(m, k, cut = quad.range)
+  quad <- quadrature(m, k, quad.range = quad.range, adaptive = adaptive.quad, 
+                     adaptive.frequency = adaptive.frequency)
 
   model <- list(
     info = list(
@@ -459,10 +462,14 @@ mainModelToParTable <- function(finalModel, method = "lms") {
 customParamsToParTable <- function(model, coefs, se) {
   parTable <- model$parTable
   custom   <- parTable[parTable$op == ":=", ]
+
   if (!NROW(custom$lhs)) return(NULL)
   parTable <- NULL
-  for (lhs in custom$lhs) {
-    newRow <- data.frame(lhs = lhs, op = ":=", rhs = "",
+  for (i in seq_len(NROW(custom))) {
+    lhs <- custom[i, "lhs"]
+    rhs <- custom[i, "rhs"]
+
+    newRow <- data.frame(lhs = lhs, op = ":=", rhs = rhs,
                          label = lhs, est = coefs[[lhs]],
                          std.error = se[[lhs]])
     parTable <- rbind(parTable, newRow)
@@ -477,10 +484,16 @@ modelToParTable <- function(model, coefs = NULL, se = NULL, method = "lms") {
 
   if (!is.null(coefs) && !is.null(se) && !is.null(names(se))) {
     parTable <- rbind(parTable, customParamsToParTable(model, coefs, se))
-    # this is ugly but should work
+
+    # this is ugly but should work...
+    # due to how values are read from the matrices, std.errors are overwritten
+    # by the custom parameter-values (e.g., 'X=~a*x1; a==1.2' results in a std.error of 1.2, when it should be 0)
     isLabelled <- parTable$label != ""
     labels     <- parTable[isLabelled, "label"]
-    parTable[isLabelled, "se"] <- se[labels]
+    parTable[isLabelled, "std.error"] <- se[labels]
+    # if the std.error of a labelled parameter is 0, it is invariant, and should be NA
+    # NB: there is a very small chance that a std.error of 0 is caused by a rounding error
+    parTable[isLabelled & parTable$std.error == 0, "std.error"] <- NA
   }
 
   parTable
