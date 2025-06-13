@@ -75,20 +75,20 @@ plot_jn(x = "INT", z = "PBC", y = "BEH", model = est2,
         min_z = -1.5, max_z = -0.5)
 
 ## ----eval = EVAL_DEFAULT------------------------------------------------------
-#  tpb <- "
-#  # Outer Model (Based on Hagger et al., 2007)
-#    ATT =~ att1 + att2 + att3 + att4 + att5
-#    SN =~ sn1 + sn2
-#    PBC =~ pbc1 + pbc2 + pbc3
-#    INT =~ int1 + int2 + int3
-#    BEH =~ b1 + b2
-#  
-#  # Inner Model (Based on Steinmetz et al., 2011)
-#    INT ~ ATT + SN + PBC
-#    BEH ~ INT + PBC
-#    BEH ~ PBC:INT
-#  "
-#  
-#  est2 <- modsem(tpb, TPB, method = "qml")
-#  plot_surface(x = "INT", z = "PBC", y = "BEH", model = est2)
+# tpb <- "
+# # Outer Model (Based on Hagger et al., 2007)
+#   ATT =~ att1 + att2 + att3 + att4 + att5
+#   SN =~ sn1 + sn2
+#   PBC =~ pbc1 + pbc2 + pbc3
+#   INT =~ int1 + int2 + int3
+#   BEH =~ b1 + b2
+# 
+# # Inner Model (Based on Steinmetz et al., 2011)
+#   INT ~ ATT + SN + PBC
+#   BEH ~ INT + PBC
+#   BEH ~ PBC:INT
+# "
+# 
+# est2 <- modsem(tpb, TPB, method = "qml")
+# plot_surface(x = "INT", z = "PBC", y = "BEH", model = est2)
 

@@ -43,6 +43,7 @@ lms2 <- modsem(m2, oneInt, method = "lms")
 summary(lms2)
 
 ## ----error = TRUE-------------------------------------------------------------
+try({
 m2 <- '
 # Outer Model
   X =~ x1 # X is observed
@@ -55,6 +56,7 @@ m2 <- '
 '
 
 lms3 <- modsem(m2, oneInt, method = "lms")
+})
 
 ## -----------------------------------------------------------------------------
 m3 <- '

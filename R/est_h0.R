@@ -57,6 +57,7 @@ estimate_h0.modsem_da <- function(object, warn_no_interaction = TRUE, ...) {
   argList[newArgNames] <- newArgList[newArgNames] 
 
   tryCatch({
+    # labels should probably be replaced instead...
     strippedParTable <- removeUnknownLabels(parTable[!grepl(":", parTable$rhs), ])
     
     if (NROW(strippedParTable) == NROW(parTable)) {
@@ -119,8 +120,6 @@ estimate_h0.modsem_pi <- function(object, warn_no_interaction = TRUE, ...) {
       return(NULL)
     }
 
-
-
     isInteractionTerm <- grepl(":", parTable$rhs)
     constrainedParTable <- parTable
 
@@ -140,18 +139,25 @@ estimate_h0.modsem_pi <- function(object, warn_no_interaction = TRUE, ...) {
     # We don't want to remove the interaction term, since we want the baseline model
     # to have the same variables as the original model (inluding the product indicators).
     # However, we want to constrain the interaction terms to zero.
+
+    isInteractionTerm <- grepl(":", constrainedParTable$rhs) # recompute as parTable might have changed
     constrainedParTable[isInteractionTerm, "mod"] <- "0"
     
     syntax <- parTableToSyntax(constrainedParTable)
-    argList <- c(
-        list(model = syntax, data = data, method = method), argList
-    )
+    argList <- c(list(model = syntax, data = data, method = method), argList)
     
-    do.call(modsem_pi, args = argList)
+    fit <- do.call(modsem_pi, args = argList)
+
+    if (is.null(extract_lavaan(fit))) {
+      warning2("`lavaan` failed when estimating the model!", immediate. = FALSE)
+      return(NULL)
+    }
+
+    fit
   },
   error = function(e) {
-    warning2("Null model could not be estimated. ",
-             "Error message: ", e$message)
+    warning2("Baseline model could not be estimated: ", e$message, 
+             immediate. = FALSE)
     NULL
   })
 }
