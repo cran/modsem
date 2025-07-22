@@ -5,37 +5,61 @@
 #' @param data dataframe
 #'
 #' @param method method to use:
-#' \code{"rca"} = residual centering approach (passed to \code{lavaan}),
-#' \code{"uca"} = unconstrained approach (passed to \code{lavaan}),
-#' \code{"dblcent"} = double centering approach (passed to \code{lavaan}),
-#' \code{"pind"} = prod ind approach, with no constraints or centering (passed to \code{lavaan}),
-#' \code{"custom"} = use parameters specified in the function call (passed to \code{lavaan})
+#' \describe{
+#'   \item{\code{"dblcent"}}{double centering approach (passed to \code{lavaan}).}
+#'   \item{\code{"ca"}}{constrained approach (passed to \code{lavaan}).}
+#'   \item{\code{"rca"}}{residual centering approach (passed to \code{lavaan}).}
+#'   \item{\code{"uca"}}{unconstrained approach (passed to \code{lavaan}).}
+#'   \item{\code{"pind"}}{prod ind approach, with no constraints or centering (passed to \code{lavaan}).}
+#' }
 #'
 #' @param match should the product indicators be created by using the match-strategy
+#'
+#' @param match.recycle should the indicators be recycled when using the match-strategy? I.e., 
+#'   if one of the latent variables have fewer indicators than the other, some indicators
+#'   are recycled to match the latent variable with the most indicators.
 #'
 #' @param standardize.data should data be scaled before fitting model
 #'
 #' @param first.loading.fixed Should the first factor loading in the latent product be fixed to one? Defaults to \code{FALSE}, as 
 #'   this already happens in \code{lavaan} by default. If \code{TRUE}, the first factor loading in the latent product is fixed to one.
-#'   manually in the generated syntax (e.g., \code{XZ =~ 1*x1z1}).'
+#'   Manually in the generated syntax (e.g., \code{XZ =~ 1*x1z1}).'
 #'
-#' @param center.before should indicators in products be centered before computing products (overwritten by \code{method}, if \code{method != NULL})
+#' @param center.before should indicators in products be centered before computing products.
 #'
 #' @param center.after should indicator products be centered after they have been computed?
 #'
-#' @param residuals.prods should indicator products be centered using residuals (overwritten by \code{method}, if \code{method != NULL})
+#' @param residuals.prods should indicator products be centered using residuals.
 #'
-#' @param residual.cov.syntax should syntax for residual covariances be produced (overwritten by \code{method}, if \code{method != NULL})
+#' @param residual.cov.syntax should syntax for residual covariances be produced.
 #'
-#' @param constrained.prod.mean should syntax for product mean be produced (overwritten by \code{method}, if \code{method != NULL})
+#' @param constrained.prod.mean should syntax for product mean be produced.
 #'
 #' @param center.data should data be centered before fitting model
 #'
-#' @param constrained.loadings should syntax for constrained loadings be produced (overwritten by \code{method}, if \code{method != NULL})
+#' @param constrained.loadings should syntax for constrained loadings be produced.
 #'
-#' @param constrained.var should syntax for constrained variances be produced (overwritten by \code{method}, if \code{method != NULL})
+#' @param constrained.var should syntax for constrained variances be produced.
 #'
-#' @param constrained.res.cov.method method for constraining residual covariances
+#' @param res.cov.method method for constraining residual covariances. Options are
+#' \describe{
+#'   \item{"simple"}{Residuals of product indicators with variables in common are allowed to covary freely. Defualt for most approches.}
+#'   \item{"ca"}{Residual covariances of product indicators are constrained according to the constrained approach.}
+#'   \item{"equality"}{Residuals of product indicators with variables in common are constrained to have equal covariances".
+#'                     Can be useful for models where the model is unidentifiable using \code{res.cov.method == "simple"},
+#'                     (e.g., when there is an interaction between an observed and a latent variable).}
+#'   \item{"none"}{Residual covariances between product indicators are not specificed (i.e., constrained to zero). 
+#'                 Produces the same results as \code{constrained.cov.syntax = FALSE}.
+#'                 Can be useful for models where the model is unidentifiable using \code{res.cov.method == "simple"},
+#'                 (e.g., when there is an interaction between an observed and a latent variable).}
+#' }
+#'
+#' @param res.cov.across Should residual covariances be specified/freed across different interaction terms.
+#'   For example if you have two interaction terms \code{X:Z} and \code{X:W} the residuals of the 
+#'   generated product indicators \code{x1:z1} and \code{x1:w1} may be correlated. If \code{TRUE} 
+#'   residual covariances are allowed across different latent interaction terms. If \code{FALSE} 
+#'   residual covariances are only allowed between product indicators which belong to the same 
+#'   latent interaction term.
 #'
 #' @param auto.scale methods which should be scaled automatically (usually not useful)
 #'
@@ -55,7 +79,31 @@
 #' @param suppress.warnings.lavaan should warnings from \code{lavaan} be suppressed?
 #' @param suppress.warnings.match should warnings from \code{match} be suppressed?
 #'
-#' @param ... arguments passed to \code{lavaan::sem()}
+#' @param rcs Should latent variable indicators be replaced with reliability-corrected
+#'   single item indicators instead? See \code{\link{relcorr_single_item}}.
+#'
+#' @param rcs.choose Which latent variables should get their indicators replaced with
+#'   reliability-corrected single items? It is passed to \code{\link{relcorr_single_item}}
+#'   as the \code{choose} argument.
+#'
+#' @param rcs.res.cov.xz Should the residual (co-)variances of the product indicators
+#'   created from the reliability-corrected single items (created if \code{rcs = TRUE})
+#'   be specified and constrained before estimating the model? If \code{TRUE} the estimates
+#'   for the constraints are approximated using a monte carlo simulation (see the \code{rcs.mc.reps} argument).
+#'   If \code{FALSE} the residual variances are not specified, which usually mean that all 
+#'   are constrained to zero.
+#'
+#' @param rcs.mc.reps Sample size used in monte-carlo simulation, when approximating the
+#'   the estimates of the residual (co-)variances between the product indicators formed
+#'   by reliabiliyt-corrected single items (see the \code{rcs.res.cov.xz} argument).
+#'
+#' @param rcs.scale.corrected Should reliability corrected items be scale-corrected? If \code{TRUE}
+#'   reliability-corrected single items are corrected for differences in factor loadings between
+#'   the items. Default is \code{TRUE}.
+#' 
+#' @param LAVFUN Function used to estimate the model. Defaults to \code{lavaan::sem}.
+#'
+#' @param ... arguments passed to \code{LAVFUN}
 #'
 #' @return \code{modsem} object
 #' @export
@@ -86,13 +134,13 @@
 #' '
 #'
 #' # Double centering approach
-#' est1 <- modsem_pi(m1, oneInt)
-#' summary(est1)
+#' est <- modsem_pi(m1, oneInt)
+#' summary(est)
 #'
 #' \dontrun{
 #' # The Constrained Approach
-#' est1Constrained <- modsem_pi(m1, oneInt, method = "ca")
-#' summary(est1Constrained)
+#' est_ca <- modsem_pi(m1, oneInt, method = "ca")
+#' summary(est_ca)
 #' }
 #'
 #' # Theory Of Planned Behavior
@@ -115,18 +163,19 @@
 #' '
 #'
 #' # Double centering approach
-#' estTpb <- modsem_pi(tpb, data = TPB)
-#' summary(estTpb)
+#' est_tpb <- modsem_pi(tpb, data = TPB)
+#' summary(est_tpb)
 #'
 #' \dontrun{
 #' # The Constrained Approach
-#' estTpbConstrained <- modsem_pi(tpb, data = TPB, method = "ca")
-#' summary(estTpbConstrained)
+#' est_tpb_ca <- modsem_pi(tpb, data = TPB, method = "ca")
+#' summary(est_tpb_ca)
 #' }
 modsem_pi <- function(model.syntax = NULL,
                       data = NULL,
                       method = "dblcent",
                       match = NULL,
+                      match.recycle = NULL,
                       standardize.data = FALSE,
                       center.data = FALSE,
                       first.loading.fixed = FALSE,
@@ -137,7 +186,8 @@ modsem_pi <- function(model.syntax = NULL,
                       constrained.prod.mean = NULL,
                       constrained.loadings = NULL,
                       constrained.var = NULL,
-                      constrained.res.cov.method = NULL,
+                      res.cov.method = NULL,
+                      res.cov.across = NULL,
                       auto.scale = "none",
                       auto.center = "none",
                       estimator = "ML",
@@ -147,9 +197,16 @@ modsem_pi <- function(model.syntax = NULL,
                       na.rm = FALSE,
                       suppress.warnings.lavaan = FALSE,
                       suppress.warnings.match = FALSE,
+                      rcs = FALSE,
+                      rcs.choose = NULL,
+                      rcs.res.cov.xz = rcs,
+                      rcs.mc.reps = 1e5,
+                      rcs.scale.corrected = TRUE,
+                      LAVFUN = lavaan::sem,
                       ...) {
   stopif(is.null(model.syntax), "No model syntax provided in modsem")
   stopif(is.null(data), "No data provided in modsem")
+  stopif(!is.data.frame(data) && !is.matrix(data), "data must be a data.frame or matrix!")
 
   if (!is.null(cluster)) {
     est <- modsemPICluster(
@@ -157,6 +214,7 @@ modsem_pi <- function(model.syntax = NULL,
       method = method,
       data = data,
       match = match,
+      match.recycle = match.recycle,
       standardize.data = standardize.data,
       center.data = center.data,
       first.loading.fixed = first.loading.fixed,
@@ -167,7 +225,8 @@ modsem_pi <- function(model.syntax = NULL,
       constrained.prod.mean = constrained.prod.mean,
       constrained.loadings = constrained.loadings,
       constrained.var = constrained.var,
-      constrained.res.cov.method = constrained.res.cov.method,
+      res.cov.method = res.cov.method,
+      res.cov.across = res.cov.across,
       auto.scale = auto.scale,
       auto.center = auto.center,
       run = run,
@@ -177,6 +236,11 @@ modsem_pi <- function(model.syntax = NULL,
       na.rm = na.rm,
       suppress.warnings.match = suppress.warnings.match,
       suppress.warnings.lavaan = suppress.warnings.lavaan,
+      rcs = rcs,
+      rcs.choose = rcs.choose,
+      rcs.mc.reps = rcs.mc.reps,
+      rcs.scale.corrected = rcs.scale.corrected,
+      LAVFUN = lavaan::sem,
       ...
     )
 
@@ -184,6 +248,25 @@ modsem_pi <- function(model.syntax = NULL,
   }
 
   if (!is.data.frame(data)) data <- as.data.frame(data)
+ 
+  if (rcs) { # use reliability-correct single items?
+    if (!is.null(rcs.choose))
+      rcs.choose <- rcs.choose[!grepl(":", rcs.choose)]
+
+    corrected <- relcorr_single_item(
+      syntax          = model.syntax, 
+      data            = data,
+      choose          = rcs.choose,
+      scale.corrected = rcs.scale.corrected,
+      warn.lav        = FALSE
+    )
+
+    model.syntax <- corrected$syntax
+    data         <- corrected$data
+
+    if (rcs.res.cov.xz)
+      res.cov.across <- FALSE
+  }
 
   methodSettings <-
     getMethodSettingsPI(method, args =
@@ -194,19 +277,23 @@ modsem_pi <- function(model.syntax = NULL,
                              constrained.prod.mean = constrained.prod.mean,
                              constrained.loadings = constrained.loadings,
                              constrained.var = constrained.var,
-                             constrained.res.cov.method = constrained.res.cov.method,
+                             res.cov.method = res.cov.method,
+                             res.cov.across = res.cov.across,
                              first.loading.fixed = first.loading.fixed,
-                             match = match))
-
+                             match = match, 
+                             match.recycle = match.recycle))
+  
   # Get the specifications of the model
   modelSpec <- parseLavaan(model.syntax, colnames(data),
                            match = methodSettings$match,
-                           suppress.warnings.match = suppress.warnings.match)
+                           suppress.warnings.match = suppress.warnings.match,
+                           match.recycle = match.recycle)
   
   # Save these for later
-  input <- list(syntax = model.syntax, data = data, parTable = modelSpec$parTable)
+  input <- list(syntax = model.syntax, data = data, 
+                parTable = modelSpec$parTable)
 
-  # Data Processing  -----------------------------------------------------------
+  # Data Processing
   oVs        <- c(modelSpec$oVs, group)
   missingOVs <- setdiff(oVs, colnames(data))
   stopif(length(missingOVs), "Missing variables in data:\n", missingOVs)
@@ -240,13 +327,28 @@ modsem_pi <- function(model.syntax = NULL,
   # Genereating a new syntax with constraints and measurmentmodel
   parTable <- addSpecsParTable(modelSpec,
                                residual.cov.syntax = methodSettings$residual.cov.syntax,
-                               constrained.res.cov.method = methodSettings$constrained.res.cov.method,
+                               res.cov.method = methodSettings$res.cov.method,
+                               res.cov.across = methodSettings$res.cov.across,
                                constrained.prod.mean = methodSettings$constrained.prod.mean,
                                constrained.loadings = methodSettings$constrained.loadings,
                                constrained.var = methodSettings$constrained.var,
                                firstFixed = first.loading.fixed)
 
   newSyntax <- parTableToSyntax(parTable, removeColon = TRUE)
+ 
+  if (rcs && rcs.res.cov.xz && method != "ca") { # Constrained Approach Should handle this it on its own...
+
+    elemsxz   <- modelSpec$elementsInProdNames
+    crossResCov <- simulateCrosssimulateCrossResCovRCS(
+      corrected = corrected,
+      elemsInIntTerms = elemsxz,
+      mc.reps = rcs.mc.reps,
+      parTable = parTable,
+      include.normal.inds = modelSpec$nways > 2L
+    )
+
+    newSyntax <- paste(newSyntax, crossResCov$syntax, sep = "\n")
+  }
 
   # Interaction model
   modelSpec$prodInds <- prodInds
@@ -257,13 +359,17 @@ modsem_pi <- function(model.syntax = NULL,
 
   # Extra info saved for estimating baseline model
   input$modsemArgs <- methodSettings
-  input$lavArgs    <- list(estimator = estimator, cluster = cluster, group = group, ...)
+  input$lavArgs    <- list(estimator = estimator, cluster = cluster, group = group, 
+                           LAVFUN = LAVFUN, 
+                           rcs.res.cov.xz = rcs.res.cov.xz, 
+                           rcs.mc.reps = rcs.mc.reps,
+                           rcs.choose = rcs.choose, ...)
   modelSpec$input  <- input
 
   if (run) {
     lavWrapper <- getWarningWrapper(silent = suppress.warnings.lavaan)
-    lavEst <- tryCatch(lavaan::sem(newSyntax, newData, estimator = estimator,
-                                   group = group, ...) |> lavWrapper(),
+    lavEst <- tryCatch(LAVFUN(newSyntax, newData, estimator = estimator,
+                              group = group, ...) |> lavWrapper(),
                        error = function(cnd) {
                          warning2(capturePrint(cnd))
                          NULL
@@ -317,9 +423,13 @@ createIndProds <- function(relDf, indNames, data, centered = FALSE) {
     inds <- lapplyDf(inds, FUN = function(x) x - mean(x, na.rm = TRUE))
   }
 
-  prods <- lapplyNamed(varnames, FUN = function(varname, data, relDf)
-                       multiplyIndicatorsCpp(data[relDf[[varname]]]),
-                       data = inds, relDf = relDf, names = varnames)
+  prods <- lapplyNamed(
+    X = varnames, 
+    FUN = \(varname, data, relDf) multiplyIndicatorsCpp(data[relDf[[varname]]]),
+    data = inds, 
+    relDf = relDf, 
+    names = varnames
+  )
 
   # return as data.frame()
   structure(prods, row.names = seq_len(nrow(data)),
@@ -328,8 +438,11 @@ createIndProds <- function(relDf, indNames, data, centered = FALSE) {
 
 
 calculateResidualsDf <- function(dependentDf, independentNames, data) {
+  isComplete <- stats::complete.cases(data)
+
   # Using purrr::list_cbind() is more efficient than cbind()
   combinedData <- purrr::list_cbind(list(dependentDf, data))
+  combinedData <- combinedData[isComplete, ]
 
   # Getting the names of the dependent variables
   dependentNames <- colnames(dependentDf)
@@ -341,7 +454,7 @@ calculateResidualsDf <- function(dependentDf, independentNames, data) {
   colnames(resNoNA) <- dependentNames
 
   resNA <- dependentDf 
-  resNA[stats::complete.cases(data), ] <- resNoNA
+  resNA[isComplete, ] <- resNoNA
 
   resNA
 }
@@ -357,7 +470,8 @@ getResidualsFormula <- function(dependendtNames, indepNames) {
 
 addSpecsParTable <- function(modelSpec,
                              residual.cov.syntax = FALSE,
-                             constrained.res.cov.method = "equality",
+                             res.cov.method = "equality",
+                             res.cov.across = TRUE,
                              constrained.prod.mean = FALSE,
                              constrained.loadings = FALSE,
                              constrained.var = FALSE,
@@ -385,15 +499,36 @@ addSpecsParTable <- function(modelSpec,
   if (!is.logical(residual.cov.syntax)) {
     stop2("residual.cov.syntax is not FALSE or TRUE in generateSyntax")
 
-  } else if (residual.cov.syntax) {
-    residualCovariances <- purrr::map(.x = relDfs, .f = getParTableResCov,
-                                      method = constrained.res.cov.method,
-                                      pt = parTable)  |>
-      purrr::list_rbind()
+  } else if (residual.cov.syntax && res.cov.method != "none") {
+    # Even if `res.cov.across == TRUE` we still want to run `getParTableResCov`
+    # for each latent interaction terms, due to some important checks, which 
+    # won't work properly when using a combined `relDf`. If checks fail
+    # we get `attr(relDf, "OK") == FALSE`
+    residualCovariancesList <- purrr::map(.x = relDfs, .f = getParTableResCov,
+                                          method = res.cov.method,
+                                          pt = parTable, 
+                                          include.single.inds = FALSE)
+    residualCovariances <- purrr::list_rbind(residualCovariancesList)
+
+    if (res.cov.across) {
+      # Get residual covariances across interaction terms
+      # E.g., 
+      # X:Z =~ x1:z1
+      # X:M =~ x1:m1
+      # x1:z1 ~~ x1:m1
+      isOK <- vapply(residualCovariancesList, FUN.VALUE = logical(1L), 
+                     FUN = \(rows) attr(rows, "OK"))
+      RelList <- Reduce(lapply(unname(relDfs[isOK]), FUN = as.list), f = c)
+      residualCovariances <- getParTableResCov(relDf = RelList, # works with list as well
+                                               method = res.cov.method,
+                                               pt = parTable, 
+                                               include.single.inds = TRUE)
+    }
+
     parTable <- rbindParTable(parTable, residualCovariances)
   }
 
-  if (constrained.var) parTable <- specifyVarCov(parTable, relDfs)
+  if (constrained.var)      parTable <- specifyVarCov(parTable, relDfs)
   if (constrained.loadings) parTable <- specifyFactorLoadings(parTable, relDfs)
 
   if (constrained.prod.mean) {
@@ -483,6 +618,8 @@ createParTableRow <- function(vecLhsRhs, op, mod = "") {
 #' \code{"pind"} = prod ind approach, with no constraints or centering,
 #' \code{"custom"} = use parameters specified in the function call
 #'
+#' @param data Optional. Dataset to use, usually not relevant.
+#'
 #' @param match should the product indicators be created by using the match-strategy
 #'
 #' @param ... arguments passed to other functions (e.g., \link{modsem_pi})
@@ -491,7 +628,7 @@ createParTableRow <- function(vecLhsRhs, op, mod = "") {
 #' @export
 #' @description
 #' \code{get_pi_syntax()} is a function for creating the \code{lavaan} syntax used for estimating
-#' latent interaction models using one of the product indicators in \code{lavaan}.
+#' latent interaction models using one of the product indicator approaches.
 #'
 #' @examples
 #' library(modsem)
@@ -508,15 +645,21 @@ createParTableRow <- function(vecLhsRhs, op, mod = "") {
 #' syntax <- get_pi_syntax(m1)
 #' data <- get_pi_data(m1, oneInt)
 #' est <- sem(syntax, data)
+#' summary(est)
 get_pi_syntax <- function(model.syntax,
                           method = "dblcent",
                           match = FALSE,
+                          data = NULL,
                           ...) {
   oVs       <- getOVs(model.syntax = model.syntax)
-  emptyData <- as.data.frame(matrix(0, nrow = 1, ncol = length(oVs),
-                                    dimnames = list(NULL, oVs)))
+
+  if (is.null(data)) {
+    data <- as.data.frame(matrix(0, nrow = 1, ncol = length(oVs),
+                                 dimnames = list(NULL, oVs)))
+  }
+
   modsem_pi(model.syntax, method = method, match = match,
-            data = emptyData, run = FALSE, ...)$syntax
+            data = data, run = FALSE, ...)$syntax
 }
 
 
@@ -537,8 +680,8 @@ get_pi_syntax <- function(model.syntax,
 #' @return \code{data.frame}
 #' @export
 #' @description
-#' \code{get_pi_syntax()} is a function for creating the \code{lavaan} syntax used for estimating
-#' latent interaction models using one of the product indicators in \code{lavaan}.
+#' \code{get_pi_data()} is a function for creating a dataset with product indiactors used for estimating
+#' latent interaction models using one of the product indicator approaches.
 #'
 #' @examples
 #' library(modsem)
@@ -555,6 +698,7 @@ get_pi_syntax <- function(model.syntax,
 #' syntax <- get_pi_syntax(m1)
 #' data <- get_pi_data(m1, oneInt)
 #' est <- sem(syntax, data)
+#' summary(est)
 get_pi_data <- function(model.syntax, data, method = "dblcent",
                         match = FALSE, ...) {
   modsem_pi(model.syntax, data = data, method = method, match = match,
@@ -594,6 +738,7 @@ modsemPICluster <- function(model.syntax = NULL,
                             data = NULL,
                             method = "dblcent",
                             match = NULL,
+                            match.recycle = NULL,
                             standardize.data = FALSE,
                             center.data = FALSE,
                             first.loading.fixed = FALSE,
@@ -604,7 +749,8 @@ modsemPICluster <- function(model.syntax = NULL,
                             constrained.prod.mean = NULL,
                             constrained.loadings = NULL,
                             constrained.var = NULL,
-                            constrained.res.cov.method = NULL,
+                            res.cov.method = NULL,
+                            res.cov.across = NULL,
                             auto.scale = "none",
                             auto.center = "none",
                             estimator = "ML",
@@ -614,6 +760,12 @@ modsemPICluster <- function(model.syntax = NULL,
                             na.rm = FALSE,
                             suppress.warnings.lavaan = FALSE,
                             suppress.warnings.match = FALSE,
+                            rcs = FALSE,
+                            rcs.choose = NULL,
+                            rcs.res.cov.xz = rcs,
+                            rcs.mc.reps = 1e5,
+                            rcs.scale.corrected = FALSE,
+                            LAVFUN = lavaan::sem,
                             ...) {
   stopif(na.rm, "`na.rm=TRUE` can currently not be paired with the `cluster` argument!")
 
@@ -637,9 +789,11 @@ modsemPICluster <- function(model.syntax = NULL,
     if (!NROW(modsemify(syntaxBlock))) next
 
     newBlockSyntax <- get_pi_syntax(
-      model.syntax = syntaxBlock, 
+      model.syntax = syntaxBlock,
+      data = data,
       method = method,
       match = match,
+      match.recycle = match.recycle,
       standardize.data = standardize.data,
       center.data = center.data,
       first.loading.fixed = first.loading.fixed,
@@ -650,18 +804,24 @@ modsemPICluster <- function(model.syntax = NULL,
       constrained.prod.mean = constrained.prod.mean,
       constrained.loadings = constrained.loadings,
       constrained.var = constrained.var,
-      constrained.res.cov.method = constrained.res.cov.method,
+      res.cov.method = res.cov.method,
+      res.cov.across = res.cov.across,
       auto.scale = auto.scale,
       auto.center = auto.center,
       suppress.warnings.match = suppress.warnings.match,
+      rcs = rcs,
+      rcs.choose = rcs.choose,
+      rcs.res.cov.xz = rcs.res.cov.xz,
+      rcs.mc.reps = rcs.mc.reps,
+      rcs.scale.corrected = rcs.scale.corrected
     ) |> stringr::str_replace_all(pattern = "\n", replacement = "\n\t")
-
 
     newBlockData <- get_pi_data(
       model.syntax = syntaxBlock, 
       data = data,
       method = method,
       match = match,
+      match.recycle = match.recycle,
       standardize.data = standardize.data,
       center.data = center.data,
       first.loading.fixed = first.loading.fixed,
@@ -672,11 +832,17 @@ modsemPICluster <- function(model.syntax = NULL,
       constrained.prod.mean = constrained.prod.mean,
       constrained.loadings = constrained.loadings,
       constrained.var = constrained.var,
-      constrained.res.cov.method = constrained.res.cov.method,
+      res.cov.method = res.cov.method,
+      res.cov.across = res.cov.across,
       auto.scale = auto.scale,
       auto.center = auto.center,
       suppress.warnings.match = suppress.warnings.match,
       na.rm = FALSE,
+      rcs = rcs,
+      rcs.choose = rcs.choose,
+      rcs.res.cov.xz = rcs.res.cov.xz,
+      rcs.mc.reps = rcs.mc.reps,
+      rcs.scale.corrected = rcs.scale.corrected
     )
 
     if (is.null(newData)) {
@@ -699,7 +865,7 @@ modsemPICluster <- function(model.syntax = NULL,
   if (run) {
     lavWrapper <- getWarningWrapper(silent = suppress.warnings.lavaan)
     lavEst <- tryCatch({
-        lavWrapper(lavaan::sem(
+        lavWrapper(LAVFUN(
           newSyntax, newData, estimator = estimator,
           group = group, cluster = cluster, ...
         ))

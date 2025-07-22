@@ -50,3 +50,7 @@ knitr::opts_chunk$set(
 #                   method = "qml")
 # summary(est_qml)
 
+## -----------------------------------------------------------------------------
+# est_lms <- modsem(tpb, data = TPB, method = "lms", auto.split.syntax = TRUE)
+# summary(est_lms)
+

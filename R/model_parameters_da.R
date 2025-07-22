@@ -17,7 +17,7 @@ createTheta <- function(model, start = NULL) {
                                    model$constrExprs)
   totalThetaLabel <- calcThetaLabel(thetaLabel, model$constrExprs)
 
-  M  <- model$matrices
+  M            <- model$matrices
   lambdaX      <- as.vector(M$lambdaX)
   lambdaY      <- as.vector(M$lambdaY)
   thetaDelta   <- as.vector(M$thetaDelta)
@@ -34,27 +34,28 @@ createTheta <- function(model, start = NULL) {
   omegaXiXi    <- as.vector(M$omegaXiXi)
   omegaEtaXi   <- as.vector(M$omegaEtaXi)
 
-  allModelValues <- c("lambdaX" = lambdaX,
-                      "lambdaY" = lambdaY,
-                      "tauX" = tauX,
-                      "tauY" = tauY,
-                      "thetaDelta" = thetaDelta,
+  allModelValues <- c("lambdaX"      = lambdaX,
+                      "lambdaY"      = lambdaY,
+                      "tauX"         = tauX,
+                      "tauY"         = tauY,
+                      "thetaDelta"   = thetaDelta,
                       "thetaEpsilon" = thetaEpsilon,
-                      "phi" = phi,
-                      "A" = A,
-                      "psi" = psi,
-                      "alpha" = alpha,
-                      "beta0" = beta0,
-                      "gammaXi" = gammaXi,
-                      "gammaEta" = gammaEta,
-                      "omegaXiXi" = omegaXiXi,
-                      "omegaEtaXi" = omegaEtaXi)
+                      "phi"          = phi,
+                      "A"            = A,
+                      "psi"          = psi,
+                      "alpha"        = alpha,
+                      "beta0"        = beta0,
+                      "gammaXi"      = gammaXi,
+                      "gammaEta"     = gammaEta,
+                      "omegaXiXi"    = omegaXiXi,
+                      "omegaEtaXi"   = omegaEtaXi)
 
   lavLabelsMain <- createLavLabels(M, subset = is.na(allModelValues),
                                    etas = etas)
 
   thetaMain <- allModelValues[is.na(allModelValues)]
-  thetaMain <- fillThetaIfStartNULL(start = start, theta = thetaMain)
+  thetaMain <- fillThetaIfStartNULL(start = start, theta = thetaMain, 
+                                    lavlab = lavLabelsMain)
   theta     <- c(thetaLabel, thetaCov, thetaMain)
 
   allLabels <- names(c(totalThetaLabel, thetaCov, thetaMain))
@@ -73,29 +74,61 @@ createThetaCovModel <- function(covModel, start = NULL) {
   M <- covModel$matrices
 
   phi      <- as.vector(M$phi)
-  A        <- as.vector(M$A)
   psi      <- as.vector(M$psi)
   alpha    <- as.vector(M$alpha)
   gammaXi  <- as.vector(M$gammaXi)
   gammaEta <- as.vector(M$gammaEta)
   thetaCov <- c("phi" = phi,
-                "A" = A,
                 "psi" = psi,
                 "gammaXi" = gammaXi,
                 "gammaEta" = gammaEta)
 
   lavLabelsCov <- createLavLabelsCov(M, subset = is.na(thetaCov))
   thetaCov <- thetaCov[is.na(thetaCov)]
-  thetaCov <- fillThetaIfStartNULL(start = start, theta = thetaCov)
+  thetaCov <- fillThetaIfStartNULL(start = start, theta = thetaCov,
+                                   lavlab = lavLabelsCov)
 
   list(theta = thetaCov, lavLabels = lavLabelsCov)
 }
 
 
-fillThetaIfStartNULL <- function(start, theta) {
-  if (!is.null(start)) return(theta)
-  vapply(theta, FUN = function(x) stats::runif(1),
-         FUN.VALUE = vector("numeric", 1L))
+fillThetaIfStartNULL <- function(start, 
+                                 theta, 
+                                 lavlab = NULL, 
+                                 var = 1,
+                                 cov = 0, 
+                                 meas = 0.7, 
+                                 mean = 0,
+                                 reg = 0) {
+  if (!is.null(start)) {
+    return(theta)
+
+  } else if (!is.null(lavlab)) {
+    tryCatch({
+      OP <- "~~|=~|~1|~"
+      op <- stringr::str_extract(lavlab, pattern = OP)
+      lr <- stringr::str_split_fixed(lavlab, pattern = OP, n = 2)
+      
+      lhs <- lr[, 1]
+      rhs <- lr[, 2]
+      op[is.na(op)] <- "~"
+    
+      theta.filled                          <- theta
+      theta.filled[op == "~"]               <- reg
+      theta.filled[op == "=~"]              <- meas
+      theta.filled[op == "~1"]              <- mean
+      theta.filled[op == "~~" & lhs == rhs] <- var
+      theta.filled[op == "~~" & lhs != rhs] <- cov
+      theta.filled[is.na(theta.filled)]     <- reg
+
+      theta.filled
+    }, error = \(e) 
+        fillThetaIfStartNULL(start = start, theta = theta, lavlab = NULL)
+    )
+  } else {
+    vapply(theta, FUN = function(x) stats::runif(1),
+           FUN.VALUE = numeric(1L))
+  }
 }
 
 
@@ -109,7 +142,7 @@ fillModel <- function(model, theta, fillPhi = FALSE, method = "lms") {
       thetaLabel <- theta[seq_len(model$lenThetaLabel)]
       theta <- theta[-seq_len(model$lenThetaLabel)]
     }
-    thetaLabel <- calcThetaLabel(thetaLabel, model$constrExprs)
+    thetaLabel <- suppressWarnings(calcThetaLabel(thetaLabel, model$constrExprs))
   }
 
   # cov model
@@ -120,8 +153,7 @@ fillModel <- function(model, theta, fillPhi = FALSE, method = "lms") {
     thetaMain <- theta[-seq_len(model$lenThetaCov)]
   }
 
-  model$covModel <- fillCovModel(model$covModel, thetaCov, thetaLabel,
-                                 fillPhi = fillPhi, method = method)
+  model$covModel <- fillCovModel(model$covModel, thetaCov, thetaLabel)
   model$matrices <- fillMainModel(model, thetaMain, thetaLabel,
                                   fillPhi = fillPhi, method = method)
   model
@@ -167,8 +199,7 @@ fillMainModel <- function(model, theta, thetaLabel, fillPhi = FALSE,
 }
 
 
-fillCovModel <- function(covModel, theta, thetaLabel, fillPhi = FALSE,
-                         method = "lms") {
+fillCovModel <- function(covModel, theta, thetaLabel) {
   if (is.null(names(theta))) names(theta) <- names(covModel$theta)
   if (is.null(covModel$matrices)) return(covModel)
   M <- covModel$matrices
@@ -180,14 +211,7 @@ fillCovModel <- function(covModel, theta, thetaLabel, fillPhi = FALSE,
   M$psi      <- fillSymmetric(M$psi, fetch(theta, "^psi"))
   M$gammaEta <- fillNA_Matrix(M$gammaEta, theta = theta, pattern = "^gammaEta")
   M$gammaXi  <- fillNA_Matrix(M$gammaXi, theta = theta, pattern = "^gammaXi")
-
-  if (method == "lms") {
-    M$A <- fillNA_Matrix(M$A, theta = theta, pattern = "^A[0-9]+")
-  } else if (method == "qml") {
-    M$phi <- fillSymmetric(M$phi, fetch(theta, "^phi"))
-  }
-
-  if (fillPhi) M$phi <- M$A %*% t(M$A)
+  M$phi <- fillSymmetric(M$phi, fetch(theta, "^phi"))
 
   covModel$matrices <- M
   covModel
@@ -195,23 +219,41 @@ fillCovModel <- function(covModel, theta, thetaLabel, fillPhi = FALSE,
 
 
 fillNA_Matrix <- function(X, theta, pattern) {
-  X[is.na(X)] <- fetch(theta, pattern)
+  X[is.na(X) & !is.nan(X)] <- fetch(theta, pattern)
   X
 }
 
 
 fillSymmetric <- function(mat, values) {
-  mat[is.na(mat)] <- values
+  mat[is.na(mat) & !is.nan(mat)] <- values
   mat[upper.tri(mat)] <- t(mat)[upper.tri(mat)]
   mat
 }
 
 
-# Set bounds for parameters to (0, Inf)
-getParamBounds <- function(model, lowest = 0, varParams=NULL) {
+getParamBounds <- function(model) {
   lower <- rep(-Inf, model$freeParams)
   upper <- rep(Inf, model$freeParams)
   names(lower) <- names(upper) <- names(model$theta)
+
+  parTable <- model$parTable
+  BOUNDS <- parTable[canBeNumeric(parTable$rhs) & parTable$op %in%
+                     BOUNDUARY_OPS, , drop = FALSE]
+  bound.param <- BOUNDS$lhs
+  bound.type  <- BOUNDS$op
+  bound.value <- as.numeric(BOUNDS$rhs)
+
+  upper.type    <- bound.type == "<"
+  lower.type <- bound.type == ">"
+
+  bound.upper <- structure(bound.value[upper.type], 
+                           names = bound.param[upper.type])
+  bound.lower <- structure(bound.value[lower.type],
+                           names = bound.param[lower.type])
+   
+  upper[names(bound.upper)] <- bound.upper
+  lower[names(bound.lower)] <- bound.lower
+
   list(lower = lower, upper = upper)
 }
 
@@ -246,7 +288,7 @@ calcPhiTheta <- function(theta, model, method) {
     matLab <- model$labelMatrices
   }
 
-  vals   <- as.vector(matEst$phi[is.na(matNA$A)])
+  vals   <- as.vector(matEst$phi[is.na(matNA$A) & !is.nan(matNA$A)])
   labels <- as.vector(matLab$A)
 
   if (any(labels != "")) {
@@ -258,4 +300,219 @@ calcPhiTheta <- function(theta, model, method) {
 
   theta[grepl("^A[0-9]+$", names(theta))] <- vals
   theta
+}
+
+
+LMS_BLOCKS = list(
+  lambdaX      = 0,
+  lambdaY      = 1,
+  tauX         = 2,
+  tauY         = 3,
+  thetaDelta   = 4,
+  thetaEpsilon = 5,
+  A            = 6,
+  psi          = 7,
+  alpha        = 8, 
+  beta0        = 9,
+  gammaXi      = 10,
+  gammaEta     = 11, 
+  omegaXiXi    = 12,
+  omegaEtaXi   = 13,
+  phi          = NA
+)
+
+
+SYMMETRIC_BLOCKS_LMS = c(
+  thetaDelta = 4, 
+  thetaEpsilon = 5,
+  psi = 7,
+  phi = NA
+)
+
+
+getParamNamesMatrix <- function(mat, matname) {
+  if (is.character(mat)) {
+    c(mat)
+
+  } else {
+    M <- list()
+    M[[matname]] <- mat
+    names(unlist(M))
+  }
+}
+
+
+getParamLocationsMatrices <- function(matrices, isFree = is.na) {
+  matrices <- matrices[intersect(names(matrices), names(LMS_BLOCKS))]
+  locations <- data.frame(param = NULL, block = NULL, row = NULL, col = NULL)
+  for (blockname in names(matrices)) {
+    X <- matrices[[blockname]]
+    n <- nrow(X) 
+    m <- ncol(X)
+
+    if (!any(isFree(X))) next
+
+    params <- getParamNamesMatrix(mat = X, matname = blockname)
+    block  <- LMS_BLOCKS[[blockname]]
+    rowidx <- matrix(seq_len(n) - 1, nrow = n, ncol = m, byrow = FALSE)
+    colidx <- matrix(seq_len(m) - 1, nrow = n, ncol = m, byrow = TRUE)
+
+    params <- params[isFree(X)]
+    rowidx <- rowidx[isFree(X)]
+    colidx <- colidx[isFree(X)]
+
+    locationsBlock <- data.frame(
+      param = params,
+      block = block,
+      row   = rowidx,
+      col   = colidx,
+      symmetric = as.integer(block %in% SYMMETRIC_BLOCKS_LMS)
+    )
+
+    locations <- rbind(locations, locationsBlock)
+  }
+
+  locations
+}
+
+
+getGradientStruct <- function(model, theta) {
+  tryCatch(
+    getGradientStructSimple(model = model, theta = theta),
+    error = function(e) {
+      warning2("Failed to compute gradient structure: ", e$message)
+      
+      list(
+        locations   = NULL, 
+        Jacobian    = NULL,
+        nlinDerivs  = NULL,
+        evalTheta   = NULL,
+        hasCovModel = TRUE, # may not be true, but we should behave as if it is
+        isNonLinear = TRUE  # may not be true, but we should behave as if it is
+      )
+    }
+  )
+}
+
+
+getGradientStructSimple <- function(model, theta) {
+  hasCovModel <- !is.null(model$covModel$matrices)
+
+  if (hasCovModel) {
+    out <- list(
+      locations   = NULL, 
+      Jacobian    = NULL,
+      nlinDerivs  = NULL,
+      evalTheta   = NULL,
+      hasCovModel = TRUE, 
+      isNonLinear = TRUE  # may not be true, but we should behave as if it is
+    )
+
+    return(out)
+  }
+
+  parTable <- model$parTable
+  parTable <- parTable[!parTable$op %in% BOUNDUARY_OPS, , drop = FALSE] # not relevant
+
+  isConstraint <- parTable$op %in% CONSTRAINT_OPS & !canBeNumeric(parTable$rhs)
+  constraints  <- parTable[isConstraint, ]
+  restParTable <- parTable[!isConstraint, ]
+  constraints  <- constraints[constraints$lhs %in% restParTable$mod, ]
+
+  derivatives <- list()
+  derivatives2 <- list()
+  for (i in seq_len(NROW(constraints))) {
+    constrVar <- constraints[i, "lhs"]
+    constrEq  <- constraints[i, "rhs"]
+
+    derivatives[[constrVar]] <- derivateConstraint(constrEq)
+    derivatives2[[constrVar]] <- secondDerivateConstraint(constrEq)
+  }
+
+  isLinear <- vapply(derivatives, FUN.VALUE = logical(1L), FUN = is.atomic)
+
+  linDerivs   <- derivatives[isLinear]
+  nlinDerivs  <- derivatives[!isLinear]
+  nlinDerivs2 <- derivatives2[!isLinear]
+  evalTheta   <- \(theta) c(theta, suppressWarnings(calcThetaLabel(theta, constraints))) # This could be made a bit better
+
+  locations <- rbind(
+    getParamLocationsMatrices(model$matrices, isFree=is.na),
+    getParamLocationsMatrices(model$labelMatrices, isFree=\(x) x != "")
+  )
+
+  k <- nrow(locations)
+  m <- length(theta)
+
+  param.full <- locations$param
+  param.part <- names(theta)
+
+  ordering <- structure(seq_along(theta), names = param.part)
+  ordering <- ordering[param.full]
+  
+  locations  <- locations[order(ordering), ]
+  param.full <- locations$param
+
+  Jacobian <- matrix(0, nrow = m, ncol = k,  
+                     dimnames = list(param.part, param.full))
+  Jacobian2 <- Jacobian
+
+  for (par in param.full) {
+    match.full <- param.full == par
+    match.part <- param.part == par
+
+    Jacobian[match.part, match.full] <- 1
+  }
+
+  for (dep in names(linDerivs)) {
+    deriv <- linDerivs[[dep]]
+
+    for (indep in names(deriv)) {
+      match.full <- param.full == dep
+      match.part <- param.part == indep
+      Jacobian[match.part, match.full] <- deriv[[indep]]
+    }
+  }
+
+  list(
+    locations   = locations, 
+    Jacobian    = Jacobian,
+    Jacobian2   = Jacobian2,
+    nlinDerivs  = nlinDerivs,
+    nlinDerivs2  = nlinDerivs2,
+    evalTheta   = evalTheta,
+    hasCovModel = hasCovModel,
+    isNonLinear = length(nlinDerivs) > 1
+  )
+}
+
+
+derivateConstraint <- function(constr) {
+  f <- stats::formula(paste0("~", constr))
+  eq <- Deriv::Deriv(f, combine = "list")
+
+  if (is.null(names(eq))) {
+    names(eq) <- all.vars(f)
+  } else {
+    eq <- as.list(eq)[-1]
+  }
+
+  eq
+}
+
+
+secondDerivateConstraint <- function(constr) {
+  f <- stats::formula(paste0("~", constr))
+  eq <- Deriv::Deriv(f, nderiv = 2, combine = "list")
+
+  out <- list()
+  if (is.null(names(eq))) {
+    names(eq) <- all.vars(f)
+  } else {
+    for (indep in all.vars(f)) {
+      out[[indep]] <- eq[[indep]][[indep]]
+    }
+  }
+
+  out
 }

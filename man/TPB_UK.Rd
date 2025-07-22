@@ -5,8 +5,9 @@
 \alias{TPB_UK}
 \title{TPB_UK}
 \source{
-Gathered from a replciation study of the original by Hagger et al. (2023).
-Obtained from https://doi.org/10.23668/psycharchives.12187
+Gathered from a replication study by Hagger et al. (2023).
+
+Obtained from \doi{10.23668/psycharchives.12187}
 }
 \description{
 A dataset based on the Theory of Planned Behaviour from a
@@ -31,4 +32,5 @@ tpb_uk <- "
 "
 
 est <- modsem(tpb_uk, data = TPB_UK)
+summary(est)
 }

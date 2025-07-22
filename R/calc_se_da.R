@@ -43,8 +43,8 @@ calcFIM_da <- function(model,
 
   if (robust.se) {
     warnif(hessian && FIM == "observed",
-           "'robust.se = TRUE' should not be paired with ",
-           "'EFIM.hessian = TRUE' && 'FIM = \"observed\"'")
+           "`robust.se = TRUE` should not be paired with ",
+           "`OFIM.hessian = TRUE` and `FIM = \"observed\"`")
     H <- calcHessian(model, theta = theta, data = data, method = method,
                      epsilon = epsilon, P = P)
     invH <- solveFIM(H, NA__ = NA__)
@@ -65,7 +65,7 @@ calcFIM_da <- function(model,
   dimnames(vcov.all) <- list(lavLabels, lavLabels)
   dimnames(I) <- dimnames(vcov) <- list(subLavLabels, subLavLabels)
 
-  list(FIM = I, vcov = vcov.all, vcov.sub = vcov, type = FIM,
+  list(FIM = I, vcov.all = vcov.all, vcov.free = vcov, type = FIM,
        raw.labels = rawLabels, n.additions = nAdditions)
 }
 
@@ -86,9 +86,14 @@ calcHessian <- function(model, theta, data, method = "lms",
   if (method == "lms") {
     if (is.null(P)) P <- estepLms(model, theta = theta, data = data)
     # negative hessian (sign = -1)
-    H <- fdHESS(pars = theta, fun = logLikLms, model = model,
-                data = data, P = P, sign = -1,
-                .relStep = .Machine$double.eps^(1/5))
+    fH <- \(model) hessianObsLogLikLms(model = model, data = data, P = P, theta = theta,  sign = -1,
+                                       .relStep = .Machine$double.eps^(1/5))
+
+    H <- tryCatch(fH(model), error = function(e) {
+      warning2("Optimized calculation of Hessian failed, attempting to switch!")
+      model$gradientStruct$hasCovModel <- TRUE
+      fH(model)
+    })
 
   } else if (method == "qml") {
     # negative hessian (sign = -1)
@@ -100,9 +105,11 @@ calcHessian <- function(model, theta, data, method = "lms",
 }
 
 
-solveFIM <- function(H, NA__ = -999) {
-  tryCatch(solve(H),
+solveFIM <- function(H, NA__ = -999, use.ginv = FALSE) {
+  tryCatch(if (use.ginv) GINV(H) else solve(H),
            error = function(e) {
+             if (!use.ginv) return(solveFIM(H, NA__ = NA__, use.ginv = TRUE))
+
              H[TRUE] <- NA__
              H
            },
@@ -116,16 +123,18 @@ calcSE_da <- function(calc.se = TRUE, vcov, rawLabels, NA__ = -999) {
   if (!calc.se) return(rep(NA__, length(rawLabels)))
   if (is.null(vcov)) {
     warning2("Fisher Information Matrix (FIM) was not calculated, ",
-             "unable to compute standard errors")
+             "unable to compute standard errors", immediate. = FALSE)
     return(rep(NA__, length(rawLabels)))
   }
 
   se <- suppressWarnings(sqrt(diag(vcov)))
 
   if (all(is.na(se))) {
-    warning2("SE's could not be computed, negative Hessian is singular.")
+    warning2("Standard errors could not be computed, negative Hessian is singular.",
+             immediate. = FALSE)
   } else if (any(is.nan(se))) {
-    warning2("SE's for some coefficients could not be computed.")
+    warning2("Standard errors for some coefficients could not be computed.",
+             immediate. = FALSE)
   }
 
   if (!is.null(names(se))) names(se) <- rawLabels
@@ -141,83 +150,68 @@ calcOFIM_LMS <- function(model, theta, data, hessian = FALSE,
   N <- nrow(data)
   if (hessian) {
     # negative hessian (sign = -1)
-    I <- fdHESS(pars = theta, fun = obsLogLikLms, model = model,
-                data = data, P = P, sign = -1,
-                .relStep = .Machine$double.eps^(1/5))
+    I <- calcHessian(model, theta = theta, data = data, 
+                     method = "lms", epsilon = epsilon, P = P)
+
     return(I)
   }
 
-  J <- gradientObsLogLikLms_i(theta, model = model, data = data,
+  S <- gradientObsLogLikLms_i(theta, model = model, data = data,
                               P = P, sign = 1, epsilon = epsilon)
-  I <- matrix(0, nrow = length(theta), ncol = length(theta))
-
-  for (i in seq_len(N)) {
-    J_i <- J[i,]
-    I <- I + J_i %*% t(J_i)
-  }
-
-  I
+  crossprod(S)
 }
 
 
-calcEFIM_LMS <- function(model, finalModel = NULL, theta, data, S = 100,
-                         parametric = TRUE, epsilon = 1e-6, verbose = FALSE,
-                         R.max = 1e6, P = NULL) {
-  lastQuad <- if (!is.null(P)) P$lastQuad else NULL
-  k <- length(theta)
+calcEFIM_LMS <- function(model, finalModel = NULL, theta, data,
+                         S         = 100,
+                         parametric = TRUE,
+                         epsilon    = 1e-6,
+                         verbose    = FALSE,
+                         R.max      = 1e6,
+                         P          = NULL) {
+  k <- length(theta)                       # number of free parameters
+  N <- nrow(data)
+  R <- min(R.max, N * S)
+  warnif(R.max <= N, "R.max is less than N!")
 
-  if (S <= k) {
-    warning2("`EFIM.S` is lower than the number of free parameters! Increasing `EFIM.S` to ", 2 * k)
-    S <- 2 * k
-  }
-
-  N      <- nrow(model$data)
-  R.ceil <- N * S > R.max
-  R      <- ifelse(R.ceil, yes = R.max, no = N * S) 
- 
-  if (R < N) {
-    warning2("Population size is smaller than sample size, please increase it using the `R.max` argument!")
-    R <- N
-  }
-  
   if (parametric) {
-    if (is.null(finalModel)) stop2("finalModel must be included in calcEFIM_LMS")
+    stopif(is.null(finalModel), "`finalModel` is needed when parametric = TRUE")
     parTable   <- modelToParTable(finalModel, method = "lms")
-    population <- tryCatch(
-      simulateDataParTable(parTable, N = R, colsOVs = colnames(data))$oV,
-      error = function(e) {
-        warning2("Unable to simulate data for EFIM, using stochastic sampling instead")
-        calcEFIM_LMS(model = model, theta = theta, data = data, S = S, 
-                     parametric = FALSE, epsilon = epsilon)
-      })
+    population <- simulateDataParTable(parTable, N = R,
+                                       colsOVs = colnames(data))$oV
+  } else {
+    population <- data[sample(nrow(data), R, replace = TRUE), , drop = FALSE]
+  }
 
-  } else population <- data[sample(R, N, replace = TRUE), ]
+  popEstep <- estepLms(model      = model,
+                       theta      = theta,
+                       data       = population,
+                       recalcQuad = TRUE,
+                       lastQuad   = if(!is.null(P)) P$quad else NULL)
+
+  J <- gradientObsLogLikLms_i(theta = theta,
+                              model = model,
+                              data  = population,
+                              P     = popEstep,
+                              sign  = +1,
+                              epsilon = epsilon)      # R × k matrix
 
   I <- matrix(0, nrow = k, ncol = k)
-
   for (i in seq_len(S)) {
-    if (verbose) printf("\rMonte-Carlo: Iteration = %d/%d", i, S)
+    if (R == N * S) {
+      # non-overlapping split
+      idx1 <- (i - 1) * N + 1
+      sub  <- idx1:(idx1 + N - 1)
+    } else {                    
+      sub <- sample(R, N)
+    }
 
-    if (!R.ceil) {
-      n1  <- (i - 1) * N + 1
-      nn  <- n1 + N - 1
-      sub <- n1:nn
-    } else sub <- sample(R, N)
-
-    P <- estepLms(model = model, theta = theta, data = population[sub, ], 
-                  recalcQuad = FALSE, lastQuad = lastQuad)
-    J <- gradientObsLogLikLms(theta = theta, model = model, data = population[sub, ],
-                              P = P, sign = 1, epsilon = epsilon)
-
-    I <- I + J %*% t(J)
-  }
-  
-  if (verbose) {
-    cat("\n")
-    if (S <= 100) message("Consider increasing the Monte-Carlo Monte-Carloiterations, using the `EFIM.S` argument!")
+    I <- I + crossprod(J[sub, , drop = FALSE])
   }
 
-  I / (S - k) # divide by degrees of freedom
+  if (verbose) cat("\n")
+
+  I / S
 }
 
 
@@ -232,37 +226,19 @@ calcOFIM_QML <- function(model, theta, data, hessian = FALSE,
     return(I)
   }
 
-  J <- gradientLogLikQml_i(theta, model = model, sign = 1, epsilon = epsilon)
-  I <- matrix(0, nrow = length(theta), ncol = length(theta))
-
-  for (i in seq_len(N)) {
-    J_i <- J[i,]
-    I <- I + J_i %*% t(J_i)
-  }
-
-  I
+  S <- gradientLogLikQml_i(theta, model = model, sign = 1, epsilon = epsilon)
+  crossprod(S)
 }
 
 
 calcEFIM_QML <- function(model, finalModel = NULL, theta, data, S = 100,
                          parametric = TRUE, epsilon = 1e-8, verbose = FALSE,
                          R.max = 1e6) {
-  k <- length(theta)
-  
-  if (S <= k) {
-    warning2("`EFIM.S` is lower than the number of free parameters! Increasing `EFIM.S` to ", 2 * k)
-    S <- 2 * k
-  }
+  k <- length(theta)                       # number of free parameters
+  N <- nrow(data)
+  R <- min(R.max, N * S)
+  warnif(R.max <= N, "R.max is less than N!")
 
-  N      <- nrow(model$data)
-  R.ceil <- N * S > R.max
-  R      <- ifelse(R.ceil, yes = R.max, no = N * S) 
-  
-  if (R < N) {
-    warning2("Population size is smaller than sample size, please increase it using the `R.max` argument!")
-    R <- N
-  }
-  
   if (parametric) {
     if (is.null(finalModel)) stop2("finalModel must be included in calcEFIM_QML")
     parTable <- modelToParTable(finalModel, method = "qml")
@@ -277,28 +253,25 @@ calcEFIM_QML <- function(model, finalModel = NULL, theta, data, S = 100,
 
   } else population <- data[sample(R, N, replace = TRUE), ]
 
+  J <- gradientLogLikQml(theta = theta, model = model, sign = +1, 
+                         epsilon = epsilon, data = population)
 
   I <- matrix(0, nrow = k, ncol = k)
   for (i in seq_len(S)) {
-    if (verbose) printf("\rMonte-Carlo: Iteration = %d/%d", i, S)
-   
-    if (!R.ceil) {
-      n1  <- (i - 1) * N + 1
-      nn  <- n1 + N - 1
-      sub <- n1:nn
-    } else sub <- sample(R, N)
+    if (R == N * S) {
+      # non-overlapping split
+      idx1 <- (i - 1) * N + 1
+      sub  <- idx1:(idx1 + N - 1)
+    } else {                    
+      sub <- sample(R, N)
+    }
 
-    J <- gradientLogLikQml(theta = theta, model = model, sign = 1, epsilon = epsilon,
-                           data = population[sub, ])
-    I <- I + J %*% t(J)
+    I <- I + crossprod(J[sub, , drop = FALSE])
   }
 
-  if (verbose) {
-    cat("\n")
-    if (S <= 100) message("Consider increasing the Monte-Carlo iterations, using the `EFIM.S` argument!")
-  }
+  if (verbose) cat("\n")
 
-  I / (S - k) # divide by degrees of freedom
+  I / S
 }
 
 

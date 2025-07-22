@@ -197,6 +197,8 @@ createParTableBranch <- function(syntaxTree) {
 #''
 #' modsemify(m1)
 modsemify <- function(syntax) {
+  if (is.null(syntax)) return(NULL)
+
   stopif(!is.character(syntax) && length(syntax) > 1,
          "Syntax is not a string og length 1")
   syntaxTrees <- createSyntaxTreesSyntax(syntax)
@@ -207,6 +209,8 @@ modsemify <- function(syntax) {
 
 
 parTableToSyntax <- function(parTable, removeColon = FALSE) {
+  if (is.null(parTable)) return(NULL)
+
   intercepts <- parTable$op == "~1"
   parTable[intercepts, "rhs"] <- "1"
   parTable[intercepts, "op"]  <- "~"

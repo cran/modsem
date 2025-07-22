@@ -27,11 +27,11 @@
 #' @param model An object of class \code{\link{modsem_pi}}, \code{\link{modsem_da}}, 
 #'   \code{\link{modsem_mplus}}, or possibly a \code{lavaan} object. Must be a fitted
 #'   SEM model containing paths for \code{y ~ x + z + x:z}.
-#' @param alpha_se A numeric value in \([0, 1]\) specifying the transparency of
+#' @param alpha_se A numeric value in \eqn{[0, 1]} specifying the transparency of
 #'   the confidence/prediction interval ribbon. Default is \code{0.15}.
 #' @param digits An integer specifying the number of decimal places to which the
 #'   moderator values (\code{z}) are rounded for labeling/grouping in the plot.
-#' @param ci_width A numeric value in \((0,1)\) indicating the coverage of the
+#' @param ci_width A numeric value in \eqn{(0,1)} indicating the coverage of the
 #'   confidence (or prediction) interval. The default is \code{0.95} for a 95\%
 #'   interval.
 #' @param ci_type A character string specifying whether to compute
@@ -104,7 +104,7 @@
 #'   BEH ~ INT + PBC
 #'   BEH ~ PBC:INT
 #' "
-#' est2 <- modsem(tpb, data = TPB, method = "lms")
+#' est2 <- modsem(tpb, data = TPB, method = "lms", nodes = 32)
 #'
 #' # Plot with custom Z values and a denser X grid
 #' plot_interaction(x = "INT", z = "PBC", y = "BEH",
@@ -153,8 +153,8 @@ plot_interaction <- function(x, z, y, xz = NULL, vals_x = seq(-3, 3, .001),
 #' @param model A fitted model object of class \code{modsem_da}, \code{modsem_mplus}, \code{modsem_pi}, or \code{lavaan}.
 #' @param min_z The minimum value of the moderator variable \code{z} to be used in the plot (default is -3). It is relative to the mean of z.
 #' @param max_z The maximum value of the moderator variable \code{z} to be used in the plot (default is 3). It is relative to the mean of z.
-#' @param sig.level The significance level for the confidence intervals (default is 0.05).
-#' @param alpha alpha setting used in `ggplot` (i.e., the opposite of opacity)
+#' @param sig.level The alpha-criterion for the confidence intervals (default is 0.05).
+#' @param alpha alpha setting used in \code{ggplot} (i.e., the opposite of opacity)
 #' @param detail The number of generated data points to use for the plot (default is 1000). You can increase this value for smoother plots.
 #' @param sd.line A thick black line showing \code{+/- sd.line * sd(z)}. NOTE: This line will be truncated by \code{min_z} and \code{max_z} if 
 #' the sd.line falls outside of \code{[min_z, max_z]}.
@@ -213,7 +213,7 @@ plot_jn <- function(x, z, y, xz = NULL, model, min_z = -3, max_z = 3,
   }
 
   if (standardized) {
-    parTable <- standardized_estimates(model)
+    parTable <- standardized_estimates(model, correction = TRUE)
   } else parTable <- parameter_estimates(model)
   parTable <- getMissingLabels(parTable)
 
@@ -408,48 +408,47 @@ plot_jn <- function(x, z, y, xz = NULL, model, min_z = -3, max_z = 3,
 
 #' Plot Surface for Interaction Effects
 #'
-#' Generates a 3D surface plot to visualize the interaction effect of two variables (`x` and `z`) on an outcome (`y`)
-#' using parameter estimates from a supported model object (e.g., `lavaan` or `modsem`).
-#' The function allows specifying ranges for `x` and `z` in standardized z-scores, which are then transformed
+#' Generates a 3D surface plot to visualize the interaction effect of two variables (\code{x} and \code{z})
+#' on an outcome (\code{y})
+#' using parameter estimates from a supported model object (e.g., \code{lavaan} or \code{modsem}).
+#' The function allows specifying ranges for \code{x} and \code{z} in standardized z-scores, which are then transformed
 #' back to the original scale based on their means and standard deviations.
 #'
 #' @param x A character string specifying the name of the first predictor variable.
 #' @param z A character string specifying the name of the second predictor variable.
 #' @param y A character string specifying the name of the outcome variable.
-#' @param xz Optional. A character string or vector specifying the interaction term between `x` and `z`.
-#'   If `NULL`, the interaction term is constructed as `paste(x, z, sep = ":")` and adjusted for specific model classes.
-#' @param model A model object of class `'modsem_pi'`, `'modsem_da'`, `'modsem_mplus'`, or `'lavaan'`. The model should
-#'   include paths for the predictors (`x`, `z`, and `xz`) to the outcome (`y`).
-#' @param min_x Numeric. Minimum value of `x` in z-scores. Default is -3.
-#' @param max_x Numeric. Maximum value of `x` in z-scores. Default is 3.
-#' @param min_z Numeric. Minimum value of `z` in z-scores. Default is -3.
-#' @param max_z Numeric. Maximum value of `z` in z-scores. Default is 3.
+#' @param xz Optional. A character string or vector specifying the interaction term between \code{x} and \code{z}.
+#'   If \code{NULL}, the interaction term is constructed as \code{paste(x, z, sep = ":")} and adjusted for specific model classes.
+#' @param model A model object of class \code{\link{modsem_pi}}, \code{\link{modsem_da}}, \code{\link{modsem_mplus}}, or \code{lavaan}. The model should
+#'   include paths for the predictors (\code{x}, \code{z}, and \code{xz}) to the outcome (\code{y}).
+#' @param min_x Numeric. Minimum value of \code{x} in z-scores. Default is -3.
+#' @param max_x Numeric. Maximum value of \code{x} in z-scores. Default is 3.
+#' @param min_z Numeric. Minimum value of \code{z} in z-scores. Default is -3.
+#' @param max_z Numeric. Maximum value of \code{z} in z-scores. Default is 3.
 #' @param standardized Should coefficients be standardized beforehand?
-#' @param detail Numeric. Step size for the grid of `x` and `z` values, determining the resolution of the surface.
-#'   Smaller values increase plot resolution. Default is `1e-2`.
-#' @param ... Additional arguments passed to `plotly::plot_ly`.
+#' @param detail Numeric. Step size for the grid of \code{x} and \code{z} values, determining the resolution of the surface.
+#'   Smaller values increase plot resolution. Default is \code{1e-2}.
+#' @param ... Additional arguments passed to \code{plotly::plot_ly}.
 #'
 #' @details
-#' The input `min_x`, `max_x`, `min_z`, and `max_z` define the range of `x` and `z` values in z-scores.
+#' The input \code{min_x}, \code{max_x}, \code{min_z}, and \code{max_z} define the range of \code{x} and \code{z} values in z-scores.
 #' These are scaled by the standard deviations and shifted by the means of the respective variables, obtained
-#' from the model parameter table. The resulting surface shows the predicted values of `y` over the grid of `x` and `z`.
+#' from the model parameter table. The resulting surface shows the predicted values of \code{y} over the grid of \code{x} and \code{z}.
 #'
-#' The function supports models of class `modsem` (with subclasses `modsem_pi`, `modsem_da`, `modsem_mplus`) and `lavaan`.
-#' For `lavaan` models, it is not designed for multigroup models, and a warning will be issued if multiple groups are detected.
+#' The function supports models of class \code{modsem} (with subclasses \code{modsem_pi}, \code{modsem_da}, \code{modsem_mplus}) and \code{lavaan}.
+#' For \code{lavaan} models, it is not designed for multigroup models, and a warning will be issued if multiple groups are detected.
 #'
-#' @return A `plotly` surface plot object displaying the predicted values of `y` across the grid of `x` and `z` values.
-#'   The color bar shows the values of `y`.
+#' @return A \code{plotly} surface plot object displaying the predicted values of \code{y} across the grid of \code{x} and \code{z} values.
+#'   The color bar shows the values of \code{y}.
 #'
 #' @note
-#' The interaction term (`xz`) may need to be manually specified for some models. For non-`lavaan` models,
-#' interaction terms may have their separator (`:`) removed based on circumstances.
+#' The interaction term (\code{xz}) may need to be manually specified for some models. For non-\code{lavaan} models,
+#' interaction terms may have their separator (\code{:}) removed based on circumstances.
 #'
 #' @examples
-#' \dontrun{
 #' m1 <- "
 #' # Outer Model
-#'   X =~ x1
-#'   X =~ x2 + x3
+#'   X =~ x1 + x2 + x3
 #'   Z =~ z1 + z2 + z3
 #'   Y =~ y1 + y2 + y3
 #'
@@ -459,6 +458,7 @@ plot_jn <- function(x, z, y, xz = NULL, model, min_z = -3, max_z = 3,
 #' est1 <- modsem(m1, data = oneInt)
 #' plot_surface("X", "Z", "Y", model = est1)
 #'
+#' \dontrun{
 #' tpb <- "
 #' # Outer Model (Based on Hagger et al., 2007)
 #'   ATT =~ att1 + att2 + att3 + att4 + att5
@@ -466,18 +466,15 @@ plot_jn <- function(x, z, y, xz = NULL, model, min_z = -3, max_z = 3,
 #'   PBC =~ pbc1 + pbc2 + pbc3
 #'   INT =~ int1 + int2 + int3
 #'   BEH =~ b1 + b2
-#'
+#' 
 #' # Inner Model (Based on Steinmetz et al., 2011)
-#'   # Causal Relationsships
 #'   INT ~ ATT + SN + PBC
 #'   BEH ~ INT + PBC
-#'   # BEH ~ ATT:PBC
 #'   BEH ~ PBC:INT
-#'   # BEH ~ PBC:PBC
 #' "
-#'
-#' est2 <- modsem(tpb, TPB, method = "lms")
-#' plot_surface(x = "INT", z = "PBC", y = "BEH", model = est1)
+#' 
+#' est2 <- modsem(tpb, TPB, method = "lms", nodes = 32)
+#' plot_surface(x = "INT", z = "PBC", y = "BEH", model = est2)
 #' }
 #'
 #' @export
@@ -497,7 +494,7 @@ plot_surface <- function(x, z, y, xz = NULL, model,
   }
 
   if (standardized) {
-    parTable <- standardized_estimates(model)
+    parTable <- standardized_estimates(model, correction = TRUE)
   } else parTable <- parameter_estimates(model)
 
   if (isLavaanObject(model)) {

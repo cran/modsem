@@ -17,12 +17,13 @@
   scientific = FALSE,
   ci = FALSE,
   standardized = FALSE,
+  centered = FALSE,
   monte.carlo = FALSE,
   mc.reps = 10000,
   loadings = TRUE,
   regressions = TRUE,
   covariances = TRUE,
-  intercepts = !standardized,
+  intercepts = TRUE,
   variances = TRUE,
   var.interaction = FALSE,
   ...
@@ -49,28 +50,31 @@
   adjusted.stat = FALSE,
   digits = 3,
   scientific = FALSE,
-  ci = FALSE,
+  verbose = TRUE,
   ...
 )
 }
 \arguments{
 \item{object}{modsem object to summarized}
 
-\item{H0}{should a null model be estimated (used for comparison)}
+\item{H0}{Should the baseline model be estimated, and used to produce 
+comparative fit?}
 
-\item{verbose}{print progress for the estimation of null model}
+\item{verbose}{Should messages be printed?}
 
 \item{r.squared}{calculate R-squared}
 
 \item{adjusted.stat}{should sample size corrected/adjustes AIC and BIC be reported?}
 
-\item{digits}{number of digits to print}
+\item{digits}{Number of digits for printed numerical values}
 
-\item{scientific}{print p-values in scientific notation}
+\item{scientific}{Should scientific format be used for p-values?}
 
 \item{ci}{print confidence intervals}
 
 \item{standardized}{print standardized estimates}
+
+\item{centered}{print mean centered estimates}
 
 \item{monte.carlo}{should Monte Carlo bootstrapped standard errors be used? Only 
 relevant if \code{standardized = TRUE}. If \code{FALSE} delta method is used instead.}
@@ -88,7 +92,8 @@ and \code{standardized = TRUE}.}
 
 \item{variances}{print variances}
 
-\item{var.interaction}{if FALSE (default) variances for interaction terms will be removed (if present)}
+\item{var.interaction}{if FALSE variances for interaction terms will be removed 
+from the output}
 
 \item{...}{arguments passed to lavaan::summary()}
 

@@ -1,5 +1,8 @@
 # Functions for constructing matrices for LMS and QML.
-# Last updated: 06.06.2024
+EMPTY_MATSTRUCT <- list(numeric = matrix(nrow = 0, ncol = 0), 
+                        label = matrix(nrow = 0, ncol = 0))
+
+
 setMatrixConstraints <- function(X, parTable, op, RHS, LHS, type, nonFreeParams) {
   fillConstExprs(X, parTable = parTable, op = op, RHS = RHS, LHS = LHS,
                  type = type, nonFreeParams = nonFreeParams) |>
@@ -8,6 +11,8 @@ setMatrixConstraints <- function(X, parTable, op, RHS, LHS, type, nonFreeParams)
 
 
 fillConstExprs <- function(X, parTable, op, RHS, LHS, type, nonFreeParams = TRUE) {
+  if (!NROW(parTable)) return(X)
+
   constExprs <- parTable[parTable$op == op &
                          parTable$rhs %in% RHS &
                          parTable$lhs %in% LHS &
@@ -30,6 +35,9 @@ fillConstExprs <- function(X, parTable, op, RHS, LHS, type, nonFreeParams = TRUE
 fillDynExprs <- function(X, parTable, op, RHS, LHS, type) {
   # dynamic exprs need a corresponding matrix of labels
   labelX <- as.character.matrix(X, empty = TRUE)
+
+  if (!NROW(parTable)) return(list(numeric = X, label = labelX))
+
   dynamicExprs <- parTable[parTable$op == op &
                            parTable$rhs %in% RHS &
                            parTable$lhs %in% LHS &
@@ -89,12 +97,12 @@ notFilledLambda <- function(ind, lambda) {
 }
 
 
-constructLambda <- function(lVs, indsLVs, parTable, auto.constraints = TRUE) {
+constructLambda <- function(lVs, indsLVs, parTable, auto.fix.first = TRUE) {
   numLVs        <- length(lVs)
   indsLVs       <- indsLVs[lVs] # make sure it is sorted
   allIndsLVs    <- unique(unlist(indsLVs))
   numAllIndsLVs <- length(allIndsLVs)
-  firstVal      <- ifelse(auto.constraints, 1, NA)
+  firstVal      <- ifelse(auto.fix.first, 1, NA)
 
   lambda <- matrix(0, nrow = numAllIndsLVs, ncol = numLVs,
                    dimnames = list(allIndsLVs, lVs))
@@ -103,7 +111,7 @@ constructLambda <- function(lVs, indsLVs, parTable, auto.constraints = TRUE) {
     firstFilled <- FALSE
     for (ind in indsLVs[[lV]]) {
       # TODO: make this work when duplicates appear seperately in lambdaY and lambdaX
-      if (!firstFilled && auto.constraints && notFilledLambda(ind, lambda)) {
+      if (!firstFilled && auto.fix.first && notFilledLambda(ind, lambda)) {
         lambda[ind, lV] <- firstVal
         firstFilled <- TRUE
       } else lambda[ind, lV] <- NA
@@ -143,7 +151,7 @@ constructTau <- function(lVs, indsLVs, parTable, mean.observed = TRUE) {
 }
 
 
-constructTheta <- function(lVs, indsLVs, parTable, auto.constraints = TRUE) {
+constructTheta <- function(lVs, indsLVs, parTable, auto.fix.single = TRUE) {
   numLVs        <- length(lVs)
   indsLVs       <- indsLVs[lVs] # make sure it is sorted
   numIndsLVs    <- lapply(indsLVs, FUN = length)
@@ -154,7 +162,7 @@ constructTheta <- function(lVs, indsLVs, parTable, auto.constraints = TRUE) {
                   dimnames = list(allIndsLVs, allIndsLVs))
   diag(theta) <- NA
 
-  if (auto.constraints) {
+  if (auto.fix.single) {
     for (lV in lVs) { # set to 0 if there is only a single indicator
       if (numIndsLVs[[lV]] != 1) next
       theta[indsLVs[[lV]], indsLVs[[lV]]] <- 0
@@ -168,6 +176,7 @@ constructTheta <- function(lVs, indsLVs, parTable, auto.constraints = TRUE) {
 
 
 constructGamma <- function(DVs, IVs, parTable) {
+  if (!length(DVs)) return(EMPTY_MATSTRUCT)
   exprsGamma <- parTable[parTable$op == "~" & !grepl(":", parTable$rhs), ]
   numDVs <- length(DVs)
   numIVs <- length(IVs)
@@ -178,11 +187,23 @@ constructGamma <- function(DVs, IVs, parTable) {
 }
 
 
-constructPsi <- function(etas, parTable) {
+constructPsi <- function(etas, parTable, orthogonal.y = FALSE) {
+  if (!length(etas)) return(EMPTY_MATSTRUCT)
+
   numEtas   <- length(etas)
   psi       <- matrix(0, nrow = numEtas, ncol = numEtas,
                       dimnames = list(etas, etas))
   diag(psi) <- NA
+
+  if (!orthogonal.y) {
+    for (i in seq_len(NROW(psi))) for (j in seq_len(i - 1)) {
+      eta_i <- etas[[i]]
+      eta_j <- etas[[j]]
+
+      if (isPureEta(eta_i, parTable) && isPureEta(eta_j, parTable))
+        psi[i, j] <- NA
+    }
+  }
 
   setMatrixConstraints(X = psi, parTable = parTable, op = "~~",
                        RHS = etas, LHS = etas, type = "symmetric",
@@ -191,12 +212,17 @@ constructPsi <- function(etas, parTable) {
 
 
 constructPhi <- function(xis, method = "lms", cov.syntax = NULL,
-                         parTable) {
+                         parTable, orthogonal.x = FALSE) {
+  if (!length(xis)) return(EMPTY_MATSTRUCT)
+
   numXis <- length(xis)
   phi    <- matrix(0, nrow = numXis, ncol = numXis,
                    dimnames = list(xis, xis))
+
   if (method != "lms" && is.null(cov.syntax)) {
-    phi[lower.tri(phi, diag = TRUE)] <- NA
+    if (!orthogonal.x) phi[lower.tri(phi, diag = TRUE)] <- NA
+    else               diag(phi) <- NA
+
     setMatrixConstraints(X = phi, parTable = parTable, op = "~~",
                          RHS = xis, LHS = xis, type = "symmetric",
                          nonFreeParams = FALSE)
@@ -205,25 +231,48 @@ constructPhi <- function(xis, method = "lms", cov.syntax = NULL,
 
 
 constructA <- function(xis, method = "lms", cov.syntax = NULL,
-                       parTable) {
+                       parTable, orthogonal.x = FALSE) {
+  if (!length(xis)) return(EMPTY_MATSTRUCT)
+
   numXis <- length(xis)
   A      <- matrix(0, nrow = numXis, ncol = numXis,
                    dimnames = list(xis, xis))
   if (method == "lms" && is.null(cov.syntax)) {
-    A[lower.tri(A, diag = TRUE)] <- NA
-    setMatrixConstraints(X = A, parTable = parTable, op = "~~",
-                         RHS = xis, LHS = xis, type = "symmetric",
-                         nonFreeParams = FALSE)
+    if (!orthogonal.x) A[lower.tri(A, diag = TRUE)] <- NA
+    else               diag(A) <- NA
+
+    A <- setMatrixConstraints(X = A, parTable = parTable, op = "~~",
+                              RHS = xis, LHS = xis, type = "symmetric",
+                              nonFreeParams = FALSE)
+   
+    if (!any(is.na(A$numeric))) {
+      Phi <- A$numeric
+      Phi[upper.tri(Phi)] <- t(Phi)[upper.tri(Phi)]
+      A$numeric <- t(chol(Phi))
+    }
+
+    A
+
   } else getEmptyPhi(phi = A)
 }
 
 
-constructAlpha <- function(etas, parTable, auto.constraints = TRUE,
-                           mean.observed = TRUE) {
+constructAlpha <- function(etas, parTable, mean.observed = TRUE) {
+  if (!length(etas)) return(EMPTY_MATSTRUCT)
+
   numEtas <- length(etas)
-  if (auto.constraints && mean.observed) default <- 0 else default <- NA
+  default <- if (mean.observed) 0 else NA
+
   alpha <- matrix(default, nrow = numEtas, ncol = 1,
                   dimnames = list(etas, "1"))
+
+  if (!mean.observed) {
+    for (i in seq_len(numEtas)) {
+      eta <- etas[[i]]
+      fill <- if (intTermsAffectLV(eta, parTable)) NA else 0
+      alpha[eta, 1] <- fill
+    } 
+  }
 
   setMatrixConstraints(X = alpha, parTable = parTable, op = "~1",
                        RHS = "", LHS = etas, type = "lhs",
@@ -421,8 +470,8 @@ getScalingLambdaY <- function(lambdaY, indsEtas, etas, method = "qml") {
 sortXisConstructOmega <- function(xis, varsInts, etas, intTerms,
                                   method = "lms", double = FALSE) {
   checkVarsIntsDA(varsInts, lVs = c(etas, xis))
-  listSortedXis  <- sortXis(xis = xis, varsInts = varsInts, etas = etas,
-                            intTerms = intTerms, double = double)
+  listSortedXis <- sortXis(xis = xis, varsInts = varsInts, etas = etas,
+                           intTerms = intTerms, double = double)
   sortedXis    <- listSortedXis$sortedXis
   nonLinearXis <- listSortedXis$nonLinearXis
 
@@ -452,6 +501,7 @@ sortXis <- function(xis, varsInts, etas, intTerms, double) {
 
   sortedXis <- c(allVarsInInts, xis[!xis %in% allVarsInInts])
   nonLinearXis <- character(0L)
+  
   for (interaction in varsInts) {
     if (any(interaction %in% nonLinearXis) && !double ||
         all(interaction %in% nonLinearXis) && double) next # no need to add it again
@@ -460,7 +510,9 @@ sortXis <- function(xis, varsInts, etas, intTerms, double) {
     stopif(all(interaction %in% etas), "Interactions between two endogenous ",
            "variables are not allowed, see \nvignette(\"interaction_two_etas\", \"modsem\")")
 
-    choice <- unique(interaction[which(!interaction %in% etas)])
+    choice <- unique(interaction[which(!interaction %in% etas &
+                                       !interaction %in% nonLinearXis)])
+
     if (length(choice) > 1 && !double) {
       freq <- freqInIntTerms[choice, "freq"]
       choice <- choice[whichIsMax(freq)][[1]] # pick first if both are equal

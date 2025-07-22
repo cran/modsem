@@ -9,6 +9,7 @@ modsem_pi(
   data = NULL,
   method = "dblcent",
   match = NULL,
+  match.recycle = NULL,
   standardize.data = FALSE,
   center.data = FALSE,
   first.loading.fixed = FALSE,
@@ -19,7 +20,8 @@ modsem_pi(
   constrained.prod.mean = NULL,
   constrained.loadings = NULL,
   constrained.var = NULL,
-  constrained.res.cov.method = NULL,
+  res.cov.method = NULL,
+  res.cov.across = NULL,
   auto.scale = "none",
   auto.center = "none",
   estimator = "ML",
@@ -29,6 +31,12 @@ modsem_pi(
   na.rm = FALSE,
   suppress.warnings.lavaan = FALSE,
   suppress.warnings.match = FALSE,
+  rcs = FALSE,
+  rcs.choose = NULL,
+  rcs.res.cov.xz = rcs,
+  rcs.mc.reps = 1e+05,
+  rcs.scale.corrected = TRUE,
+  LAVFUN = lavaan::sem,
   ...
 )
 }
@@ -38,13 +46,19 @@ modsem_pi(
 \item{data}{dataframe}
 
 \item{method}{method to use:
-\code{"rca"} = residual centering approach (passed to \code{lavaan}),
-\code{"uca"} = unconstrained approach (passed to \code{lavaan}),
-\code{"dblcent"} = double centering approach (passed to \code{lavaan}),
-\code{"pind"} = prod ind approach, with no constraints or centering (passed to \code{lavaan}),
-\code{"custom"} = use parameters specified in the function call (passed to \code{lavaan})}
+\describe{
+  \item{\code{"dblcent"}}{double centering approach (passed to \code{lavaan}).}
+  \item{\code{"ca"}}{constrained approach (passed to \code{lavaan}).}
+  \item{\code{"rca"}}{residual centering approach (passed to \code{lavaan}).}
+  \item{\code{"uca"}}{unconstrained approach (passed to \code{lavaan}).}
+  \item{\code{"pind"}}{prod ind approach, with no constraints or centering (passed to \code{lavaan}).}
+}}
 
 \item{match}{should the product indicators be created by using the match-strategy}
+
+\item{match.recycle}{should the indicators be recycled when using the match-strategy? I.e., 
+if one of the latent variables have fewer indicators than the other, some indicators
+are recycled to match the latent variable with the most indicators.}
 
 \item{standardize.data}{should data be scaled before fitting model}
 
@@ -52,23 +66,41 @@ modsem_pi(
 
 \item{first.loading.fixed}{Should the first factor loading in the latent product be fixed to one? Defaults to \code{FALSE}, as 
 this already happens in \code{lavaan} by default. If \code{TRUE}, the first factor loading in the latent product is fixed to one.
-manually in the generated syntax (e.g., \code{XZ =~ 1*x1z1}).'}
+Manually in the generated syntax (e.g., \code{XZ =~ 1*x1z1}).'}
 
-\item{center.before}{should indicators in products be centered before computing products (overwritten by \code{method}, if \code{method != NULL})}
+\item{center.before}{should indicators in products be centered before computing products.}
 
 \item{center.after}{should indicator products be centered after they have been computed?}
 
-\item{residuals.prods}{should indicator products be centered using residuals (overwritten by \code{method}, if \code{method != NULL})}
+\item{residuals.prods}{should indicator products be centered using residuals.}
 
-\item{residual.cov.syntax}{should syntax for residual covariances be produced (overwritten by \code{method}, if \code{method != NULL})}
+\item{residual.cov.syntax}{should syntax for residual covariances be produced.}
 
-\item{constrained.prod.mean}{should syntax for product mean be produced (overwritten by \code{method}, if \code{method != NULL})}
+\item{constrained.prod.mean}{should syntax for product mean be produced.}
 
-\item{constrained.loadings}{should syntax for constrained loadings be produced (overwritten by \code{method}, if \code{method != NULL})}
+\item{constrained.loadings}{should syntax for constrained loadings be produced.}
 
-\item{constrained.var}{should syntax for constrained variances be produced (overwritten by \code{method}, if \code{method != NULL})}
+\item{constrained.var}{should syntax for constrained variances be produced.}
 
-\item{constrained.res.cov.method}{method for constraining residual covariances}
+\item{res.cov.method}{method for constraining residual covariances. Options are
+\describe{
+  \item{"simple"}{Residuals of product indicators with variables in common are allowed to covary freely. Defualt for most approches.}
+  \item{"ca"}{Residual covariances of product indicators are constrained according to the constrained approach.}
+  \item{"equality"}{Residuals of product indicators with variables in common are constrained to have equal covariances".
+                    Can be useful for models where the model is unidentifiable using \code{res.cov.method == "simple"},
+                    (e.g., when there is an interaction between an observed and a latent variable).}
+  \item{"none"}{Residual covariances between product indicators are not specificed (i.e., constrained to zero). 
+                Produces the same results as \code{constrained.cov.syntax = FALSE}.
+                Can be useful for models where the model is unidentifiable using \code{res.cov.method == "simple"},
+                (e.g., when there is an interaction between an observed and a latent variable).}
+}}
+
+\item{res.cov.across}{Should residual covariances be specified/freed across different interaction terms.
+For example if you have two interaction terms \code{X:Z} and \code{X:W} the residuals of the 
+generated product indicators \code{x1:z1} and \code{x1:w1} may be correlated. If \code{TRUE} 
+residual covariances are allowed across different latent interaction terms. If \code{FALSE} 
+residual covariances are only allowed between product indicators which belong to the same 
+latent interaction term.}
 
 \item{auto.scale}{methods which should be scaled automatically (usually not useful)}
 
@@ -89,7 +121,31 @@ If \code{FALSE} they are not removed.}
 
 \item{suppress.warnings.match}{should warnings from \code{match} be suppressed?}
 
-\item{...}{arguments passed to \code{lavaan::sem()}}
+\item{rcs}{Should latent variable indicators be replaced with reliability-corrected
+single item indicators instead? See \code{\link{relcorr_single_item}}.}
+
+\item{rcs.choose}{Which latent variables should get their indicators replaced with
+reliability-corrected single items? It is passed to \code{\link{relcorr_single_item}}
+as the \code{choose} argument.}
+
+\item{rcs.res.cov.xz}{Should the residual (co-)variances of the product indicators
+created from the reliability-corrected single items (created if \code{rcs = TRUE})
+be specified and constrained before estimating the model? If \code{TRUE} the estimates
+for the constraints are approximated using a monte carlo simulation (see the \code{rcs.mc.reps} argument).
+If \code{FALSE} the residual variances are not specified, which usually mean that all 
+are constrained to zero.}
+
+\item{rcs.mc.reps}{Sample size used in monte-carlo simulation, when approximating the
+the estimates of the residual (co-)variances between the product indicators formed
+by reliabiliyt-corrected single items (see the \code{rcs.res.cov.xz} argument).}
+
+\item{rcs.scale.corrected}{Should reliability corrected items be scale-corrected? If \code{TRUE}
+reliability-corrected single items are corrected for differences in factor loadings between
+the items. Default is \code{TRUE}.}
+
+\item{LAVFUN}{Function used to estimate the model. Defaults to \code{lavaan::sem}.}
+
+\item{...}{arguments passed to \code{LAVFUN}}
 }
 \value{
 \code{modsem} object
@@ -121,13 +177,13 @@ m1 <- '
 '
 
 # Double centering approach
-est1 <- modsem_pi(m1, oneInt)
-summary(est1)
+est <- modsem_pi(m1, oneInt)
+summary(est)
 
 \dontrun{
 # The Constrained Approach
-est1Constrained <- modsem_pi(m1, oneInt, method = "ca")
-summary(est1Constrained)
+est_ca <- modsem_pi(m1, oneInt, method = "ca")
+summary(est_ca)
 }
 
 # Theory Of Planned Behavior
@@ -150,12 +206,12 @@ tpb <- '
 '
 
 # Double centering approach
-estTpb <- modsem_pi(tpb, data = TPB)
-summary(estTpb)
+est_tpb <- modsem_pi(tpb, data = TPB)
+summary(est_tpb)
 
 \dontrun{
 # The Constrained Approach
-estTpbConstrained <- modsem_pi(tpb, data = TPB, method = "ca")
-summary(estTpbConstrained)
+est_tpb_ca <- modsem_pi(tpb, data = TPB, method = "ca")
+summary(est_tpb_ca)
 }
 }

@@ -8,13 +8,15 @@ resetOptimizerInfoQML <- function() {
 
 
 incrementIterations <- function(logLik) {
-  eval    <- OptimizerInfoQML$eval + 1
-  logLiks <- c(OptimizerInfoQML$logLiks, logLik)
-  change  <- getDiffTwoMax(logLiks)
+  eval       <- OptimizerInfoQML$eval + 1
+  logLiks    <- c(OptimizerInfoQML$logLiks, logLik)
+  diffLL     <- getDiffTwoMax(logLiks)
+  deltaLL    <- diffLL$abs
+  relDeltaLL <- diffLL$rel
 
   clearConsoleLine() # clear before printing
-  printf("\rEvaluations = %d, LogLik = %.2f, Change = %.3f", 
-         OptimizerInfoQML$eval, logLik, change)
+  printf("\rEval=%d LogLik=%.2f \u0394LL=%.2g rel\u0394LL=%.2g", 
+         eval, logLik, deltaLL, relDeltaLL)
   
   OptimizerInfoQML$eval    <- eval
   OptimizerInfoQML$logLiks <- logLiks
@@ -70,11 +72,11 @@ logLikQml <- function(theta, model, sum = TRUE, sign = -1, verbose = FALSE) {
   invLXPLX <- solve(m$LXPLX)
   m$L1     <- m$phi %*% t(m$lambdaX) %*% invLXPLX
   m$Sigma1 <- m$phi - m$phi %*% t(m$lambdaX) %*% invLXPLX %*% m$lambdaX %*% m$phi
-  m$kronXi <- calcKronXi(m, t)
-  m$Binv   <- calcBinvCpp(m, t)
+  m$kronXi <- calcKronXi(m, t, ncores = ThreadEnv$n.threads)
+  m$Binv   <- calcBinvCpp(m, t, ncores = ThreadEnv$n.threads)
 
-  Ey            <- muQmlCpp(m, t)
-  sigmaEpsilon  <- sigmaQmlCpp(m, t)
+  Ey            <- muQmlCpp(m, t, ncores = ThreadEnv$n.threads)
+  sigmaEpsilon  <- sigmaQmlCpp(m, t, ncores = ThreadEnv$n.threads)
   sigmaXU       <- calcSigmaXU(m)
 
   normalInds    <- colnames(sigmaXU)
@@ -103,25 +105,18 @@ probf2 <- function(matrices, normalInds, sigma, sum=FALSE) {
   mu <- rep(0, ncol(sigma))
   X  <- cbind(matrices$x, matrices$u)[ , normalInds]
 
-  # if (sum)
-  #   total_log_dmvn(X, mu = mu, sigma = sigma)
-  # else
-  #  dmvn(X, mean = mu, sigma = sigma, log = TRUE)
-
   p <- dmvn(X, mean = mu, sigma = sigma, log = TRUE)
 
   if (sum) sum(p) else p
 }
 
 
-
-
 probf3 <- function(matrices, nonNormalInds, expected, sigma, t, numEta, sum = FALSE) {
   if (numEta == 1) 
-    p <- dnormCpp(matrices$y[, 1], mu = expected, sigma = sqrt(sigma))
+    p <- dnormCpp(matrices$y[, 1], mu = expected, sigma = sqrt(sigma), ncores = ThreadEnv$n.threads)
   else 
     p <- rep_dmvnorm(matrices$y[, nonNormalInds], expected = expected,
-              sigma = sigma, t = t)
+                     sigma = sigma, t = t, ncores = ThreadEnv$n.threads)
   if (sum) sum(p) else p
 }
 
@@ -181,7 +176,8 @@ mstepQml <- function(model,
     est <- stats::nlminb(start = theta, objective = logLikQml, model = model,
                          gradient = gradient, sign = -1, verbose = verbose,
                          upper = model$info$bounds$upper,
-                         lower = model$info$bounds$lower, control = control, ...)
+                         lower = model$info$bounds$lower, 
+                         control = control, ...) |> suppressWarnings()
 
   } else if (optimizer == "L-BFGS-B") {
     control$factr <- convergence

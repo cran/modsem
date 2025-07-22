@@ -35,9 +35,9 @@ plot_jn(
 
 \item{max_z}{The maximum value of the moderator variable \code{z} to be used in the plot (default is 3). It is relative to the mean of z.}
 
-\item{sig.level}{The significance level for the confidence intervals (default is 0.05).}
+\item{sig.level}{The alpha-criterion for the confidence intervals (default is 0.05).}
 
-\item{alpha}{alpha setting used in `ggplot` (i.e., the opposite of opacity)}
+\item{alpha}{alpha setting used in \code{ggplot} (i.e., the opposite of opacity)}
 
 \item{detail}{The number of generated data points to use for the plot (default is 1000). You can increase this value for smoother plots.}
 

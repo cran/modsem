@@ -2,7 +2,7 @@
 % Please edit documentation in R/modsem_da.R
 \name{modsem_da}
 \alias{modsem_da}
-\title{Interaction between latent variables using lms and qml approaches}
+\title{Interaction between latent variables using LMS and QML approaches}
 \usage{
 modsem_da(
   model.syntax = NULL,
@@ -11,6 +11,7 @@ modsem_da(
   verbose = NULL,
   optimize = NULL,
   nodes = NULL,
+  impute.na = NULL,
   convergence.abs = NULL,
   convergence.rel = NULL,
   optimizer = NULL,
@@ -35,20 +36,31 @@ modsem_da(
   quad.range = NULL,
   adaptive.quad = NULL,
   adaptive.frequency = NULL,
+  adaptive.quad.tol = NULL,
   n.threads = NULL,
   algorithm = NULL,
   em.control = NULL,
+  rcs = FALSE,
+  rcs.choose = NULL,
+  rcs.scale.corrected = TRUE,
+  orthogonal.x = NULL,
+  orthogonal.y = NULL,
+  auto.fix.first = NULL,
+  auto.fix.single = NULL,
+  auto.split.syntax = NULL,
   ...
 )
 }
 \arguments{
 \item{model.syntax}{\code{lavaan} syntax}
 
-\item{data}{dataframe}
+\item{data}{A dataframe with observed variables used in the model.}
 
 \item{method}{method to use:
-\code{"lms"} = latent model structural equations (not passed to \code{lavaan}).
-\code{"qml"} = quasi maximum likelihood estimation of latent model structural equations (not passed to \code{lavaan}).}
+\describe{
+  \item{\code{"lms"}}{latent moderated structural equations (not passed to \code{lavaan}).}
+  \item{\code{"qml"}}{quasi maximum likelihood estimation (not passed to \code{lavaan}).}
+}}
 
 \item{verbose}{should estimation progress be shown}
 
@@ -59,8 +71,13 @@ increased number gives better estimates but slower computation. How many are nee
 For simple models, somewhere between 16-24 nodes should be enough; for more complex models, higher numbers may be needed.
 For models where there is an interaction effect between an endogenous and exogenous variable,
 the number of nodes should be at least 32, but practically (e.g., ordinal/skewed data), more than 32 is recommended. In cases
-where data is non-normal, it might be better to use the \code{qml} approach instead. For large
-numbers of nodes, you might want to change the \code{'quad.range'} argument.}
+where data is non-normal, it might be better to use the \code{qml} approach instead. 
+You can also consider setting \code{adaptive.quad = TRUE}.}
+
+\item{impute.na}{Should missing values be imputed? If \code{FALSE} missing values
+are removed case-wise. If \code{TRUE} values are imputed using \code{Amelia::amelia}.
+Default is \code{FALSE}. If you want more fine-grained control over how the missing data 
+is imputed, you should consider imputing it yourself.}
 
 \item{convergence.abs}{Absolute convergence criterion. 
 Lower values give better estimates but slower computation. Not relevant when
@@ -78,32 +95,30 @@ For QML, \code{"L-BFGS-B"} may be faster if there is a large number of iteration
 \item{center.data}{should data be centered before fitting model}
 
 \item{standardize.data}{should data be scaled before fitting model, will be overridden by
-\code{standardize} if \code{standardize} is set to \code{TRUE}.
-
-\strong{NOTE}: It is recommended that you estimate the model normally and then standardize the output using
-\code{\link{standardize_model}} \code{\link{standardized_estimates}}, \code{summary(<modsem_da-object>, standardize=TRUE)}}
+\code{standardize} if \code{standardize} is set to \code{TRUE}.}
 
 \item{standardize.out}{should output be standardized (note will alter the relationships of
-parameter constraints since parameters are scaled unevenly, even if they
-have the same label). This does not alter the estimation of the model, only the
-output.
+  parameter constraints since parameters are scaled unevenly, even if they
+  have the same label). This does not alter the estimation of the model, only the
+  output.
 
 \strong{NOTE}: It is recommended that you estimate the model normally and then standardize the output using
-\code{\link{standardized_estimates}}.}
+\code{\link{standardize_model}}, \code{\link{standardized_estimates}} or \code{summary(<modsem_da-object>, standardize=TRUE)}.}
 
 \item{standardize}{will standardize the data before fitting the model, remove the mean
-structure of the observed variables, and standardize the output. Note that \code{standardize.data},
-\code{mean.observed}, and \code{standardize.out} will be overridden by \code{standardize} if \code{standardize} is set to \code{TRUE}.
+  structure of the observed variables, and standardize the output. Note that \code{standardize.data},
+  \code{mean.observed}, and \code{standardize.out} will be overridden by \code{standardize} if \code{standardize} is set to \code{TRUE}.
 
 \strong{NOTE}: It is recommended that you estimate the model normally and then standardize the output using
-\code{\link{standardized_estimates}}.}
+  \code{\link{standardized_estimates}}.}
 
 \item{mean.observed}{should the mean structure of the observed variables be estimated?
-This will be overridden by \code{standardize} if \code{standardize} is set to \code{TRUE}.
+  This will be overridden by \code{standardize}, if \code{standardize} is set to \code{TRUE}.
 
 \strong{NOTE}: Not recommended unless you know what you are doing.}
 
-\item{cov.syntax}{model syntax for implied covariance matrix (see \code{vignette("interaction_two_etas", "modsem")})}
+\item{cov.syntax}{model syntax for implied covariance matrix of exogenous latent variables
+(see \code{vignette("interaction_two_etas", "modsem")}).}
 
 \item{double}{try to double the number of dimensions of integration used in LMS,
 this will be extremely slow but should be more similar to \code{mplus}.}
@@ -113,17 +128,31 @@ this will be extremely slow but should be more similar to \code{mplus}.}
 \item{FIM}{should the Fisher information matrix be calculated using the observed or expected values? Must be either \code{"observed"} or \code{"expected"}.}
 
 \item{EFIM.S}{if the expected Fisher information matrix is computed, \code{EFIM.S} selects the number of Monte Carlo samples. Defaults to 100. 
-\strong{NOTE}: This number should likely be increased for better estimates (e.g., 1000-10000), but it might drasticly increase computation time.}
+\strong{NOTE}: This number should likely be increased for better estimates (e.g., 1000), but it might drasticly increase computation time.}
 
-\item{OFIM.hessian}{should the observed Fisher information be computed using the Hessian? If \code{FALSE}, it is computed using the gradient.}
+\item{OFIM.hessian}{Logical. If \code{TRUE} (default), standard errors are
+  based on the negative Hessian (observed Fisher information).
+  If \code{FALSE}, they come from the outer product
+  of individual score vectors (OPG). For correctly specified models,
+  these two matrices are asymptotically equivalent; yielding nearly identical
+  standard errors in large samples. The Hessian usually shows smaller finite-sample
+  variance (i.e., it's more consistent), and is therefore the default. 
+
+  Note, that the Hessian is not always positive definite, and is more computationally
+  expensive to calculate. The OPG should always be positive definite, and a lot 
+  faster to compute. If the model is correctly specified, and the sample size is large,
+  then the two should yield similar results, and switching to the OPG can save a 
+  lot of time. Note, that the required sample size depends on the complexity of the model.
+
+  A large difference between Hessian and OPG suggests misspecification, and 
+  \code{robust.se = TRUE} should be set to obtain sandwich (robust) standard errors.}
 
 \item{EFIM.parametric}{should data for calculating the expected Fisher information matrix be
 simulated parametrically (simulated based on the assumptions and implied parameters
 from the model), or non-parametrically (stochastically sampled)? If you believe that
 normality assumptions are violated, \code{EFIM.parametric = FALSE} might be the better option.}
 
-\item{robust.se}{should robust standard errors be computed? Meant to be used for QML,
-can be unreliable with the LMS approach.}
+\item{robust.se}{should robust standard errors be computed, using the sandwich estimator?}
 
 \item{R.max}{Maximum population size (not sample size) used in the calculated of the expected
 fischer information matrix.}
@@ -149,7 +178,9 @@ fixed Gauss Hermite quadrature this usually means that less nodes are placed at 
 \item{adaptive.frequency}{How often should the quasi-adaptive quadrature be calculated? Defaults to 3, meaning 
 that it is recalculated every third EM-iteration.}
 
-\item{n.threads}{number of cores to use for parallel processing. If \code{NULL}, it will use <= 2 threads.
+\item{adaptive.quad.tol}{Relative error tolerance for quasi adaptive quadrature. Defaults to \code{1e-12}.}
+
+\item{n.threads}{number of threads to use for parallel processing. If \code{NULL}, it will use <= 2 threads.
 If an integer is specified, it will use that number of threads (e.g., \code{n.threads = 4} will use 4 threads).
 If \code{"default"}, it will use the default number of threads (2).
 If \code{"max"}, it will use all available threads, \code{"min"} will use 1 thread.}
@@ -160,6 +191,48 @@ accelerated EM procedure that uses Quasi-Newton and Fisher Scoring
 optimization steps when needed. Default is \code{"EM"}.}
 
 \item{em.control}{a list of control parameters for the EM algorithm. See \code{\link{default_settings_da}} for defaults.}
+
+\item{rcs}{Should latent variable indicators be replaced with reliability-corrected
+single item indicators instead? See \code{\link{relcorr_single_item}}.}
+
+\item{rcs.choose}{Which latent variables should get their indicators replaced with
+reliability-corrected single items? It is passed to \code{\link{relcorr_single_item}}
+as the \code{choose} argument.}
+
+\item{rcs.scale.corrected}{Should reliability-corrected items be scale-corrected? If \code{TRUE}
+reliability-corrected single items are corrected for differences in factor loadings between
+the items. Default is \code{TRUE}.}
+
+\item{orthogonal.x}{If \code{TRUE}, all covariances among exogenous latent variables only are set to zero. 
+Default is \code{FALSE}.}
+
+\item{orthogonal.y}{If \code{TRUE}, all covariances among endogenous latent variables only are set to zero. 
+If \code{FALSE} residual covariances are added between pure endogenous variables; 
+those that are predicted by no other endogenous variable in the structural model.
+Default is \code{FALSE}.}
+
+\item{auto.fix.first}{If \code{TRUE} the factor loading of the first indicator, for 
+a given latent variable is fixed to \code{1}. If \code{FALSE} no loadings are fixed
+(automatically). Note that that this might make it such that the model no longer is
+identified. Default is \code{TRUE}. \strong{NOTE} this behaviour is overridden 
+if the first loading is labelled, where it gets treated as a free parameter instead. This
+differs from the default behaviour in \code{lavaan}.}
+
+\item{auto.fix.single}{If \code{TRUE}, the residual variance of 
+an observed indicator is set to zero if it is the only indicator of a latent variable.
+If \code{FALSE} the residual variance is not fixed to zero, and treated as a free parameter
+of the model. Default is \code{TRUE}. \strong{NOTE} this behaviour is overridden 
+if the first loading is labelled, where it gets treated as a free parameter instead.}
+
+\item{auto.split.syntax}{Should the model syntax automatically be split into a 
+linear and non-linear part? This is done by moving the structural model for 
+linear endogenous variables (used in interaction terms) into the \code{cov.syntax}
+argument. This can potentially allow interactions between two endogenous variables
+given that both are linear (i.e., not affected by interaction terms). This is 
+\code{FALSE} by default for the LMS approach.
+When using the QML approach interation effects between exogenous and endogenous 
+variables can in some cases be biased, if the model is not split beforehand. 
+The default is therefore \code{TRUE} for the QML approach.}
 
 \item{...}{additional arguments to be passed to the estimation function.}
 }
@@ -196,8 +269,8 @@ m1 <- "
 
 \dontrun{
 # QML Approach
-est1 <- modsem_da(m1, oneInt, method = "qml")
-summary(est1)
+est_qml <- modsem_da(m1, oneInt, method = "qml")
+summary(est_qml)
 
 # Theory Of Planned Behavior
 tpb <- "
@@ -209,17 +282,13 @@ tpb <- "
   BEH =~ b1 + b2
 
 # Inner Model (Based on Steinmetz et al., 2011)
-  # Covariances
-  ATT ~~ SN + PBC
-  PBC ~~ SN
-  # Causal Relationships
   INT ~ ATT + SN + PBC
   BEH ~ INT + PBC
   BEH ~ INT:PBC
 "
 
 # LMS Approach
-estTpb <- modsem_da(tpb, data = TPB, method = lms, EFIM.S = 1000)
-summary(estTpb)
+est_lms <- modsem_da(tpb, data = TPB, method = "lms")
+summary(est_lms)
 }
 }

@@ -15,16 +15,23 @@ fit_modsem_da <- function(model, chisq = TRUE) {
   warnif(any(grepl(":", parTable$rhs)) && chisq,
          "Chi-Square based fit-measures for LMS and QML ",
          "should be calculated for baseline model ",
-         "i.e., the model without the interaction effect")
+         "i.e., the model without the interaction effect",
+         immediate. = FALSE)
 
+
+  t      <- nFreeInterceptsDA(model)
+  mean.s <- model$args$mean.observed || t > 0
   logLik <- model$logLik
   O      <- stats::cov(model$data)
   mu     <- apply(model$data, 2, mean)
+  mu     <- matrix(mu, ncol = 1, dimnames = list(colnames(model$data), "~1"))
   N      <- NROW(model$data)
   p      <- NCOL(model$data)
   coef   <- coef(model, type = "free")
   k      <- length(coef)
-  df     <- getDegreesOfFreedom(m = p, coef = coef)
+  df     <- getDegreesOfFreedom(p = p, coef = coef, mean.structure = mean.s)
+ 
+  expected.matrices <- model$expected.matrices
 
   matrices <- model$model$matrices
   gammaXi  <- matrices$gammaXi
@@ -39,23 +46,19 @@ fit_modsem_da <- function(model, chisq = TRUE) {
   tauY     <- matrices$tauY
   alpha    <- matrices$alpha
   Ieta     <- matrices$Ieta
+  beta0    <- matrices$beta0
   Binv     <- solve(Ieta - gammaEta)
 
   if (chisq) {
-    covX  <- lambdaX %*% phi %*% t(lambdaX) + thetaX
-    covXY <- lambdaY %*% (Binv %*% gammaXi %*% phi) %*% t(lambdaX)
-    covY  <- lambdaY %*%
-      (Binv %*% (gammaXi %*% phi %*% t(gammaXi) + psi) %*% t(Binv)) %*%
-      t(lambdaY) + thetaY
+    E <- expected.matrices$sigma.ov
 
-    E <- rbind(cbind(covX, t(covXY)),
-               cbind(covXY, covY))
-
-    if (any(grepl("tau|alpha", names(coef)))) {
-      muX   <- tauX
-      muY   <- tauY + lambdaY %*% Binv %*% alpha
-      muHat <- rbind(muX, muY)
+    if (mean.s) {
+      muHat <- expected.matrices$mu.ov
     } else muHat <- mu
+
+    # Make sure the order of the rows and columns of E matches O
+    E <- E[rownames(O), colnames(O), drop = FALSE]
+    muHat <- muHat[rownames(O), , drop = FALSE]
 
     chisqValue <- calcChiSqr(O = O, E = E, N = N, p = p, mu = mu, muHat = muHat)
     chisqP     <- stats::pchisq(chisqValue, df, lower.tail = FALSE)
@@ -83,11 +86,11 @@ fit_modsem_da <- function(model, chisq = TRUE) {
   aBIC <- calcAdjBIC(logLik, k = k, N = N)
 
   list(
-    sigma.observed = O, 
-    sigma.expected = E,
-    mu.observed    = mu,
-    mu.expected    = muHat,
-    
+    sigma.observed = modsemMatrix(O, symmetric = TRUE), 
+    sigma.expected = modsemMatrix(E, symmetric = TRUE),
+    mu.observed    = modsemMatrix(mu),
+    mu.expected    = modsemMatrix(muHat),
+
     chisq.value  = chisqValue, 
     chisq.pvalue = chisqP,
     chisq.df     = df,

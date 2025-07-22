@@ -1,0 +1,35 @@
+TITLE:
+Running Model via Mplus
+DATA:
+FILE = "mplusResults_6507283a847451aff127c84c87ebd81b.dat";
+ 
+VARIABLE:
+NAMES = c_SUBJEC cmp_PBC_ cmp_INT_ cmp_BEH_; 
+ MISSING=.;
+ 
+ANALYSIS:
+estimator = ml;
+type = random;
+algorithm = integration;
+processors = 2;
+integration =  15;
+
+MODEL:
+BEH ON INT;
+BEH ON PBC;
+BEH ON INTPBCSUBJECTI;
+BEH ON INTPBC;
+SUBJECTI BY c_SUBJEC@1;
+PBC BY cmp_PBC_@1;
+INT BY cmp_INT_@1;
+BEH BY cmp_BEH_@1;
+  c_SUBJEC@0.0936187855780746;
+  cmp_PBC_@0.0623762696661833;
+  cmp_INT_@0.0654627832580257;
+  cmp_BEH_@0.0825806515046781;
+INTPBC | INT XWITH PBC;
+INTPBCSUBJECTI | INTPBC XWITH SUBJECTI;
+INTPBC | INT XWITH PBC;
+
+OUTPUT:
+TECH3;

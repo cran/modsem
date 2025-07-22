@@ -1,3 +1,8 @@
+PI_METHODS   = c("rca", "uca", "dblcent", "pind", "ca", "custom")
+DA_METHODS   = c("lms", "qml")
+MPLUS_METHOD = "mplus"
+
+
 #' Estimate interaction effects in structural equation models (SEMs)
 #'
 #' @param model.syntax \code{lavaan} syntax
@@ -5,25 +10,31 @@
 #' @param data dataframe
 #'
 #' @param method method to use:
-#' \code{"rca"} = residual centering approach (passed to \code{lavaan}),
-#' \code{"uca"} = unconstrained approach (passed to \code{lavaan}),
-#' \code{"dblcent"} = double centering approach (passed to \code{lavaan}),
-#' \code{"pind"} = prod ind approach, with no constraints or centering (passed to \code{lavaan}),
-#' \code{"lms"} = latent model structural equations (not passed to \code{lavaan}),
-#' \code{"qml"} = quasi maximum likelihood estimation of latent model structural equations (not passed to \code{lavaan}),
-#' \code{"custom"} = use parameters specified in the function call (passed to \code{lavaan}).
+#' \describe{
+#'   \item{\code{"dblcent"}}{double centering approach (passed to \code{lavaan}).}
+#'   \item{\code{"ca"}}{constrained approach (passed to \code{lavaan}).}
+#'   \item{\code{"rca"}}{residual centering approach (passed to \code{lavaan}).}
+#'   \item{\code{"uca"}}{unconstrained approach (passed to \code{lavaan}).}
+#'   \item{\code{"pind"}}{prod ind approach, with no constraints or centering (passed to \code{lavaan}).}
+#'   \item{\code{"lms"}}{latent moderated structural equations (not passed to \code{lavaan}).}
+#'   \item{\code{"qml"}}{quasi maximum likelihood estimation (not passed to \code{lavaan}).}
+#'   \item{\code{"custom"}}{use parameters specified in the function call (passed to \code{lavaan}).}
+#'   \item{\code{"mplus"}}{estimate model through \code{Mplus}.}
+#' }
 #'
 #' @param ... arguments passed to other functions depending on the method (see \code{\link{modsem_pi}}, \code{\link{modsem_da}}, and \code{\link{modsem_mplus}})
+#'
 #' @return \code{modsem} object with class \code{\link{modsem_pi}}, \code{\link{modsem_da}}, or \code{\link{modsem_mplus}}
+#'
 #' @export
 #' @description
 #' \code{modsem()} is a function for estimating interaction effects between latent variables
 #' in structural equation models (SEMs).
-#' Methods for estimating interaction effects in SEMs can basically be split into
-#' two frameworks:
-#' 1. Product Indicator-based approaches (\code{"dblcent"}, \code{"rca"}, \code{"uca"},
-#' \code{"ca"}, \code{"pind"})
-#' 2. Distributionally based approaches (\code{"lms"}, \code{"qml"}).
+#' Methods for estimating interaction effects in SEMs can basically be split into two frameworks:
+#' \enumerate{
+#'   \item Product Indicator (PI) based approaches (\code{"dblcent"}, \code{"rca"}, \code{"uca"}, \code{"ca"}, \code{"pind"})
+#'   \item Distributionally (DA) based approaches (\code{"lms"}, \code{"qml"}).
+#' }
 #'
 #' For the product indicator-based approaches, \code{modsem()} is essentially a fancy wrapper for \code{lavaan::sem()} which generates the
 #' necessary syntax and variables for the estimation of models with latent product indicators.
@@ -58,7 +69,7 @@
 #' summary(est1_ca)
 #'
 #' # LMS approach
-#' est1_lms <- modsem(m1, oneInt, method = "lms", EFIM.S=1000)
+#' est1_lms <- modsem(m1, oneInt, method = "lms")
 #' summary(est1_lms)
 #'
 #' # QML approach
@@ -91,7 +102,7 @@
 #' summary(est_tpb_ca)
 #'
 #' # LMS approach
-#' est_tpb_lms <- modsem(tpb, data = TPB, method = "lms")
+#' est_tpb_lms <- modsem(tpb, data = TPB, method = "lms", nodes = 32)
 #' summary(est_tpb_lms)
 #'
 #' # QML approach
@@ -116,11 +127,11 @@ modsem <- function(model.syntax = NULL,
     data <- as.data.frame(data)
   }
 
-  if (method %in% c("rca", "uca", "dblcent", "pind", "ca", "custom")) {
+  if (method %in% PI_METHODS) {
     modsem_pi(model.syntax, data = data, method = method, ...)
-  } else if (method %in% c("lms", "qml")) {
+  } else if (method %in% DA_METHODS) {
     modsem_da(model.syntax, data = data, method = method, ...)
-  } else if (method == "mplus") {
+  } else if (method == MPLUS_METHOD) {
     modsem_mplus(model.syntax, data = data, ...)
   } else {
     stop2("Method not recognized")

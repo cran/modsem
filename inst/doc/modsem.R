@@ -32,8 +32,7 @@ knitr::opts_chunk$set(
 # summary(reg1)
 
 ## -----------------------------------------------------------------------------
-# # Using "pind" as the method (see Chapter 3)
-# est2 <- modsem('y1 ~ x1 + z1 + x1:z1', data = oneInt, method = "pind")
+# est2 <- modsem('y1 ~ x1 + z1 + x1:z1', data = oneInt, method = "dblcent")
 # summary(est2)
 
 ## -----------------------------------------------------------------------------
@@ -46,7 +45,7 @@ knitr::opts_chunk$set(
 #   Y ~ X + z1 + X:z1
 # '
 # 
-# est3 <- modsem(m3, oneInt, method = "pind")
+# est3 <- modsem(m3, oneInt, method = "dblcent", res.cov.method = "none")
 # summary(est3)
 
 ## -----------------------------------------------------------------------------

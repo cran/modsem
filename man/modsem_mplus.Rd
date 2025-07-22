@@ -10,8 +10,11 @@ modsem_mplus(
   estimator = "ml",
   type = "random",
   algorithm = "integration",
-  process = 8,
+  processors = 2,
   integration = 15,
+  rcs = FALSE,
+  rcs.choose = NULL,
+  rcs.scale.corrected = TRUE,
   ...
 )
 }
@@ -26,9 +29,20 @@ modsem_mplus(
 
 \item{algorithm}{algorithm argument passed to \code{Mplus}}
 
-\item{process}{process argument passed to \code{Mplus}}
+\item{processors}{processors argument passed to \code{Mplus}}
 
 \item{integration}{integration argument passed to \code{Mplus}}
+
+\item{rcs}{Should latent variable indicators be replaced with reliability-corrected
+single item indicators instead? See \code{\link{relcorr_single_item}}.}
+
+\item{rcs.choose}{Which latent variables should get their indicators replaced with
+reliability-corrected single items? It is passed to \code{\link{relcorr_single_item}}
+as the \code{choose} argument.}
+
+\item{rcs.scale.corrected}{Should reliability-corrected items be scale-corrected? If \code{TRUE}
+reliability-corrected single items are corrected for differences in factor loadings between
+the items. Default is \code{TRUE}.}
 
 \item{...}{arguments passed to other functions}
 }
@@ -40,27 +54,25 @@ Estimation latent interactions through \code{Mplus}
 }
 \examples{
 # Theory Of Planned Behavior
-tpb <- '
-# Outer Model (Based on Hagger et al., 2007)
-  ATT =~ att1 + att2 + att3 + att4 + att5
-  SN =~ sn1 + sn2
-  PBC =~ pbc1 + pbc2 + pbc3
-  INT =~ int1 + int2 + int3
-  BEH =~ b1 + b2
+m1 <- '
+# Outer Model
+  X =~ x1 + x2
+  Z =~ z1 + z2
+  Y =~ y1 + y2 
 
-# Inner Model (Based on Steinmetz et al., 2011)
-  # Covariances
-  ATT ~~ SN + PBC
-  PBC ~~ SN
-  # Causal Relationsships
-  INT ~ ATT + SN + PBC
-  BEH ~ INT + PBC
-  BEH ~ INT:PBC
+# Inner model
+  Y ~ X + Z + X:Z
 '
 
 \dontrun{
-est_mplus <- modsem_mplus(tpb, data = TPB)
-summary(est_mplus)
+# Check if Mplus is installed
+run <- tryCatch({MplusAutomation::detectMplus(); TRUE},
+                error = \(e) FALSE)
+
+if (run) {
+  est_mplus <- modsem_mplus(m1, data = oneInt)
+  summary(est_mplus)
+}
 }
 
 }

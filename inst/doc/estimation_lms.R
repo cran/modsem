@@ -30,6 +30,7 @@ knitr::opts_chunk$set(
 #               nodes = 32, # Number of nodes for numerical integration
 #               adaptive.quad = TRUE, # Use quasi-adaptive quadrature
 #               adaptive.frequency = 3, # Update the quasi-adaptive quadrature every third EM-iteration
+#               adaptive.quad.tol = 1e-12, # Relative error tolerance for quasi-adaptive quad
 #               algorithm ="EMA", # Use accelerated EM algorithm (Default)
 #               convergence.abs = 1e-4, # Relative convergence criterion
 #               convergence.rel = 1e-10, # Relative convergence criterion

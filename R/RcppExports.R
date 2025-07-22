@@ -13,47 +13,83 @@ sigmaLmsCpp <- function(model, z) {
     .Call(`_modsem_sigmaLmsCpp`, model, z)
 }
 
-muQmlCpp <- function(m, t) {
-    .Call(`_modsem_muQmlCpp`, m, t)
+gradLogLikLmsCpp <- function(modelR, P, block, row, col, symmetric, eps = 1e-6) {
+    .Call(`_modsem_gradLogLikLmsCpp`, modelR, P, block, row, col, symmetric, eps)
 }
 
-sigmaQmlCpp <- function(m, t) {
-    .Call(`_modsem_sigmaQmlCpp`, m, t)
+completeLogLikLmsCpp <- function(modelR, P, quad) {
+    .Call(`_modsem_completeLogLikLmsCpp`, modelR, P, quad)
 }
 
-calcKronXi <- function(m, t) {
-    .Call(`_modsem_calcKronXi`, m, t)
+gradObsLogLikLmsCpp <- function(modelR, data, P, block, row, col, symmetric, eps = 1e-6, ncores = 1L) {
+    .Call(`_modsem_gradObsLogLikLmsCpp`, modelR, data, P, block, row, col, symmetric, eps, ncores)
 }
 
-calcBinvCpp <- function(m, t) {
-    .Call(`_modsem_calcBinvCpp`, m, t)
+observedLogLikLmsCpp <- function(modelR, data, P, ncores = 1L) {
+    .Call(`_modsem_observedLogLikLmsCpp`, modelR, data, P, ncores)
 }
 
-dnormCpp <- function(x, mu, sigma) {
-    .Call(`_modsem_dnormCpp`, x, mu, sigma)
+hessObsLogLikLmsCpp <- function(modelR, data, P, block, row, col, symmetric, relStep = 1e-6, minAbs = 0.0, ncores = 1L) {
+    .Call(`_modsem_hessObsLogLikLmsCpp`, modelR, data, P, block, row, col, symmetric, relStep, minAbs, ncores)
+}
+
+hessCompLogLikLmsCpp <- function(modelR, P, block, row, col, symmetric, relStep = 1e-6, minAbs = 0.0, ncores = 1L) {
+    .Call(`_modsem_hessCompLogLikLmsCpp`, modelR, P, block, row, col, symmetric, relStep, minAbs, ncores)
+}
+
+muQmlCpp <- function(m, t, ncores = 1L) {
+    .Call(`_modsem_muQmlCpp`, m, t, ncores)
+}
+
+sigmaQmlCpp <- function(m, t, ncores = 1L) {
+    .Call(`_modsem_sigmaQmlCpp`, m, t, ncores)
+}
+
+calcKronXi <- function(m, t, ncores = 1L) {
+    .Call(`_modsem_calcKronXi`, m, t, ncores)
+}
+
+calcBinvCpp <- function(m, t, ncores = 1L) {
+    .Call(`_modsem_calcBinvCpp`, m, t, ncores)
+}
+
+logNormalPdf <- function(X, mu, sigmaDiag, ncores = 1L) {
+    .Call(`_modsem_logNormalPdf`, X, mu, sigmaDiag, ncores)
+}
+
+dnormCpp <- function(x, mu, sigma, ncores = 1L) {
+    .Call(`_modsem_dnormCpp`, x, mu, sigma, ncores)
 }
 
 varZCpp <- function(Omega, Sigma1, numEta) {
     .Call(`_modsem_varZCpp`, Omega, Sigma1, numEta)
 }
 
-#' Multiply indicators 
-#' @param df A data DataFrame
-#' @return A NumericVector
-#' @export
 multiplyIndicatorsCpp <- function(df) {
     .Call(`_modsem_multiplyIndicatorsCpp`, df)
 }
 
-rep_dmvnorm <- function(x, expected, sigma, t) {
-    .Call(`_modsem_rep_dmvnorm`, x, expected, sigma, t)
+dmvnrm_arma_mc <- function(x, mean, sigma, log = TRUE, ncores = 1L) {
+    .Call(`_modsem_dmvnrm_arma_mc`, x, mean, sigma, log, ncores)
 }
 
-dmvnrm_arma_mc <- function(x, mean, sigma, logd = TRUE) {
-    .Call(`_modsem_dmvnrm_arma_mc`, x, mean, sigma, logd)
+rep_dmvnorm <- function(x, expected, sigma, t, ncores = 1L) {
+    .Call(`_modsem_rep_dmvnorm`, x, expected, sigma, t, ncores)
 }
 
 totalDmvnWeightedCpp <- function(mu, sigma, nu, S, tgamma, n, d) {
     .Call(`_modsem_totalDmvnWeightedCpp`, mu, sigma, nu, S, tgamma, n, d)
+}
+
+dmvnfast <- function(X, mu, sigma, log, ncores, isChol) {
+    .Call(`_modsem_dmvnfast`, X, mu, sigma, log, ncores, isChol)
+}
+
+tracePathsNumericCpp <- function(x, y, parTable, maxlen = 100L) {
+    .Call(`_modsem_tracePathsNumericCpp`, x, y, parTable, maxlen)
+}
+
+tracePathsCharacterCpp <- function(x, y, parTable, paramCol = "mod", maxlen = 100L) {
+    .Call(`_modsem_tracePathsCharacterCpp`, x, y, parTable, paramCol, maxlen)
 }
 

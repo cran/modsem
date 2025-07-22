@@ -1,12 +1,14 @@
 ## emLms with optional EMA (Quasi-Newton + Fisher Scoring) acceleration Simplified and cleaned logic: hybrid switching based on gradient norm and relative ΔLL.
 
-# 1. Helper: compute observed-data gradient
-computeGradient <- function(theta, model, data, P, epsilon) {
-  gradientLogLikLms(theta = theta, model = model, P = P, sign = -1,
-                    data = data, epsilon = epsilon)
+
+# Compute complete-data gradient
+computeGradient <- function(theta, model, P, epsilon) {
+  gradientCompLogLikLms(theta = theta, model = model, P = P, sign = -1,
+                    epsilon = epsilon)
 }
 
-# 2. L-BFGS two-loop recursion to approximate H * gradient
+
+# L-BFGS two-loop recursion to approximate H * gradient
 lbfgs_two_loop <- function(grad, s_list, g_list) {
   q <- grad; m <- length(s_list)
   alpha <- numeric(m);
@@ -30,30 +32,30 @@ lbfgs_two_loop <- function(grad, s_list, g_list) {
   r
 }
 
-# 3. Compute complete-data Fisher information via inverse Hessian
-# (requires fdHESS or numDeriv)
+
+# Compute complete-data Fisher information via inverse Hessian
 computeFullIcom <- function(theta, model, data, P) {
-  fLogLik <- function(par) logLikLms(theta = par, model = model, P = P, data = data)
-  H <- fdHESS(pars = theta, fun = fLogLik)
-  I_obs <- H
-  diag(I_obs) <- diag(I_obs) + 1e-8  # ensure invertibility
-  I_obs
+  # fLogLik <- function(par) compLogLikLms(theta = par, model = model, P = P)
+  # Ic <- fdHESS(pars = theta, fun = fLogLik)
+
+  Ic <- hessianCompLogLikLms(theta = theta, model = model, P = P, sign = -1)
+  diag(Ic) <- diag(Ic) + 1e-8  # ensure invertibility
+  Ic
 }
 
 
 updateStatusLog <- function(iterations, mode, logLikNew, deltaLL, relDeltaLL, verbose = FALSE) {
   if (verbose) {
     clearConsoleLine()
-    cat(sprintf("\rIter=%d Mode=%s LogLik=%.2f \u0394LL=%.2g rel\u0394LL=%.2g",
-                iterations, mode, logLikNew, deltaLL, relDeltaLL))
+    printf("\rIter=%d Mode=%s LogLik=%.2f \u0394LL=%.2g rel\u0394LL=%.2g", 
+           iterations, mode, logLikNew, deltaLL, relDeltaLL)
   }
 }
 
 
-# 5. emLms function
 emLms <- function(model,
                   algorithm = c("EMA", "EM"),    # "EM" or "EMA"
-                  em.control = list(),              # overrides for tau thresholds
+                  em.control = list(),           # overrides for tau thresholds
                   verbose = FALSE,
                   convergence.abs = 1e-4,
                   convergence.rel = 1e-10,
@@ -71,6 +73,7 @@ emLms <- function(model,
                   R.max = 1e6,
                   adaptive.quad = FALSE,
                   quad.range = -Inf,
+                  adaptive.quad.tol = 1e-12,
                   ...) {
   algorithm <- toupper(match.arg(algorithm))
   data <- model$data
@@ -79,8 +82,8 @@ emLms <- function(model,
   # Default thresholds (can be overridden via em.control)
   tau  <- convergence.rel
   tau1 <- if (is.null(em.control$tau1)) tau*1e6 else em.control$tau1 # EM->QN if relDeltaLL < tau1
-  tau2 <- if (is.null(em.control$tau2)) tau*1e2 else em.control$tau2 # QN->FS if relDeltaLL < tau2
-  tau3 <- if (is.null(em.control$tau3)) tau*1e1 else em.control$tau3 # FS->stop if relDeltaLL < tau3
+  tau2 <- if (is.null(em.control$tau2)) tau*1e1 else em.control$tau2 # QN->FS if relDeltaLL < tau2
+  tau3 <- if (is.null(em.control$tau3)) tau*2   else em.control$tau3 # FS->stop if relDeltaLL < tau3
 
   # Initialization
   logLikNew <- -Inf
@@ -103,6 +106,8 @@ emLms <- function(model,
   iterations <- 0
   run <- TRUE
 
+  testSimpleGradient <- !model$gradientStruct$hasCovModel
+
   while (run) {
     # New iteration
     iterations <- iterations + 1
@@ -112,7 +117,20 @@ emLms <- function(model,
 
     # E-step
     P <- estepLms(model = model, theta = thetaOld, data = data, 
-                  lastQuad = lastQuad, recalcQuad = recalcQuad, ...)
+                  lastQuad = lastQuad, recalcQuad = recalcQuad, 
+                  adaptive.quad.tol = adaptive.quad.tol, ...)
+
+    if (testSimpleGradient) {
+      tryCatch({
+        gradientCompLogLikLms(theta = thetaNew, model = model, P = P)
+      }, error = \(e) {
+        warning2("Optimized computation of gradient failed! Attempting to switch gradient type!")
+        model$gradientStruct$hasCovModel <<- TRUE
+        model$gradientStruct$isNonLinear <<- TRUE
+      })
+
+      testSimpleGradient <- FALSE
+    }
 
     # Update Quadrature Info
     lastQuad <- P$quad
@@ -121,7 +139,7 @@ emLms <- function(model,
     logLikNew  <- P$obsLL
     logLiks    <- c(logLiks, logLikNew)
     deltaLL    <- logLikNew - logLikOld
-    relDeltaLL <- abs(deltaLL / logLikNew)
+    relDeltaLL <- ifelse(is.finite(deltaLL), deltaLL / abs(logLikOld), Inf)
 
     updateStatusLog(iterations, mode, logLikNew, deltaLL, relDeltaLL, verbose)
 
@@ -138,20 +156,27 @@ emLms <- function(model,
     if (algorithm == "EMA") {
       previousMode <- mode
 
-      if      (mode == "EM" && abs(relDeltaLL) < tau1) mode <- "QN"
-      else if (mode == "QN" && abs(relDeltaLL) < tau2) mode <- "FS"
-      else if (mode == "FS" && abs(relDeltaLL) < tau3) run <- FALSE
+      dl <- abs(relDeltaLL)
+      mode <- switch(mode,
+        EM = if (dl < tau1) "QN",
+        QN = if (dl < tau2) "FS"   else if (dl >= tau1) "EM",
+        FS = if (dl < tau3) "STOP" else if (dl >= tau2) "QN",
+        NULL
+      )
+      mode <- ifelse(is.null(mode), yes = previousMode, no = mode)
 
-      if (mode != previousMode) { # Log mode change if verbose
+      if (mode == "STOP") {
+        run <- FALSE
+        break
+      } else if (mode != previousMode) { # Log mode change if verbose
         updateStatusLog(iterations, mode, logLikNew, deltaLL, relDeltaLL, verbose)
       }
     }
 
-
     if (algorithm != "EM" && mode != "EM") {
       # EMA: QN or FS update attempt
       grad <- computeGradient(theta = thetaOld, model = model, 
-                              data = data, P = P, epsilon = epsilon)
+                              P = P, epsilon = epsilon)
 
       if (mode == "QN") {
         if (length(qn_env$s_list)) {
@@ -159,25 +184,21 @@ emLms <- function(model,
         } else direction <- -grad
 
       } else if (mode == "FS") {
-        I_obs     <- computeFullIcom(theta = thetaOld, model = model, 
-                                     data = data, P = P)
-        direction <- tryCatch(solve(I_obs, grad), error = function(e) NULL)
-
+        Ic     <- computeFullIcom(theta = thetaOld, model = model, P = P)
+        direction <- -tryCatch(solve(Ic, grad), error = function(e) NULL)
       }
 
       # Line search if a direction is available
       if (!is.null(direction)) {
         alpha     <- 1 
         success   <- FALSE
-        refLogLik <- logLikLms(theta = thetaOld, model = model, P = P, 
-                               data = data, sign = 1)
+        refLogLik <- compLogLikLms(theta = thetaOld, model = model, P = P, sign = 1)
 
         while (alpha > 1e-5) {
           thetaTrial  <- thetaOld + alpha * direction
 
           logLikTrial <- suppressWarnings({
-            logLikLms(theta = thetaTrial, model = model, P = P,
-                      data = data, sign = 1)
+            compLogLikLms(theta = thetaTrial, model = model, P = P, sign = 1)
           })
 
           if (!is.na(logLikTrial) && logLikTrial >= refLogLik) { 
@@ -194,7 +215,7 @@ emLms <- function(model,
 
           if (mode == "QN") {
             gradNew <- computeGradient(theta = thetaNew, model = model, 
-                                       data = data, P = P, epsilon = epsilon)
+                                       P = P, epsilon = epsilon)
 
             s_vec <- thetaNew - thetaOld
             y_vec <- gradNew - grad
@@ -216,7 +237,7 @@ emLms <- function(model,
     
     if (algorithm == "EM" || mode == "EM") {
       # Plain EM M-step
-      mstep <- mstepLms(model = model, P = P, data = data, theta = thetaOld,
+      mstep <- mstepLms(model = model, P = P, theta = thetaOld,
                         max.step = max.step, epsilon = epsilon,
                         optimizer = optimizer, control = control, ...)
       thetaNew <- mstep$par
@@ -231,11 +252,12 @@ emLms <- function(model,
 
   # Final E- and M-step for output
   P <- estepLms(model = model, theta = thetaNew, data = data, 
-                lastQuad = lastQuad, recalcQuad = FALSE, ...)
-  final <- mstepLms(model = model, P = P, data = data,
-                    theta = thetaNew, max.step = max.step,
-                    epsilon = epsilon, optimizer = optimizer,
-                    verbose = verbose, control = control, ...)
+                lastQuad = lastQuad, recalcQuad = FALSE, 
+                adaptive.quad.tol = adaptive.quad.tol, ...) # adaptive.quad.tol doesn't matter (atm)
+  final <- mstepLms(model = model, P = P, theta = thetaNew, 
+                    max.step = max.step, epsilon = epsilon, 
+                    optimizer = optimizer, verbose = verbose,
+                    control = control, ...)
 
   coefficients <- final$par
   lavCoefs     <- getLavCoefs(model = model, theta = coefficients, method = "lms")
@@ -245,6 +267,7 @@ emLms <- function(model,
   emptyModel <- getEmptyModel(parTable = model$parTable,
                               cov.syntax = model$cov.syntax,
                               parTableCovModel = model$covModel$parTable,
+                              mean.observed = model$info$mean.observed,
                               method = "lms")
   finalModel$matricesNA <- emptyModel$matrices
   finalModel$covModelNA <- emptyModel$covModel
@@ -257,15 +280,16 @@ emLms <- function(model,
                     EFIM.parametric = EFIM.parametric, verbose = verbose,
                     FIM = FIM, robust.se = robust.se, epsilon = epsilon,
                     R.max = R.max, NA__ = -999, P = P)
-  SE <- calcSE_da(calc.se = calc.se, FIM$vcov, rawLabels = FIM$raw.labels,
+  SE <- calcSE_da(calc.se = calc.se, FIM$vcov.all, rawLabels = FIM$raw.labels,
                   NA__ = -999)
+
   modelSE <- getSE_Model(model, se = SE, method = "lms",
                          n.additions = FIM$n.additions)
   finalModel$matricesSE <- modelSE$matrices
   finalModel$covModelSE <- modelSE$covModel
 
-  parTable <- modelToParTable(finalModel, coefs = lavCoefs,
-                              se = SE, method = "lms")
+  parTable <- modelToParTable(finalModel, coefs = lavCoefs$all,
+                              se = SE, method = "lms", calc.se = calc.se)
   parTable$z.value  <- parTable$est / parTable$std.error
   parTable$p.value  <- 2 * stats::pnorm(-abs(parTable$z.value))
   parTable$ci.lower <- parTable$est - CI_WIDTH * parTable$std.error
@@ -274,24 +298,26 @@ emLms <- function(model,
   convergence_flag <- iterations < max.iter
 
   out <- list(
-    model         = finalModel,
-    start.model   = model,
-    method        = "lms",
-    optimizer     = paste(algorithm, optimizer, sep = "-"),
-    data          = data,
-    theta         = coefficients,
-    coefs         = lavCoefs,
-    parTable      = parTable,
+    model            = finalModel,
+    start.model      = model,
+    method           = "lms",
+    optimizer        = paste(algorithm, optimizer, sep = "-"),
+    data             = data,
+    theta            = coefficients,
+    coefs.all        = lavCoefs$all,
+    coefs.free       = lavCoefs$free,
+    parTable         = modsemParTable(parTable),
     originalParTable = model$parTable,
-    logLik        = -final$objective,
-    iterations    = iterations,
-    convergence   = convergence_flag,
-    type.se       = typeSE,
-    info.quad     = getInfoQuad(model$quad),
-    type.estimates = "unstandardized",
-    FIM           = FIM$FIM,
-    vcov          = FIM$vcov,
-    information   = FIM$type
+    logLik           = P$obsLL,
+    iterations       = iterations,
+    convergence      = convergence_flag,
+    type.se          = typeSE,
+    info.quad        = getInfoQuad(model$quad),
+    type.estimates   = "unstandardized",
+    FIM              = FIM$FIM,
+    vcov.all         = FIM$vcov.all,
+    vcov.free        = FIM$vcov.free,
+    information      = FIM$type
   )
   out
 }

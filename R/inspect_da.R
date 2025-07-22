@@ -1,59 +1,131 @@
-inspectDA_Matrices <- c("lambda", "tau", "theta", "gamma_xi",
-                        "gamma_eta", "omega_xi_xi",
-                        "omega_eta_xi", "phi", "psi", "alpha")
+inspectDA_Matrices <- c("lambda", "tau", "theta", "gamma.xi",
+                        "gamma.eta", "omega.xi.xi",
+                        "omega.eta.xi", "phi", "psi", "alpha", "beta0")
 
-inspectDA_Optim <- c("vcov", "FIM", "data", "coefficients",
+
+inspectDA_Optim <- c("coefficients.free", "vcov.free", "information", 
                      "loglik", "iterations", "convergence")
 
+
 modsem_inspect_da <- function(model, what = "default") {
-  matrices <- model$model$matrices
-  matricesCovModel <- model$model$covModel$matrices
+  stopif(!length(what), "`what` is of length zero!")
+
+  matrices          <- model$model$matrices
+  matricesCovModel  <- model$model$covModel$matrices
+  expected.matrices <- model$expected.matrices
+
+
+  lambda       <- diagPartitionedMat(matrices$lambdaX,
+                                     matrices$lambdaY)
+  theta        <- diagPartitionedMat(matrices$thetaDelta,
+                                     matrices$thetaEpsilon)
+  gamma.xi     <- diagPartitionedMat(matrices$gammaXi,
+                                     matricesCovModel$gammaXi)
+  gamma.eta    <- diagPartitionedMat(matrices$gammaEta,
+                                     matricesCovModel$gammaEta)
+  omega.xi.xi  <- diagPartitionedMat(matrices$omegaXiXi,
+                                     matricesCovModel$omegaXiXi)
+  omega.eta.xi <- diagPartitionedMat(matrices$omegaEtaXi,
+                                     matricesCovModel$omegaEtaXi)
+  phi          <- diagPartitionedMat(matrices$phi,
+                                     matricesCovModel$phi)
+  psi          <- diagPartitionedMat(matrices$psi,
+                                     matricesCovModel$psi)
+  
+  tau          <- rbind(matrices$tauX, matrices$tauY)
+  alpha        <- matrices$alpha
+  beta0        <- matrices$beta0
+  
+  colnames(tau) <- colnames(alpha) <- colnames(beta0) <- "~1"
+
+  cov.ov  <- expected.matrices$sigma.ov
+  cov.lv  <- expected.matrices$sigma.lv
+  cov.all <- expected.matrices$sigma.all
+
+  cor.ov  <- cov2cor(cov.ov)
+  cor.lv  <- cov2cor(cov.lv)
+  cor.all <- cov2cor(cov.all)
+  
+
   info <- list(N                 = NROW(model$data),
-               vcov              = model$vcov,
-               FIM               = model$FIM,
+               vcov.all          = modsemMatrix(model$vcov.all, symmetric = TRUE),
+               vcov.free         = modsemMatrix(model$vcov.free, symmetric = TRUE),
+               information       = modsemMatrix(model$FIM, symmetric = TRUE),
                data              = model$data,
-               all.coefficients  = model$coefs,
-               free.coefficients = model$theta,
-               partable          = model$parTable,
-               originalpartable  = model$originalParTable,
+               coefficients.all  = modsemVector(model$coefs.all),
+               coefficients.free = modsemVector(model$coefs.free),
+               partable          = modsemParTable(model$parTable),
+               partable.input    = model$originalParTable,
                loglik            = model$logLik,
-               AIC               = model$AIC,
                iterations        = model$iterations,
                convergence       = model$convergence,
 
-               lambda       = diagPartitionedMat(matrices$lambdaX,
-                                                 matrices$lambdaY),
-               tau          = diagPartitionedMat(matrices$tauX,
-                                                 matrices$tauY),
-               theta        = diagPartitionedMat(matrices$thetaDelta,
-                                                 matrices$thetaEpsilon),
-               gamma_xi     = diagPartitionedMat(matrices$gammaXi,
-                                                 matricesCovModel$gammaXi),
-               gamma_eta    = diagPartitionedMat(matrices$gammaEta,
-                                                 matricesCovModel$gammaEta),
-               omega_xi_xi  = diagPartitionedMat(matrices$omegaXiXi,
-                                                 matricesCovModel$omegaXiXi),
-               omega_eta_xi = diagPartitionedMat(matrices$omegaEtaXi,
-                                                 matricesCovModel$omegaEtaXi),
+               lambda       = modsemMatrix(lambda), 
+               tau          = modsemMatrix(tau), 
+               theta        = modsemMatrix(theta, symmetric = TRUE),
+               gamma.xi     = modsemMatrix(gamma.xi), 
+               gamma.eta    = modsemMatrix(gamma.eta), 
+               omega.xi.xi  = modsemMatrix(omega.xi.xi), 
+               omega.eta.xi = modsemMatrix(omega.eta.xi), 
 
-               phi   = diagPartitionedMat(matrices$phi,
-                                          matricesCovModel$phi),
-               psi   = diagPartitionedMat(matrices$psi,
-                                          matricesCovModel$psi),
-               alpha = matrices$alpha)
+               phi   = modsemMatrix(phi, symmetric = TRUE), 
+               psi   = modsemMatrix(psi, symmetric = TRUE), 
 
-  switch(what,
-         default = info[names(info) != "data"],
-         all = info,
-         matrices = info[inspectDA_Matrices],
-         optim = info[inspectDA_Optim],
-         fit = {
-           h0 <- estimate_h0(model, calc.se = FALSE)
-           list(
-              fit.h0 = fit_modsem_da(h0, chisq = TRUE),
-              fit.h1 = fit_modsem_da(model, chisq = FALSE),
-              comparative.fit = compare_fit(est_h1 = model, est_h0 = h0)
-           )
-         },
-         info[what])
+               alpha = modsemMatrix(alpha),
+               beta0 = modsemMatrix(beta0),
+
+               cov.ov  = modsemMatrix(cov.ov, symmetric = TRUE),
+               cov.lv  = modsemMatrix(cov.lv, symmetric = TRUE),
+               cov.all = modsemMatrix(cov.all, symmetric = TRUE),
+
+               cor.ov  = modsemMatrix(cor.ov, symmetric = TRUE),
+               cor.lv  = modsemMatrix(cor.lv, symmetric = TRUE),
+               cor.all = modsemMatrix(cor.all, symmetric = TRUE),
+
+               mean.lv  = modsemMatrix(expected.matrices$mu.lv),
+               mean.ov  = modsemMatrix(expected.matrices$mu.ov),
+               mean.all = modsemMatrix(expected.matrices$mu.all),
+
+               r2.all  = modsemVector(expected.matrices$r2.all),
+               r2.lv   = modsemVector(expected.matrices$r2.lv),
+               r2.ov   = modsemVector(expected.matrices$r2.ov),
+
+               res.all = modsemVector(expected.matrices$res.all),
+               res.lv  = modsemVector(expected.matrices$res.lv),
+               res.ov  = modsemVector(expected.matrices$res.ov)
+  )
+
+  FIT <- \() {
+    h0 <- estimate_h0(model, calc.se = FALSE)
+    list(
+      fit.h0 = fit_modsem_da(h0, chisq = TRUE),
+      fit.h1 = fit_modsem_da(model, chisq = FALSE),
+      comparative.fit = compare_fit(est_h1 = model, est_h0 = h0)
+    )
+  }
+
+  if (length(what) > 1) {
+    fields <- info[what]
+
+  } else {
+    fields <- switch(
+      EXPR      = what,
+      coef.all  = info[c("vcov.all", "coefficients.all")],
+      coef      = info[c("vcov.all", "coefficients.all")],
+      coef.free = info[c("vcov.free", "coefficients.free")],
+      default   = info[names(info) != "data"],
+      all       = info,
+      matrices  = info[inspectDA_Matrices],
+      optim     = info[inspectDA_Optim],
+      fit       = FIT(),
+      info[[what]]
+    )
+  }
+
+  nullvalues <- vapply(fields, FUN.VALUE = logical(1L), FUN = is.null)
+
+  warnif(any(nullvalues), "Some fields in `modsem_inspect()` could not be retrieved!",
+         immediate. = FALSE)
+
+  fields 
 }

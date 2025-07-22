@@ -4,7 +4,13 @@
 \alias{get_pi_syntax}
 \title{Get \code{lavaan} syntax for product indicator approaches}
 \usage{
-get_pi_syntax(model.syntax, method = "dblcent", match = FALSE, ...)
+get_pi_syntax(
+  model.syntax,
+  method = "dblcent",
+  match = FALSE,
+  data = NULL,
+  ...
+)
 }
 \arguments{
 \item{model.syntax}{\code{lavaan} syntax}
@@ -18,6 +24,8 @@ get_pi_syntax(model.syntax, method = "dblcent", match = FALSE, ...)
 
 \item{match}{should the product indicators be created by using the match-strategy}
 
+\item{data}{Optional. Dataset to use, usually not relevant.}
+
 \item{...}{arguments passed to other functions (e.g., \link{modsem_pi})}
 }
 \value{
@@ -25,7 +33,7 @@ get_pi_syntax(model.syntax, method = "dblcent", match = FALSE, ...)
 }
 \description{
 \code{get_pi_syntax()} is a function for creating the \code{lavaan} syntax used for estimating
-latent interaction models using one of the product indicators in \code{lavaan}.
+latent interaction models using one of the product indicator approaches.
 }
 \examples{
 library(modsem)
@@ -42,4 +50,5 @@ m1 <- '
 syntax <- get_pi_syntax(m1)
 data <- get_pi_data(m1, oneInt)
 est <- sem(syntax, data)
+summary(est)
 }

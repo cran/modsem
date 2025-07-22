@@ -6,6 +6,10 @@ OP_REPLACEMENTS <- c("~~" = "___COVARIANCE___",
 OP_REPLACEMENTS_INV <- structure(names(OP_REPLACEMENTS), names = OP_REPLACEMENTS)
 
 
+CONSTRAINT_OPS <- c("==", ">", "<", ":=")
+BOUNDUARY_OPS <- c(">", "<")
+
+
 getFreeParams <- function(model) {
   model$freeParams
 }
@@ -93,11 +97,30 @@ totalLogDvmnW <- function(X, mu, sigma, nu, S, tgamma, n, d) {
 
 
 diagPartitionedMat <- function(X, Y) {
-  if (is.null(X)) return(Y) else if (is.null(Y)) return(X)
+  isNULL <- \(x) is.null(x) || length(x) == 0
+
+  if (isNULL(X)) return(Y) else if (isNULL(Y)) return(X)
+
+  if (is.null(dimnames(X)) && is.null(dimnames(Y))) {
+    rownames <- NULL
+    colnames <- NULL
+
+  } else if (is.null(dimnames(X))) {
+    rownames <- c(rep("", NROW(X)), rownames(Y))
+    colnames <- c(rep("", NCOL(X)), colnames(Y))
+
+  } else if (is.null(dimnames(Y))) {
+    rownames <- c(rownames(X), rep("", NROW(Y)))
+    colnames <- c(colnames(X), rep("", NCOL(Y)))
+
+  } else {
+    rownames <- c(rownames(X), rownames(Y))
+    colnames <- c(colnames(X), colnames(Y))
+  }
+
   structure(rbind(cbind(X, matrix(0, nrow = NROW(X), ncol = NCOL(Y))),
-               cbind(matrix(0, nrow = NROW(Y), ncol = NCOL(X)), Y)),
-            dimnames = list(c(rownames(X), rownames(Y)),
-                            c(colnames(X), colnames(Y))))
+                  cbind(matrix(0, nrow = NROW(Y), ncol = NCOL(X)), Y)),
+            dimnames = list(rownames, colnames))
 }
 
 
@@ -137,7 +160,7 @@ sortData <- function(data, allIndsXis, allIndsEtas) {
   missing <- inds[!inds %in% ovs]
 
   stopif(!all(inds %in% ovs), "Missing observed variables in data:\n  ",
-         missing)
+         paste(missing, collapse = ", "))
 
   data[c(allIndsXis, allIndsEtas)]
 }
@@ -166,18 +189,35 @@ castDataNumericMatrix <- function(data) {
 }
 
 
-filterData <- function(data) {
+handleMissingData <- function(data, impute.na = FALSE) {
   completeCases <- stats::complete.cases(data)
-  if (any(!completeCases)) warning2("Removing missing values case-wise.")
-  data[completeCases, ]
+  anyMissing    <- any(!completeCases)
+
+  if (!anyMissing) return(data)
+
+  if (!impute.na) {
+    warning2("Removing missing values case-wise!\n",
+             "Consider using `impute.na = TRUE`, or the `modsem_mimpute()` function!\n")
+
+    return(data[completeCases, ])
+
+  } else {
+    message("Imputing missing values. Consider using the `modsem_mimpute()` function!")
+
+    imp  <- Amelia::amelia(data, m = 1, p2s = 0)
+    imp1 <- as.matrix(as.data.frame(imp$imputations[[1]]))
+
+    return(imp1)
+  }
 }
 
 
-cleanAndSortData <- function(data, allIndsXis, allIndsEtas) {
+cleanAndSortData <- function(data, allIndsXis, allIndsEtas, impute.na = FALSE) {
   if (is.null(data)) return(NULL)
   # sort Data before optimizing starting params
   sortData(data, allIndsXis,  allIndsEtas) |>
-    castDataNumericMatrix() |> filterData()
+    castDataNumericMatrix() |> 
+    handleMissingData(impute.na = impute.na)
 }
 
 
@@ -213,20 +253,25 @@ getLabelIntTerms <- function(varsInInt, eta, intTerms) {
 
 
 getEmptyModel <- function(parTable, cov.syntax, parTableCovModel,
-                          method = "lms") {
+                          mean.observed = TRUE, method = "lms") {
   parTable$mod <- ""
   parTable <- removeConstraintExpressions(parTable)
 
-  if (!is.null(parTableCovModel)) {
+  if (NROW(parTableCovModel)) {
     parTableCovModel$mod <- ""
     parTableCovModel <- removeConstraintExpressions(parTableCovModel)
   }
 
-  specifyModelDA(parTable = parTable, method = method,
-                 cov.syntax = cov.syntax,
-                 parTableCovModel = parTableCovModel,
-                 auto.constraints = FALSE, createTheta = FALSE,
-                 checkModel = FALSE)
+  specifyModelDA(
+    parTable         = parTable, method = method,
+    cov.syntax       = cov.syntax,
+    parTableCovModel = parTableCovModel,
+    mean.observed    = mean.observed,
+    auto.fix.first   = FALSE,
+    auto.fix.single  = FALSE, 
+    createTheta      = FALSE,
+    checkModel       = FALSE
+  )
 }
 
 
@@ -375,11 +420,30 @@ nNegativeLast <- function(x, n = 10) {
 }
 
 
-getDegreesOfFreedom <- function(m, coef) {
-  t <- (m * (m + 1)) / 2
-  df <- t - length(coef)
-  nMeans <- sum(grepl("tau|alpha", names(coef)))
-  df + nMeans
+getDegreesOfFreedom <- function(p, coef, mean.structure = TRUE) {
+  fm <- \(c) (p * (p + c)) / 2 
+
+  # c = 1 for a model without a meanstructure
+  # c = 3 for a model with meanstructure
+  # Without meanstructure:
+  #   m = p * (p + 1) / 2
+  # With meanstructure 
+  #   m = p * (p + 1) / 2 + p
+  #     = (p * (p + 1) + p) / 2
+  #     = p * (1 + p + 1 + 1) / 2
+  #     = p * (p + 3) / 2
+
+  m <- ifelse(mean.structure, yes = fm(3), no = fm(1))
+  m - length(coef)
+}
+
+
+nFreeInterceptsDA <- function(model) {
+  parTable   <- getMissingLabels(parameter_estimates(model))
+  intercepts <- parTable$label[parTable$op == "~1"]
+  coefs <- coef(model, type = "free")
+
+  sum(intercepts %in% names(coefs))
 }
 
 
@@ -434,36 +498,331 @@ getLabelVarXZ <- function(intTerm) {
 }
 
 
-var_interactions_COEFS <- function(parTable, COEFS) {
+intTermsAffectLV <- function(lV, parTable, etas = NULL) {
+  if (grepl(":", lV)) return(TRUE)
+  else if (!lV %in% parTable[parTable$op == "~", "lhs"]) return(FALSE)
+
+  gamma <- parTable[parTable$lhs == lV & parTable$op == "~", , drop = FALSE]
+
+  if (NROW(gamma) == 0) return(FALSE)
+
+  for (i in seq_len(NROW(gamma))) {
+    rhs <- gamma$rhs[i]
+    if (intTermsAffectLV(rhs, parTable)) return(TRUE)
+  }
+
+  FALSE
+}
+
+
+getLambdaParTable <- function(parTable, rows = NULL, cols = NULL, fill.missing = FALSE) {
+  lVs <- getLVs(parTable)
+
+  indsLVs <- getIndsLVs(parTable, lVs = lVs)
+  allInds <- unique(unlist(indsLVs))
+
+  lambda <- matrix(0, nrow = length(allInds), ncol = length(lVs),
+                   dimnames = list(allInds, lVs))
+  for (lV in lVs) for (ind in indsLVs[[lV]]) {
+    lambda[ind, lV] <- parTable[parTable$lhs == lV & parTable$rhs == ind, "est"]
+  }
+
+  if (is.null(rows)) rows <- rownames(lambda)
+  if (is.null(cols)) cols <- colnames(lambda)
+
+  if (fill.missing) {
+    missingCols <- setdiff(cols, colnames(lambda))
+    missingRows <- setdiff(rows, rownames(lambda))
+  
+    if (length(missingCols)) {
+      newCols <- matrix(0, nrow = NROW(lambda), ncol = length(missingCols),
+                        dimnames = list(rownames(lambda), missingCols))
+      lambda <- cbind(lambda, newCols)
+    }
+  
+    if (length(missingRows) && fill.missing) {
+      newRows <- matrix(0, nrow = length(missingRows), ncol = NCOL(lambda),
+                        dimnames = list(missingRows, colnames(lambda)))
+      lambda <- rbind(lambda, newRows)
+    }
+  }
+
+  lambda <- lambda[rows, cols, drop = FALSE]
+}
+
+
+getLevelsParTable <- function(parTable) {
+  parTable$lhs <- stringr::str_remove_all(parTable$lhs, pattern = ":")
+  parTable$rhs <- stringr::str_remove_all(parTable$rhs, pattern = ":")
+
+  xis <- getXis(parTable, isLV = FALSE)
+  etas <- getEtas(parTable, isLV = FALSE)
+  vars <- c(xis, etas)
+
+  MAPPED <- c()
+
+  getLevelVarParTable <- function(x) {
+    if      (x %in% names(MAPPED)) return(MAPPED[[x]])
+    else if (x %in% xis) {
+      MAPPED[[x]] <<- 1L
+      return(MAPPED[[x]])
+    }
+
+    if (!x %in% etas) stop("Unexpected type of variable: ", x)
+
+    predictors <- parTable[parTable$op == "~" & parTable$lhs == x, , drop = FALSE]
+
+    if (!NROW(predictors)) {
+      MAPPED[[x]] <<- 1L
+      return(MAPPED[[x]])
+    }
+
+    maxlevel <- 0L
+    for (i in seq_len(NROW(predictors))) {
+      predictor <- predictors$rhs[i]
+      predlevel <- getLevelVarParTable(predictor)
+
+      if (predlevel > maxlevel) maxlevel <- predlevel
+    }
+
+    MAPPED[[x]] <<- maxlevel + 1L
+    MAPPED[[x]]
+  }
+
+  for (var in vars) {
+    if (var %in% names(MAPPED)) next
+    getLevelVarParTable(x = var)
+  }
+
+  MAPPED
+}
+
+
+isPureEta <- function(eta, parTable) {
+  predictors <- unique(parTable[parTable$op == "~", "rhs"])
+  !eta %in% predictors
+}
+
+
+calcExpectedMatricesDA <- function(parTable, xis = NULL, etas = NULL, intTerms = NULL) {
   parTable <- removeInteractionVariances(parTable)
-  intTerms <- unique(parTable[grepl(":", parTable$rhs) &
-                     parTable$op == "~", "rhs"])
-  
-  for (intTerm in intTerms) { # remove interaction variances from COEFS
-    labelVarXZ <- getLabelVarXZ(intTerm)
-    COEFS[[labelVarXZ]] <- NULL
+  parTable <- centerInteractions(parTable, center.means = FALSE) |> 
+    var_interactions(ignore.means = TRUE) |> 
+    meanInteractions(ignore.means = TRUE)
+
+  if (is.null(intTerms))
+    intTerms <- unique(parTable[grepl(":", parTable$rhs), "rhs"])
+  if (is.null(etas))
+    etas <- getEtas(parTable, isLV = TRUE)
+  if (is.null(xis))
+    xis  <- getXis(parTable, etas = etas, isLV = TRUE)
+
+  xis <- unique(c(xis, intTerms)) # treat int-terms as normal xis
+  lVs  <- c(xis, etas)
+
+  indsLV <- getIndsLVs(parTable, lVs = lVs)
+  inds <- unique(unlist(indsLV))
+
+  # Create lambda
+  lambda <- getLambdaParTable(parTable, rows = inds, cols = lVs, fill.missing = TRUE)
+
+  # Create Gamma
+  gammaXi <- matrix(0, nrow = length(etas), ncol = length(xis),
+                    dimnames = list(etas, xis))
+  gammaEta <- matrix(0, nrow = length(etas), ncol = length(etas),
+                     dimnames = list(etas, etas))
+
+  for (eta in etas) {
+    reg <- parTable[parTable$lhs == eta & parTable$op == "~", , drop = FALSE]
+
+    for (i in seq_len(NROW(reg))) {
+      predictor <- reg[i, "rhs"]
+      est       <- reg[i, "est"]
+      
+      if      (predictor %in% xis)  gammaXi[eta, predictor] <- est
+      else if (predictor %in% etas) gammaEta[eta, predictor] <- est                   
+      else warning("Unexpected type of predictor: ", predictor)
+    }
   }
 
-  for (intTerm in intTerms) {
-    XZ   <- stringr::str_split_fixed(intTerm, ":", 2)
-    X    <- XZ[[1]]
-    Z    <- XZ[[2]]
+  createCov <- function(vars) {
+    cov <- matrix(0, nrow = length(vars), ncol = length(vars),
+                  dimnames = list(vars, vars))
+    covRows <- parTable[parTable$op == "~~" & parTable$lhs %in% vars &
+                        parTable$rhs %in% vars, , drop = FALSE]
+    for (i in seq_len(NROW(covRows))) {
+      lhs <- covRows$lhs[i]
+      rhs <- covRows$rhs[i]
+      est <- covRows$est[i]
 
-    labelVarXZ <- getLabelVarXZ(intTerm)
-  
-    # since the interaction term has been standardized there is no need
-    # to worry about the means of X and Z, and hence the covariances between XZ~~X and XZ~~Z
-    eqVarX  <- getCovEqExpr(x=X, y=X, parTable=parTable)
-    eqVarZ  <- getCovEqExpr(x=Z, y=Z, parTable=parTable)
-    eqCovXZ <- getCovEqExpr(x=X, y=Z, parTable=parTable)
+      if (lhs %in% vars && rhs %in% vars) {
+        cov[lhs, rhs] <- cov[rhs, lhs] <- est
+      } else warning("Unexpected type of variable in covariance: ", lhs, " and ", rhs)
+    }
 
-    varX <- eval(eqVarX, envir = COEFS)
-    varZ <- eval(eqVarZ, envir = COEFS)
-    covXZ <- eval(eqCovXZ, envir = COEFS)
-
-    varXZ <- varX * varZ + covXZ ^ 2
-    COEFS[[labelVarXZ]] <- varXZ
+    cov
   }
 
-  COEFS
+  psi   <- createCov(etas)
+  phi   <- createCov(xis)
+  theta <- createCov(inds)
+
+  createBeta <- function(var) {
+    beta <- matrix(0, nrow = length(var), ncol = 1,
+                   dimnames = list(var, "~1"))
+
+    betaRows <- parTable[parTable$op == "~1" & parTable$lhs %in% var, , drop = FALSE]
+    for (i in seq_len(NROW(betaRows))) {
+      lhs <- betaRows$lhs[i]
+      est <- betaRows$est[i]
+
+      if (lhs %in% var) {
+        beta[lhs, "~1"] <- est
+      } else warning("Unexpected type of variable in beta: ", lhs)
+    }
+
+    beta
+  }
+
+  alpha <- createBeta(etas)
+  beta0 <- createBeta(xis)
+  tau   <- createBeta(inds)
+
+  # Sigma ----------------------------------------------------------------------
+  Binv <- solve(diag(nrow(gammaEta)) - gammaEta)
+  covEtaEta <- Binv %*% (gammaXi %*% phi %*% t(gammaXi) + psi) %*% t(Binv)
+  covEtaXi <- Binv %*% gammaXi %*% phi
+  sigma.lv <- rbind(cbind(phi, t(covEtaXi)),
+                    cbind(covEtaXi, covEtaEta))
+  sigma.ov <- lambda %*% sigma.lv %*% t(lambda) + theta
+  
+  # lower left corner cov-lv-ov
+  sigma.lv.ov <- lambda %*% sigma.lv
+  sigma.ov.lv <- t(sigma.lv.ov)
+
+  sigma.all <- rbind(cbind(sigma.lv, sigma.ov.lv),
+                     cbind(sigma.lv.ov, sigma.ov))
+
+  # Mu -------------------------------------------------------------------------
+  mu.eta <- Binv %*% (alpha + gammaXi %*% beta0)
+  mu.lv  <- rbind(beta0, mu.eta)
+  mu.ov  <- tau + lambda %*% mu.lv
+  mu.all <- rbind(mu.lv, mu.ov)
+
+  # Residuals and R^2 ----------------------------------------------------------
+  eta.all <- c(etas, inds)
+  var.eta.all <- diag(sigma.all[eta.all, eta.all, drop = FALSE])
+  res.eta.all <- c(diag(psi), diag(theta))
+
+  r2.all <- (var.eta.all - res.eta.all) / var.eta.all
+  r2.lv  <- r2.all[etas]
+  r2.ov  <- r2.all[inds]
+
+  res.all <- 1 - r2.all
+  res.lv  <- res.all[etas]
+  res.ov   <- res.all[inds]
+
+  list(
+    sigma.all = sigma.all, 
+    sigma.lv  = sigma.lv,
+    sigma.ov  = sigma.ov,
+    mu.all    = mu.all,
+    mu.lv     = mu.lv,
+    mu.ov     = mu.ov,
+    r2.all    = r2.all,
+    r2.lv     = r2.lv,
+    r2.ov     = r2.ov,
+    res.all   = res.all,
+    res.lv    = res.lv,
+    res.ov    = res.ov,
+    lambda    = lambda, 
+    gammaXi   = gammaXi, 
+    gammaEta  = gammaEta, 
+    psi       = psi, 
+    phi       = phi, 
+    theta     = theta
+  )
+}
+
+
+getInternalCoefsDA <- function(model) {
+  model$theta
+}
+
+
+getXisModelDA <- function(model) {
+  covModelEtas <- model$covModel$info$etas
+  allXis <- unique(c(model$info$xis, model$covModel$info$xis))
+  allXis[!allXis %in% covModelEtas]
+}
+
+
+getEtasModelDA <- function(model) {
+  unique(c(model$info$etas, model$covModel$info$etas))
+}
+
+
+splitParTableEtas <- function(parTable, parTableCov = NULL, splitEtas, allEtas,
+                              nonLinearEtas = NULL) {
+  if (!length(splitEtas) || !NROW(parTable))
+    return(list(parTable = parTable, parTableCov = parTableCov))
+
+  for (eta in splitEtas) {
+    isReg <- parTable$lhs == eta & parTable$op == "~"
+    isCov <- (parTable$lhs == eta | parTable$rhs == eta) & parTable$op == "~~"
+    isLinear <- !parTable$lhs %in% nonLinearEtas & 
+                !parTable$rhs %in% nonLinearEtas
+   
+    parTableEta <- parTable[isReg | isCov & isLinear, ]
+
+    vars <- unique(c(parTableEta$rhs, parTableEta$lhs))
+    downstreamEtas <- vars[vars != eta & vars %in% allEtas]
+   
+    parTable    <- parTable[!(isReg | isCov & isLinear), ]
+    parTableCov <- rbind(parTableCov, parTableEta)
+
+    split <- splitParTableEtas(parTable = parTable,
+                               parTableCov = parTableCov,
+                               splitEtas = downstreamEtas,
+                               allEtas = allEtas)
+
+    parTable    <- split$parTable
+    parTableCov <- split$parTableCov
+  }
+
+  list(parTable = parTable, parTableCov = parTableCov)
+}
+
+
+splitParTable <- function(parTable) {
+  intTerms <- getIntTerms(parTable)
+  empty <- list(parTable = parTable, parTableCov = NULL)
+  if (!length(intTerms))
+    return(empty)
+  
+  intVars  <- unique(unlist(stringr::str_split(intTerms, pattern = ":")))
+  etas    <- getEtas(parTable)
+
+  if (!length(intTerms))
+    return(empty)
+
+  isNonLinear <- vapply(
+    X = etas, 
+    FUN.VALUE = logical(1L),
+    FUN = intTermsAffectLV,
+    parTable = parTable
+  )
+
+  nonLinearEtas <- etas[isNonLinear]
+  linearEtas    <- etas[!isNonLinear]
+  etasCovModel  <- intVars[intVars %in% linearEtas]
+
+  if (!length(etasCovModel))
+    return(empty)
+
+  splitParTableEtas(
+    parTable = parTable, allEtas = etas, 
+    splitEtas = etasCovModel,
+    nonLinearEtas = nonLinearEtas
+  )
 }

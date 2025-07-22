@@ -7,7 +7,8 @@ specifyModelDA <- function(syntax = NULL,
                            double = FALSE,
                            parTable = NULL,
                            parTableCovModel = NULL,
-                           auto.constraints = TRUE,
+                           auto.fix.first = TRUE,
+                           auto.fix.single = TRUE,
                            createTheta = TRUE,
                            mean.observed = TRUE,
                            standardize.inp = FALSE,
@@ -15,9 +16,23 @@ specifyModelDA <- function(syntax = NULL,
                            checkModel = TRUE,
                            quad.range = Inf,
                            adaptive.quad = FALSE,
-                           adaptive.frequency = 3) {
+                           adaptive.frequency = 3,
+                           impute.na = FALSE,
+                           orthogonal.x = FALSE,
+                           orthogonal.y = FALSE,
+                           auto.split.syntax = FALSE) {
   if (!is.null(syntax)) parTable <- modsemify(syntax)
   stopif(is.null(parTable), "No parTable found")
+
+  if (auto.split.syntax && is.null(parTableCovModel) && is.null(cov.syntax)) {
+    split <- splitParTable(parTable)
+
+    parTable         <- split$parTable
+    parTableCovModel <- split$parTableCov
+
+    syntax     <- parTableToSyntax(parTable)
+    cov.syntax <- parTableToSyntax(parTableCovModel)
+  }
   
   checkParTableDA(parTable)
   # additions to lavaan-syntax for optimizer
@@ -52,11 +67,11 @@ specifyModelDA <- function(syntax = NULL,
   numAllIndsXis <- length(allIndsXis)
 
   # clean data
-  data <- cleanAndSortData(data, allIndsXis, allIndsEtas)
+  data <- cleanAndSortData(data, allIndsXis, allIndsEtas, impute.na = impute.na)
 
   # measurement model x
   listLambdaX <- constructLambda(xis, indsXis, parTable = parTable,
-                                 auto.constraints = auto.constraints)
+                                 auto.fix.first = auto.fix.first)
   lambdaX      <- listLambdaX$numeric
   labelLambdaX <- listLambdaX$label
 
@@ -68,13 +83,13 @@ specifyModelDA <- function(syntax = NULL,
                                         listTauX$syntaxAdditions)
 
   listThetaDelta <- constructTheta(xis, indsXis, parTable = parTable,
-                                   auto.constraints = auto.constraints)
+                                   auto.fix.single = auto.fix.single)
   thetaDelta      <- listThetaDelta$numeric
   thetaLabelDelta <- listThetaDelta$label
 
   # measurement model y
   listLambdaY <- constructLambda(etas, indsEtas, parTable = parTable,
-                                 auto.constraints = auto.constraints)
+                                 auto.fix.first = auto.fix.first)
   lambdaY      <- listLambdaY$numeric
   labelLambdaY <- listLambdaY$label
 
@@ -86,7 +101,7 @@ specifyModelDA <- function(syntax = NULL,
                                         listTauY$syntaxAdditions)
 
   listThetaEpsilon <- constructTheta(etas, indsEtas, parTable = parTable,
-                                     auto.constraints = auto.constraints)
+                                     auto.fix.single = auto.fix.single)
   thetaEpsilon      <- listThetaEpsilon$numeric
   thetaLabelEpsilon <- listThetaEpsilon$label
 
@@ -101,32 +116,30 @@ specifyModelDA <- function(syntax = NULL,
   labelGammaEta <- listGammaEta$label
 
   # covariance matrices
-  listPsi  <- constructPsi(etas, parTable = parTable)
+  listPsi  <- constructPsi(etas, parTable = parTable, orthogonal.y = orthogonal.y)
   psi      <- listPsi$numeric
   labelPsi <- listPsi$label
 
   listPhi <- constructPhi(xis, method = method, cov.syntax = cov.syntax,
-                          parTable = parTable)
+                          parTable = parTable, orthogonal.x = orthogonal.x)
   phi      <- listPhi$numeric
   labelPhi <- listPhi$label
 
   listA <- constructA(xis, method = method, cov.syntax = cov.syntax,
-                  parTable = parTable)
+                      parTable = parTable, orthogonal.x = orthogonal.x)
   A      <- listA$numeric
   labelA <- listA$label
 
   # mean etas
   listAlpha <- constructAlpha(etas, parTable = parTable,
-                              auto.constraints = auto.constraints,
-                              mean.observed = mean.observed)
-  alpha      <- listAlpha$numeric
+                              mean.observed = mean.observed) 
+  alpha      <- listAlpha$numeric                            
   labelAlpha <- listAlpha$label
 
   # mean xis
   listBeta0 <- constructAlpha(xis, parTable = parTable,
-                              auto.constraints = auto.constraints,
                               mean.observed = mean.observed)
-  beta0      <- listBeta0$numeric
+  beta0      <- listBeta0$numeric                   
   labelBeta0 <- listBeta0$label
 
   # quadratic terms
@@ -163,7 +176,8 @@ specifyModelDA <- function(syntax = NULL,
   subThetaEpsilon <- constructSubThetaEpsilon(indsEtas, thetaEpsilon,
                                               scalingInds, method = method)
 
-  covModel <- covModel(cov.syntax, method = method, parTable = parTableCovModel)
+  covModel <- covModel(cov.syntax, method = method, parTable = parTableCovModel,
+                       xis.main = xis, parTable.main = parTable)
 
   # list of matrices
   matrices <- list(
@@ -229,20 +243,22 @@ specifyModelDA <- function(syntax = NULL,
 
   model <- list(
     info = list(
-      N            = NROW(data),
-      xis          = xis,
-      etas         = etas,
-      numXis       = numXis,
-      numEtas      = numEtas,
-      indsXis      = indsXis,
-      indsEtas     = indsEtas,
-      allIndsXis   = allIndsXis,
-      allIndsEtas  = allIndsEtas,
-      varsInts     = varsInts,
-      latentEtas   = latentEtas,
-      scalingInds  = scalingInds,
-      kOmegaEta    = getK_NA(omegaEtaXi, labelOmegaEtaXi),
-      nonLinearXis = nonLinearXis,
+      N             = NROW(data),
+      ncol          = NCOL(data),
+      xis           = xis,
+      etas          = etas,
+      numXis        = numXis,
+      numEtas       = numEtas,
+      indsXis       = indsXis,
+      indsEtas      = indsEtas,
+      allIndsXis    = allIndsXis,
+      allIndsEtas   = allIndsEtas,
+      varsInts      = varsInts,
+      latentEtas    = latentEtas,
+      scalingInds   = scalingInds,
+      kOmegaEta     = getK_NA(omegaEtaXi, labelOmegaEtaXi),
+      nonLinearXis  = nonLinearXis,
+      mean.observed = mean.observed,
       lavOptimizerSyntaxAdditions = lavOptimizerSyntaxAdditions
     ),
 
@@ -257,23 +273,28 @@ specifyModelDA <- function(syntax = NULL,
   )
 
   model$constrExprs <- getConstrExprs(parTable, model$covModel$parTable)
-
   if (createTheta) {
     listTheta         <- createTheta(model)
     model             <- c(model, listTheta)
     model$freeParams  <- length(listTheta$theta)
-    model$info$bounds <- getParamBounds(model, varParams=listTheta$diagFreeParams)
+    model$info$bounds <- getParamBounds(model)
+    model$gradientStruct  <- getGradientStruct(model, theta = model$theta)
   }
 
   if (checkModel) 
-    checkModel(model = model, covModel = covModel, method = method)
+    preCheckModel(model = model, covModel = covModel, method = method)
 
   model
 }
 
 
 matrixToParTable <- function(matrixNA, matrixEst, matrixSE, matrixLabel,
-                             op = "=~", rowsLhs = TRUE) {
+                             op = "=~", rowsLhs = TRUE, symmetric = FALSE) {
+  if (symmetric) {
+    matrixNA[upper.tri(matrixNA)]       <- 0
+    matrixLabel[upper.tri(matrixLabel)] <- ""
+  }
+
   if (!rowsLhs) {
     matrixNA    <- t(matrixNA)
     matrixEst   <- t(matrixEst)
@@ -299,7 +320,7 @@ matrixToParTable <- function(matrixNA, matrixEst, matrixSE, matrixLabel,
 interceptsToParTable <- function(matrixNA, matrixEst, matrixSE, matrixLabel) {
   parTable <- matrixToParTable(matrixNA, matrixEst, matrixSE, matrixLabel,
                                op = "~1", rowsLhs = TRUE)
-  parTable$rhs <- ""
+  if (!is.null(parTable)) parTable$rhs <- ""
   parTable
 }
 
@@ -413,16 +434,16 @@ mainModelToParTable <- function(finalModel, method = "lms") {
                               matricesEst$thetaDelta,
                               matricesSE$thetaDelta,
                               matricesLabel$thetaDelta,
-                              op = "~~",
-                              rowsLhs = TRUE)
+                              op = "~~", rowsLhs = TRUE,
+                              symmetric = TRUE)
   parTable <- rbind(parTable, newRows)
 
   newRows <- matrixToParTable(matricesNA$thetaEpsilon,
                               matricesEst$thetaEpsilon,
                               matricesSE$thetaEpsilon,
                               matricesLabel$thetaEpsilon,
-                              op = "~~",
-                              rowsLhs = TRUE)
+                              op = "~~", rowsLhs = TRUE,
+                              symmetric = TRUE)
   parTable <- rbind(parTable, newRows)
 
   # (Co) variances Structural Model
@@ -443,7 +464,8 @@ mainModelToParTable <- function(finalModel, method = "lms") {
                               phiSE,
                               phiLabel,
                               op = "~~",
-                              rowsLhs = FALSE)
+                              rowsLhs = FALSE,
+                              symmetric = TRUE)
   parTable <- rbind(parTable, newRows)
 
   newRows <- matrixToParTable(matricesNA$psi,
@@ -451,7 +473,8 @@ mainModelToParTable <- function(finalModel, method = "lms") {
                               matricesSE$psi,
                               matricesLabel$psi,
                               op = "~~",
-                              rowsLhs = FALSE)
+                              rowsLhs = FALSE,
+                              symmetric = TRUE)
   parTable <- rbind(parTable, newRows)
 
   parTable <- lapplyDf(parTable, FUN = function(x) replace(x, x == -999, NA))
@@ -478,7 +501,7 @@ customParamsToParTable <- function(model, coefs, se) {
 }
 
 
-modelToParTable <- function(model, coefs = NULL, se = NULL, method = "lms") {
+modelToParTable <- function(model, coefs = NULL, se = NULL, method = "lms", calc.se = TRUE) {
   parTable <- rbind(mainModelToParTable(model, method = method),
                     covModelToParTable(model, method = method))
 
@@ -496,5 +519,11 @@ modelToParTable <- function(model, coefs = NULL, se = NULL, method = "lms") {
     parTable[isLabelled & parTable$std.error == 0, "std.error"] <- NA
   }
 
+  if (!calc.se) parTable$std.error <- NA  # when std.errors are not computed, static constraints
+                                          # will get Non-NA std.errors, which is incorrect
+                                          # this is naturally corrected for when calculating the 
+                                          # std.errors, but not when calc.se == FALSE
+  parTable[!is.na(parTable$std.error) &
+           parTable$std.error == -999, "std.error"] <- NA  # replace -999 with NA
   parTable
 }

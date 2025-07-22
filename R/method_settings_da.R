@@ -23,11 +23,19 @@ getMethodSettingsDA <- function(method, args = NULL) {
                    max.step = 1,
                    epsilon = 1e-4,
                    quad.range = Inf,
-                   adaptive.quad = FALSE,
+                   adaptive.quad = TRUE,
+                   adaptive.quad.tol = 1e-12,
                    adaptive.frequency = 3,
                    n.threads = NULL,
                    algorithm = "EMA",
-                   em.control = list()),
+                   em.control = list(),
+                   impute.na = FALSE,
+                   orthogonal.x = FALSE,
+                   orthogonal.y = FALSE,
+                   auto.fix.first = TRUE,
+                   auto.fix.single = TRUE,
+                   auto.split.syntax = FALSE
+        ),
         qml = list(verbose = interactive(),
                    optimize = TRUE,
                    nodes = 0,
@@ -52,11 +60,18 @@ getMethodSettingsDA <- function(method, args = NULL) {
                    epsilon = 1e-8,
                    quad.range = Inf,
                    adaptive.quad = FALSE,
+                   adaptive.quad.tol = NULL,
                    n.threads = NULL,
                    adaptive.quad = FALSE,
                    adaptive.frequency = NULL,
                    em.control = NULL,
-                   algorithm = NULL
+                   algorithm = NULL,
+                   impute.na = FALSE,
+                   orthogonal.x = FALSE,
+                   orthogonal.y = FALSE,
+                   auto.fix.first = TRUE,
+                   auto.fix.single = TRUE,
+                   auto.split.syntax = TRUE
         )
     )
 
@@ -79,6 +94,8 @@ getMethodSettingsDA <- function(method, args = NULL) {
       !args.out$standardize && args.out$mean.observed
     args.out$OFIM.hessian <-
       args.out$OFIM.hessian && !args.out$robust.se
+    args.out$center.data <- !args.out$standardize.data &&
+      !args.out$mean.observed
 
     args.out$n.threads <- setThreads(args.out$n.threads)
     args.out

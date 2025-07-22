@@ -5,7 +5,7 @@
 #' @param warn_no_interaction Logical. If `TRUE`, a warning is issued if no interaction terms are found in the model.
 #' @param ... Additional arguments passed to the `modsem_da` function, overriding
 #'   the arguments in the original model.
-#' @description Estimates a baseline model (H0) from a given model (H1) and compares the fit of both models.
+#' @description Estimates a baseline model (H0) from a given model (H1).
 #' The baseline model is estimated by removing all interaction terms from the model.
 #' @rdname estimate_h0
 #' @export
@@ -44,6 +44,7 @@ estimate_h0 <- function(object, warn_no_interaction = TRUE, ...) {
 }
 
 
+#' @describeIn estimate_h0 Estimate baseline model for \code{\link{modsem_da}} objects
 #' @export
 estimate_h0.modsem_da <- function(object, warn_no_interaction = TRUE, ...) {
   argList    <- object$args
@@ -69,10 +70,10 @@ estimate_h0.modsem_da <- function(object, warn_no_interaction = TRUE, ...) {
     
     syntax <- parTableToSyntax(strippedParTable)
     argList <- c(
-        list(model.syntax = syntax, data = data, method = method,
-             cov.syntax = cov.syntax), argList
+      list(model.syntax = syntax, data = data, method = method,
+           cov.syntax = cov.syntax), argList
     )
-    
+
     do.call(modsem_da, args = argList)
   },
   error = function(e) {
@@ -83,8 +84,16 @@ estimate_h0.modsem_da <- function(object, warn_no_interaction = TRUE, ...) {
 }
 
 
+#' @describeIn estimate_h0 Estimate baseline model for \code{\link{modsem_pi}} objects
+#' @param reduced Should the baseline model be a reduced version of the model? 
+#'   If \code{TRUE}, the latent product term and its (product) indicators are kept in the model,
+#'   but the interaction coefficients are constrained to zero. If \code{FALSE}, the
+#'   interaction terms are removed completely from the model. Note that the models will no longer be 
+#'   nested, if the interaction terms are removed from the model completely.
 #' @export
-estimate_h0.modsem_pi <- function(object, warn_no_interaction = TRUE, ...) {
+estimate_h0.modsem_pi <- function(object, warn_no_interaction = TRUE, 
+                                  reduced = TRUE, ...) {
+  pars       <- parameter_estimates(object)
   input      <- object$input
   method     <- object$method
   syntax     <- input$syntax
@@ -94,7 +103,7 @@ estimate_h0.modsem_pi <- function(object, warn_no_interaction = TRUE, ...) {
   # Get arguments
   lavArgs    <- input$lavArgs
   modsemArgs <- input$modsemArgs
-  lavArgs$meanstructure <- method %in% c("ca", "uca")
+  lavArgs$meanstructure <- any(pars$op == "~1")
   argList    <- c(modsemArgs, lavArgs)
 
   newArgList <- list(...) 
@@ -141,11 +150,12 @@ estimate_h0.modsem_pi <- function(object, warn_no_interaction = TRUE, ...) {
     # However, we want to constrain the interaction terms to zero.
 
     isInteractionTerm <- grepl(":", constrainedParTable$rhs) # recompute as parTable might have changed
-    constrainedParTable[isInteractionTerm, "mod"] <- "0"
+    if (reduced) constrainedParTable[isInteractionTerm, "mod"] <- "0"
+    else         constrainedParTable <- constrainedParTable[!isInteractionTerm, ]
     
     syntax <- parTableToSyntax(constrainedParTable)
     argList <- c(list(model = syntax, data = data, method = method), argList)
-    
+
     fit <- do.call(modsem_pi, args = argList)
 
     if (is.null(extract_lavaan(fit))) {

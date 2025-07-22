@@ -2,16 +2,19 @@ createThetaLabel <- function(labelMatrices, labelMatricesCov,
                               constrExprs, start = NULL) {
   matrices <- c(labelMatrices, labelMatricesCov)
   labels <- lapply(matrices, FUN = function(x) {
+    if (NCOL(x) == 0 || NROW(x) == 0) return(NULL)
+
     select <- apply(x, MARGIN = 2, FUN = function(z)
                     !canBeNumeric(z, includeNA = TRUE))
-    as.vector(x[select]) }) |> unlist() |> unique()
+    as.vector(x[select]) 
+  }) |> unlist() |> unique()
 
   if (!is.null(constrExprs)) {
     labels <- labels[!labels %in% constrExprs$fixedParams]
   }
 
   if (is.null(start)) {
-    start <- vapply(labels, FUN.VALUE = vector("numeric", 1L),
+    start <- vapply(labels, FUN.VALUE = numeric(1L),
                     FUN = function(x) stats::runif(1))
   }
 
@@ -46,83 +49,6 @@ fillMatricesLabels <- function(matrices, labelMatrices, thetaLabel,
 }
 
 
-getConstrExprs <- function(parTable, parTableCov) {
-  parTable <- rbind(parTable, parTableCov)
-  rows <- sortConstrExprs(parTable)
-  if (is.null(rows)) return(NULL)
-
-  fixedParams <- unique(rows$lhs)
-  thetaFixedParams <- vector("list", length(fixedParams))
-  names(thetaFixedParams) <- fixedParams
-
-  exprs <- lapply(rows$rhs, function(expr) parse(text = expr))
-  list(fixedParams = fixedParams, thetaFixedParams = thetaFixedParams,
-       exprs = exprs)
-}
-
-
-sortConstrExprs <- function(parTable) {
-  rows <- parTable[parTable$op %in% c("==", ">", "<", ":="), ]
-  if (NROW(rows) == 0) return(NULL)
-
-  labelled <- unique(parTable$mod[parTable$mod != ""])
-
-  if (!all(rows$lhs %in% labelled)) {
-    stop2("Unknown labels in constraints: ", rows$lhs[!rows$lhs %in% labelled])
-
-  } else if (length(unique(rows$lhs)) != length(rows$lhs)) {
-    stop2("Duplicated labels in constraints:\n", capturePrint(table(rows$lhs)))
-
-  } else if (any(rows$op %in% c(">", "<"))) {
-    stop2("Constraints with '>' and '<' are not implemented yet")
-  }
-
-  definedLabels <- labelled[!labelled %in% rows$lhs]
-  subRows <- rows
-  sortedRows <- data.frame(lhs = NULL, op = NULL, lhs = NULL, mod = NULL)
-  while (NROW(subRows) > 0) {
-    matchedAny <- FALSE
-    for (i in seq_len(nrow(subRows))) {
-      labels_i <- getVarsExpr(subRows[i, "rhs"])
-      if (length(labels_i) == 0 || all(labels_i %in% definedLabels)) {
-        matchedAny <- TRUE
-        sortedRows <- rbind(sortedRows, subRows[i, ])
-        definedLabels <- c(definedLabels, subRows[i, "lhs"])
-        subRows <- subRows[-i, ]
-        break
-      }
-    }
-
-    stopif(!matchedAny, "Unkown labels in constraints: ",
-           labels_i[!labels_i %in% definedLabels])
-  }
-
-  if (NROW(sortedRows) != NROW(rows)) {
-    warning2("Something went wrong when sorting and parsing constraint-expressions ",
-             "attempting to estimate model with unsorted expressions")
-    return(rows)
-  }
-
-  sortedRows
-}
-
-
-sortConstrExprsFinalPt <- function(parTable) {
-  if (!NROW(parTable)) return(NULL)
-
-  label <- NULL # R CMD check will complain that label and mod are not defined
-  mod   <- NULL # but they are defined in the parTable, and lazily evaluated
-                # defining them here stops R CMD check from complaining
-                # but doesn't change the behaviout of dplyr::rename()
-
-  # wrapr for sortConstrExprs meant to be used on the final output parTable
-  # not for the input parTable (e.g., mod -> label)
-  constrExprs <- sortConstrExprs(dplyr::rename(parTable, mod=label))
-  
-  if (is.null(constrExprs)) NULL else dplyr::rename(constrExprs, label=mod)
-}
-
-
 parTableLabelsToList <- function(parTable) {
   parTable <- parTable[parTable$label != "", ]
 
@@ -146,6 +72,7 @@ getVarsExpr <- function(expr) {
 
 
 removeConstraintExpressions <- function(parTable) {
+  if (!NROW(parTable)) return(parTable)
   parTable[!parTable$op %in% c("==", "<", ">", ":="), ]
 }
 
@@ -185,7 +112,7 @@ getTransformationsTheta <- function(model, theta, method) {
     theta <- theta[-seq_len(model$lenThetaLabel)]
   } else thetaLabel <- NULL
 
-  thetaLabel <- calcThetaLabel(thetaLabel, model$constrExprs)
+  thetaLabel <- suppressWarnings(calcThetaLabel(thetaLabel, model$constrExprs))
   c(thetaLabel, theta)
 }
 

@@ -5,8 +5,20 @@
 #' @param estimator estimator argument passed to \code{Mplus}
 #' @param type type argument passed to \code{Mplus}
 #' @param algorithm algorithm argument passed to \code{Mplus}
-#' @param process process argument passed to \code{Mplus}
+#' @param processors processors argument passed to \code{Mplus}
 #' @param integration integration argument passed to \code{Mplus}
+#'
+#' @param rcs Should latent variable indicators be replaced with reliability-corrected
+#'   single item indicators instead? See \code{\link{relcorr_single_item}}.
+#'
+#' @param rcs.choose Which latent variables should get their indicators replaced with
+#'   reliability-corrected single items? It is passed to \code{\link{relcorr_single_item}}
+#'   as the \code{choose} argument.
+#'   
+#' @param rcs.scale.corrected Should reliability-corrected items be scale-corrected? If \code{TRUE}
+#'   reliability-corrected single items are corrected for differences in factor loadings between
+#'   the items. Default is \code{TRUE}.
+#'
 #' @param ... arguments passed to other functions
 #'
 #' @return modsem_mplus object
@@ -14,27 +26,25 @@
 #'
 #' @examples
 #' # Theory Of Planned Behavior
-#' tpb <- '
-#' # Outer Model (Based on Hagger et al., 2007)
-#'   ATT =~ att1 + att2 + att3 + att4 + att5
-#'   SN =~ sn1 + sn2
-#'   PBC =~ pbc1 + pbc2 + pbc3
-#'   INT =~ int1 + int2 + int3
-#'   BEH =~ b1 + b2
-#'
-#' # Inner Model (Based on Steinmetz et al., 2011)
-#'   # Covariances
-#'   ATT ~~ SN + PBC
-#'   PBC ~~ SN
-#'   # Causal Relationsships
-#'   INT ~ ATT + SN + PBC
-#'   BEH ~ INT + PBC
-#'   BEH ~ INT:PBC
+#' m1 <- '
+#' # Outer Model
+#'   X =~ x1 + x2
+#'   Z =~ z1 + z2
+#'   Y =~ y1 + y2 
+#' 
+#' # Inner model
+#'   Y ~ X + Z + X:Z
 #' '
 #'
 #' \dontrun{
-#' est_mplus <- modsem_mplus(tpb, data = TPB)
-#' summary(est_mplus)
+#' # Check if Mplus is installed
+#' run <- tryCatch({MplusAutomation::detectMplus(); TRUE},
+#'                 error = \(e) FALSE)
+#' 
+#' if (run) {
+#'   est_mplus <- modsem_mplus(m1, data = oneInt)
+#'   summary(est_mplus)
+#' }
 #' }
 #'
 modsem_mplus <- function(model.syntax,
@@ -42,10 +52,51 @@ modsem_mplus <- function(model.syntax,
                          estimator = "ml",
                          type = "random",
                          algorithm = "integration",
-                         process = 8,
+                         processors = 2,
                          integration = 15,
+                         rcs = FALSE,
+                         rcs.choose = NULL,
+                         rcs.scale.corrected = TRUE,
                          ...) {
+  if (rcs) { # use reliability-correct single items?
+    corrected <- relcorr_single_item(
+      syntax          = model.syntax, 
+      data            = data,
+      choose          = rcs.choose,
+      scale.corrected = rcs.scale.corrected,
+      warn.lav        = FALSE
+    )
+
+    model.syntax <- corrected$syntax
+    data         <- corrected$data
+  }
+
   parTable <- modsemify(model.syntax)
+
+  # Abbreviate variable names
+  names <- unique(c(parTable$rhs, parTable$lhs))
+  names <- names[!grepl(":", names)]
+  abbreviated <- abbreviate(names, minlength = 8L, strict = TRUE)
+ 
+  # Abbreviate names in intTerms
+  intTerms <- unique(parTable$rhs[grepl(":", parTable$rhs)])
+  abbrevIntTerm <- function(xz)
+    paste0(abbreviated[stringr::str_split(xz, pattern = ":")[[1]]], collapse = ":")
+
+  newIntTerms <- vapply(intTerms, FUN.VALUE = character(1L), FUN = abbrevIntTerm)
+  names(newIntTerms) <- intTerms
+  abbreviated <- c(abbreviated, newIntTerms)
+
+  # Fix names in parTable
+  rmask <- parTable$rhs != ""
+  lmask <- parTable$lhs != ""
+  parTable$rhs[rmask] <- abbreviated[parTable$rhs[rmask]]
+  parTable$lhs[lmask] <- abbreviated[parTable$lhs[lmask]]
+  
+  # Fix names in data
+  dmask <- colnames(data) %in% names(abbreviated)
+  colnames(data)[dmask] <- abbreviated[colnames(data)[dmask]]
+
   indicators <- unique(parTable[parTable$op == "=~", "rhs", drop = TRUE])
   intTerms <- unique(getIntTermRows(parTable)$rhs)
   intTermsMplus <- stringr::str_remove_all(intTerms, ":") |>
@@ -58,47 +109,50 @@ modsem_mplus <- function(model.syntax,
       paste(paste("estimator =", estimator),
             paste("type =", type),
             paste("algorithm =", algorithm),
-            paste("process =", process),
+            paste("processors =", processors),
             paste("integration = ", integration),
             sep = ";\n"), ";\n"), # add final ";"
     MODEL = parTableToMplusModel(parTable, ...),
+    OUTPUT = "TECH3;",
     rdata = data[indicators],
   )
+
   results <- MplusAutomation::mplusModeler(model,
                                            modelout = "mplusResults.inp",
                                            run = 1L)
   coefs <- MplusAutomation::extract.mplus.model(results)
-  coefsTable <- data.frame(lhsOpRhs = coefs@coef.names,
+  coefsTable <- data.frame(label = stringr::str_remove_all(coefs@coef.names, pattern = " "),
                            est = coefs@coef,
                            std.error = coefs@se,
                            p.value = coefs@pvalues)
+
   # Measurement Model
   indicatorsCaps <- stringr::str_to_upper(indicators)
   patternMeas <-
     paste0("(", stringr::str_c(indicatorsCaps, collapse = "|"), ")") |>
     paste0("<-(?!>|Intercept)")
-  measCoefNames <- grepl(patternMeas, coefsTable$lhsOpRhs, perl = TRUE)
+  measCoefNames <- grepl(patternMeas, coefsTable$label, perl = TRUE)
 
   # Mplus has lhs/rhs in reversed order for the measurement model,
     # compared to lavaan,
-  measRhs <- stringr::str_split_i(coefsTable$lhsOpRhs[measCoefNames],
+  measRhs <- stringr::str_split_i(coefsTable$label[measCoefNames],
                                   "<-", i = 1)
-  measLhs <- stringr::str_split_i(coefsTable$lhsOpRhs[measCoefNames],
+  measLhs <- stringr::str_split_i(coefsTable$label[measCoefNames],
                                   "<-", i = 2)
   measModel <- data.frame(lhs = measLhs, op = "=~", rhs = measRhs) |>
-    cbind(coefsTable[measCoefNames, c("est", "std.error", "p.value")])
+    cbind(coefsTable[measCoefNames, ])
 
   # Structural Model
   measrRemoved <- coefsTable[!measCoefNames, ]
   patternStruct <- "<-(?!>|Intercept)"
-  structCoefNames <- grepl(patternStruct, measrRemoved$lhsOpRhs, perl = TRUE)
+  structCoefNames <- grepl(patternStruct, measrRemoved$label, perl = TRUE)
 
-  structLhs <- stringr::str_split_i(measrRemoved$lhsOpRhs[structCoefNames],
+  structLhs <- stringr::str_split_i(measrRemoved$label[structCoefNames],
                                   "<-", i = 1)
-  structRhs <- stringr::str_split_i(measrRemoved$lhsOpRhs[structCoefNames],
+  structRhs <- stringr::str_split_i(measrRemoved$label[structCoefNames],
                                   "<-", i = 2)
   structModel <- data.frame(lhs = structLhs, op = "~", rhs = structRhs) |>
-    cbind(measrRemoved[structCoefNames, c("est", "std.error", "p.value")])
+    cbind(measrRemoved[structCoefNames, ])
 
   for (i in seq_along(intTerms)) {
     xzMplus <- intTermsMplus[[i]]
@@ -110,22 +164,22 @@ modsem_mplus <- function(model.syntax,
   # Variances and Covariances
   structMeasrRemoved <- measrRemoved[!structCoefNames, ]
   patternCovVar <- "<->"
-  covVarCoefNames <- grepl(patternCovVar, structMeasrRemoved$lhsOpRhs, perl = TRUE)
-  covVarLhs <- stringr::str_split_i(structMeasrRemoved$lhsOpRhs[covVarCoefNames],
+  covVarCoefNames <- grepl(patternCovVar, structMeasrRemoved$label, perl = TRUE)
+  covVarLhs <- stringr::str_split_i(structMeasrRemoved$label[covVarCoefNames],
                                   "<->", i = 1)
-  covVarRhs <- stringr::str_split_i(structMeasrRemoved$lhsOpRhs[covVarCoefNames],
+  covVarRhs <- stringr::str_split_i(structMeasrRemoved$label[covVarCoefNames],
                                   "<->", i = 2)
   covVarModel <- data.frame(lhs = covVarLhs, op = "~~", rhs = covVarRhs) |>
-    cbind(structMeasrRemoved[covVarCoefNames, c("est", "std.error", "p.value")])
+    cbind(structMeasrRemoved[covVarCoefNames, ])
 
   # Intercepts
   covStructMeasrRemoved <- structMeasrRemoved[!covVarCoefNames, ]
   patternIntercept <- "<-Intercept"
-  interceptNames <- grepl(patternIntercept, covStructMeasrRemoved$lhsOpRhs, perl = TRUE)
-  interceptLhs <- stringr::str_split_i(covStructMeasrRemoved$lhsOpRhs[interceptNames],
+  interceptNames <- grepl(patternIntercept, covStructMeasrRemoved$label, perl = TRUE)
+  interceptLhs <- stringr::str_split_i(covStructMeasrRemoved$label[interceptNames],
                                   "<-", i = 1)
   interceptModel <- data.frame(lhs = interceptLhs, op = "~1", rhs = "") |>
-    cbind(covStructMeasrRemoved[interceptNames, c("est", "std.error", "p.value")])
+    cbind(covStructMeasrRemoved[interceptNames, ])
 
   mplusParTable <- rbind(measModel, structModel, covVarModel, interceptModel)
   mplusParTable [c("lhs", "rhs")] <-
@@ -137,45 +191,82 @@ modsem_mplus <- function(model.syntax,
   mplusParTable$p.value[mplusParTable$p.value == 999] <- NA
   mplusParTable$z.value <- mplusParTable$est / mplusParTable$std.error
   mplusParTable$z.value[is.infinite(mplusParTable$z.value)] <- NA
-  mplusParTable$label <- ""
 
-  modelSpec <- list(parTable = mplusParTable,
-                    model = results,
-                    coefs = coefs,
-                    data = data)
+  # coef and vcov
+  isfree <- coefsTable$p.value != 999
+  labels <- coefsTable$label[isfree]
+  coef <- structure(coefsTable$est[isfree], names = labels)
+
+  vcov <- tryCatch({
+    # vcov <- MplusAutomation::get_tech3(results)$paramCov
+    # `MplusAutomation::get_tech3` seems very unstable...
+    # I often get this error:
+    # `Error in get_results(x = results, element = "tech3"): could not find function "get_results"`
+    # `MplusAutomation::get_results` seems to work better...
+    vcov <- MplusAutomation::get_results(results, element = "tech3")$paramCov
+    vcov[upper.tri(vcov)] <- t(vcov)[upper.tri(vcov)]
+    dimnames(vcov) <- list(labels, labels)
+    vcov
+  }, error = function(e) {
+    warning2("Unable to retrive `tech3` from `Mplus` results\n",
+             "Message: ", e, immediate. = FALSE)
+    vcov <- matrix(NA, nrow = sum(isfree), ncol = sum(isfree), 
+                   dimnames = list(labels, labels))
+  })
+
+  modelSpec <- list(
+    parTable = modsemParTable(mplusParTable),
+    model    = results,
+    coefs    = coefs,
+    data     = data, 
+    coef     = coef,
+    vcov     = vcov
+  )
+
   structure(modelSpec,
             class = "modsem_mplus",
             method = "Mplus")
 }
 
 
-parTableToMplusModel <- function(parTable, ignoreLabels = TRUE) {
+xwith <- function(elems) {
+  if (length(elems) <= 1) return(NULL)
+  lhs <- paste0(elems[[1]], elems[[2]])
+  rhs <- paste(elems[[1]], "XWITH", elems[[2]])
+
+  elems2 <- c(lhs, elems[-c(1, 2)])
+  
+  unique(rbind(
+   createParTableRow(c(lhs, rhs), op = ":"),
+   xwith(elems2)
+  ))
+}
+
+
+parTableToMplusModel <- function(parTable) {
   # INTERACTIONEXPRESSIOns
   interactions <- parTable[grepl(":", parTable$rhs), "rhs"]
   elemsInInts <- stringr::str_split(interactions, ":")
-  newRows <- lapply(elemsInInts,
-                    function(x) {
-                      if (length(x) != 2) {
-                        stop2("Number of variables in interaction must be two")
-                      }
-                      lhs <- paste0(x[[1]], x[[2]])
-                      rhs <- paste(x[[1]], "XWITH", x[[2]])
-                      createParTableRow(c(lhs, rhs), op = ":")
-                      }) |>
+  newRows <- lapply(elemsInInts, FUN = xwith) |>
     purrr::list_rbind()
   parTable <- rbind(parTable, newRows)
 
-  parTable$op <- replaceLavOpWithMplus(parTable$op)
-  out <- ""
-  if (ignoreLabels) parTable[["mod"]] <- ""
-  for (i in 1:nrow(parTable)) {
-    if (parTable[["mod"]][i] != "") {
-      warning2("Using labels in Mplus, was this intended?")
-      modifier <- paste0("* (", parTable[["mod"]][[i]],")")
+  # Identify variances
+  isVar <- parTable$op == "~~" & parTable$lhs == parTable$rhs
 
-    } else {
-      modifier <- ""
-    }
+  parTable$op <- replaceLavOpWithMplus(parTable$op)
+  parTable[isVar, c("op", "lhs")] <- ""
+
+  out <- ""
+  for (i in seq_len(nrow(parTable))) {
+    mod   <- parTable[["mod"]][i]
+    empty <- mod == ""
+    islab <- !canBeNumeric(mod)
+
+    if (!empty && islab)       modifier <- paste0(" (", mod,")")
+    else if (!empty && !islab) modifier <- paste0("@", mod)
+    else                       modifier <- ""
+
     line <- paste0(parTable[["lhs"]][[i]], " ",
                    parTable[["op"]][[i]], " ",
                    parTable[["rhs"]][[i]],
@@ -200,4 +291,16 @@ switchLavOpToMplus <- function(op) {
          "~~" = "WITH",
          ":" = "|",
          stop2("Operator not supported for use in Mplus: ", op, "\n"))
+}
+
+
+#' @export
+vcov.modsem_mplus <- function(object, ...) {
+  object$vcov
+}
+
+
+#' @export
+coef.modsem_mplus <- function(object, ...) {
+  object$coef
 }

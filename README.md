@@ -25,6 +25,9 @@ If you have issues installing the package on `macOS`, you might need to install 
 A `C++` compiler is also required, but should be installed by default on most systems.
 See the [R for macOs](https://cran.r-project.org/bin/macosx/tools/) page for more information.
 
+If you're using `Windows`, consider installing [`OpenBLAS in R for Windows`](https://github.com/david-cortes/R-openblas-in-windows) 
+for better perfmance.
+
 # Methods/Approaches
 
 There are a number of approaches for estimating interaction effects in SEM. 
@@ -116,7 +119,7 @@ summary(est_tpb_qml, standardized = TRUE)
 ```
 ## Interactions between two observed variables
 ```R
-est2 <- modsem('y1 ~ x1 + z1 + x1:z1', data = oneInt, method = "pind")
+est2 <- modsem('y1 ~ x1 + z1 + x1:z1', data = oneInt, method = "dblcent")
 summary(est2)
 ```
 
@@ -128,9 +131,12 @@ m3 <- '
   Y =~ y1 + y2 + y3
   
   # Inner model
-  Y ~ X + z1 + X:z1 
+  Y ~ X + z1 + X:z1
 '
 
-est3 <- modsem(m3, oneInt, method = "pind")
+est3 <- modsem(m3, oneInt, method = "dblcent", 
+               res.cov.method = "none") # res.cov.method = "simple" will lead
+                                        # to an unidentifiable model. Instead we
+                                        # constrain them to zero
 summary(est3)
 ```

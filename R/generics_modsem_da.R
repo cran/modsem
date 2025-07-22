@@ -1,4 +1,5 @@
 #' @export
+#' @describeIn parameter_estimates Get parameter estimates of a \code{\link{modsem_da}} object
 parameter_estimates.modsem_da <- function(object, ...) {
   object$parTable
 }
@@ -15,6 +16,7 @@ parameter_estimates.modsem_da <- function(object, ...) {
 #' @param scientific print p-values in scientific notation
 #' @param ci print confidence intervals
 #' @param standardized print standardized estimates
+#' @param centered print mean centered estimates
 #' @param monte.carlo should Monte Carlo bootstrapped standard errors be used? Only 
 #'   relevant if \code{standardized = TRUE}. If \code{FALSE} delta method is used instead.
 #' @param mc.reps number of Monte Carlo repetitions. Only relevant if \code{monte.carlo = TRUE}, 
@@ -25,7 +27,8 @@ parameter_estimates.modsem_da <- function(object, ...) {
 #' @param intercepts should intercepts be included in the output?
 #' If \code{standardized = TRUE} intercepts will by default be excluded. 
 #' @param variances print variances
-#' @param var.interaction if FALSE (default) variances for interaction terms will be removed (if present)
+#' @param var.interaction if FALSE variances for interaction terms will be removed 
+#' from the output
 #' @param ... additional arguments
 #' @rdname summary
 #' @export
@@ -53,31 +56,57 @@ summary.modsem_da <- function(object,
                               scientific = FALSE,
                               ci = FALSE,
                               standardized = FALSE,
+                              centered = FALSE,
                               monte.carlo = FALSE,
                               mc.reps = 10000,
                               loadings = TRUE,
                               regressions = TRUE,
                               covariances = TRUE,
-                              intercepts = !standardized,
+                              intercepts = TRUE,
                               variances = TRUE,
                               var.interaction = FALSE,
                               ...) {
-  method <- object$method
+  method   <- object$method
+  parTable <- parameter_estimates(object)
 
+  extra.cols <- NULL
   if (standardized) {
-    parTable <- standardized_estimates(object, intercepts = intercepts, 
-                                       monte.carlo = monte.carlo, mc.reps = mc.reps)
-  } else {
-    parTable <- parameter_estimates(object)
+    std.col     <- "Std.all"
+    extra.cols <- c(extra.cols, std.col)
+
+    parTable <- addTransformedEstimatesPT(
+      parTable    = parTable,
+      values.from = "est",
+      values.to   = std.col,
+      FUN         = standardized_estimates,
+      object      = object,
+      monte.carlo = monte.carlo,
+      mc.reps     = mc.reps
+    )
+  }
+  
+  if (centered) {
+    cnt.col     <- "Cnt.all"
+    extra.cols <- c(extra.cols, cnt.col)
+
+    parTable <- addTransformedEstimatesPT(
+      parTable    = parTable,
+      values.from = "est",
+      values.to   = cnt.col,
+      FUN         = centered_estimates,
+      object      = object,
+      monte.carlo = monte.carlo,
+      mc.reps     = mc.reps
+    )
   }
 
   if (!var.interaction) {
-    parTable <- removeInteractionVariances(parTable)
-  }
+    parTable.out <- removeInteractionVariances(parTable)
+  } else parTable.out <- parTable
 
   args <- object$args
   out <- list(
-    parTable       = parTable,
+    parTable       = parTable.out,
     data           = object$data,
     iterations     = object$iterations,
     logLik         = object$logLik,
@@ -93,7 +122,9 @@ summary.modsem_da <- function(object,
   )
 
   if (H0) {
-    if (any(grepl(":", parTable$rhs))) cat("Estimating baseline model (H0)\n")
+    if (any(grepl(":", parTable$rhs)) && verbose) 
+      cat("Estimating baseline model (H0)\n")
+
     est_h0 <- estimate_h0(object, calc.se = FALSE, warn_no_interaction = FALSE)
     
     out$nullModel <- est_h0
@@ -112,8 +143,14 @@ summary.modsem_da <- function(object,
   }
 
   if (r.squared) {
-    out$r.squared <- calcRsquared(parTable)
-    if (H0) out$r.squared$H0 <- calcRsquared(est_h0$parTable)
+  	out$r.squared <- modsem_inspect(object, "r2.lv")
+
+    if (H0) {
+			r.squared.h0 <- modsem_inspect(est_h0, "r2.lv")
+			out$r.squared.h0 <- r.squared.h0[names(out$r.squared)] # should't be necessary
+			                                                       # but sort just in case...
+		} else out$r.squared.h0 <- NULL
+
   } else out$r.squared <- NULL
 
   out$format <- list(
@@ -125,7 +162,8 @@ summary.modsem_da <- function(object,
     regressions   = regressions,
     covariances   = covariances,
     intercepts    = intercepts,
-    variances     = variances
+    variances     = variances,
+    extra.cols    = extra.cols
   )
 
   class(out) <- "summary_da"
@@ -135,22 +173,41 @@ summary.modsem_da <- function(object,
 
 #' @export
 print.summary_da <- function(x, digits = 3, ...) {
-  width.out <- getWidthPrintedParTable(x$parTable,
-                                       scientific = x$format$scientific,
-                                       ci = x$format$ci,
-                                       digits = x$format$digits,
-                                       loadings = x$format$loadings,
-                                       regressions = x$format$regressions,
-                                       covariances = x$format$covariances,
-                                       intercepts = x$format$intercepts,
-                                       variances = x$format$variances)
+  # We want the width without ci and extra cols
+  width.out <- getWidthPrintedParTable(
+    parTable    = x$parTable, 
+    scientific  = x$format$scientific,
+    ci          = FALSE,
+    digits      = x$format$digits,
+    loadings    = x$format$loadings,
+    regressions = x$format$regressions,
+    covariances = x$format$covariances,
+    intercepts  = x$format$intercepts,
+    variances   = x$format$variances,
+    extra.cols  = NULL
+  )
+
   cat(paste0("\nmodsem (version ", PKG_INFO$version, "):\n\n"))
-  names <- c("Estimator", "Optimization method", "Number of observations",
-             "Number of iterations", "Loglikelihood",
-             "Akaike (AIC)", "Bayesian (BIC)")
-  values <- c(stringr::str_to_upper(c(x$method, x$optimizer)),
-              x$N, x$iterations, round(x$logLik, 2), round(x$fit$AIC, 2),
-              round(x$fit$BIC, 2))
+  
+  names <- c(
+    "Estimator", 
+    "Optimization method", 
+    "Number of observations",
+    "Number of iterations", 
+    "Loglikelihood",
+    "Akaike (AIC)", 
+    "Bayesian (BIC)"
+  )
+
+  values <- c(
+    stringr::str_to_upper(c(x$method, x$optimizer)),
+    x$N,
+    x$iterations,
+    round(x$logLik, 2),
+    round(x$fit$AIC, 2),
+    round(x$fit$BIC, 2)
+  )
+
   if (x$format$adjusted.stat) {
     names  <- c(names, "Corrected Akaike (AICc)", "Adjusted Bayesian (aBIC)")
     values <- c(values, round(x$fit$AICc, 2), round(x$fit$aBIC, 2))
@@ -172,7 +229,7 @@ print.summary_da <- function(x, digits = 3, ...) {
   if (!is.null(x$D)) {
     cat("Fit Measures for Baseline Model (H0):\n")
     names <- c("Loglikelihood", "Akaike (AIC)", "Bayesian (BIC)")
-    values <- c(round(x$nullModel$logLik), round(x$fitH0$AIC, 2), round(x$fitH0$BIC, 2))
+    values <- c(round(x$nullModel$logLik, 2), round(x$fitH0$AIC, 2), round(x$fitH0$BIC, 2))
 
     if (x$format$adjusted.stat) {
       names <- c(names, "Corrected Akaike (AICc)", "Adjusted Bayesian (aBIC)")
@@ -192,7 +249,7 @@ print.summary_da <- function(x, digits = 3, ...) {
     names <- c("Loglikelihood change",
                "Difference test (D)",
                "Degrees of freedom (D)", "P-value (D)")
-    values <- c(formatNumeric(x$D$llChange, digits = 2),
+    values <- c(formatNumeric(x$D$diff.loglik, digits = 2),
                 formatNumeric(x$D$D, digits = 2),
                 x$D$df,
                 formatPval(x$D$p, scientific = x$format$scientific))
@@ -202,45 +259,27 @@ print.summary_da <- function(x, digits = 3, ...) {
   }
 
   if (!is.null(x$r.squared)) {
-    r.squared <- x$r.squared
-    r.squared$Rsqr <- formatNumeric(r.squared$Rsqr, digits = 3)
-    maxWidth <- max(vapply(r.squared$Rsqr, FUN.VALUE = numeric(1), FUN = nchar))
-    r.squared$Rsqr <-
-      stringr::str_pad(r.squared$Rsqr, width = maxWidth, side = "left")
+    r.squared <- formatNumeric(x$r.squared, digits = 3)
+    names     <- names(r.squared)
 
     cat("R-Squared Interaction Model (H1):\n")
-    names <- r.squared$eta
-    values <- character(length(names))
-    for (i in seq_along(r.squared$eta)) {
-      values[[i]] <- r.squared$Rsqr[[i]]
-    }
-    cat(allignLhsRhs(lhs = names, rhs = values, pad = "  ",
-                     width.out = width.out))
+    cat(allignLhsRhs(lhs = names, rhs = r.squared, 
+										 pad = "  ", width.out = width.out))
 
-    if (!is.null(r.squared$H0)) {
-      r.squared$H0$Rsqr <- formatNumeric(r.squared$H0$Rsqr, digits = 3)
-      maxWidth <-
-        max(vapply(r.squared$H0$Rsqr, FUN.VALUE = numeric(1), FUN = nchar))
-      r.squared$H0$Rsqr <-
-        stringr::str_pad(r.squared$H0$Rsqr, width = maxWidth, side = "left")
-
-      cat("R-Squared Baseline Model (H0):\n")
-      names <- r.squared$H0$eta
-      for (i in seq_along(names)) {
-          values[[i]] <- formatNumeric(r.squared$H0$Rsqr[[i]], digits = 3)
-      }
-      cat(allignLhsRhs(lhs = names, rhs = values, pad = "  ",
+    if (!is.null(x$r.squared.h0)) {
+      r.squared.h0 <- formatNumeric(x$r.squared.h0, digits = 3)
+			names.h0     <- names(r.squared.h0)
+      
+			cat("R-Squared Baseline Model (H0):\n")
+      cat(allignLhsRhs(lhs = names.h0, rhs = r.squared.h0, pad = "  ",
                        width.out = width.out))
 
       # Calculate Change (using unformatted Rsquared)
-      r.squared$H0$diff <-
-        formatNumeric(x$r.squared$Rsqr - x$r.squared$H0$Rsqr, digits = 3)
+     	r.squared.diff <- formatNumeric(x$r.squared - x$r.squared.h0, digits = 3)
+			names.diff     <- names(r.squared.diff)
       cat("R-Squared Change (H1 - H0):\n")
-      for (i in seq_along(names)) {
-        values[[i]] <- r.squared$H0$diff[[i]]
-      }
-      cat(allignLhsRhs(lhs = names, rhs = values, pad = "  ",
-                       width.out = width.out))
+      cat(allignLhsRhs(lhs = names.diff, rhs = r.squared.diff, 
+											 pad = "  ", width.out = width.out))
     }
   }
 
@@ -258,7 +297,8 @@ print.summary_da <- function(x, digits = 3, ...) {
                 regressions = x$format$regressions,
                 covariances = x$format$covariances,
                 intercepts  = x$format$intercepts,
-                variances   = x$format$variances)
+                variances   = x$format$variances,
+                extra.cols  = x$format$extra.cols)
 }
 
 
@@ -275,29 +315,148 @@ print.modsem_da <- function(x, digits = 3, ...) {
 }
 
 
-calcRsquared <- function(parTable) {
-  parTable <- var_interactions.data.frame(parTable)
-  etas     <- unique(parTable$lhs[parTable$op == "~"])
-
-  # Calculate Variances/R squared of Etas
-  residuals_df <- parTable[parTable$lhs %in% etas & 
-                           parTable$rhs == parTable$lhs, ]
-  residuals <- structure(residuals_df$est, names=residuals_df$lhs)[etas]
-  variances <- calcVarParTable(etas, parTable)
-  Rsqr <- 1 - residuals / variances
-
-  data.frame(eta = etas, variance = variances,
-             residual = residuals, Rsqr = Rsqr)
-}
-
-
 #' @export
 var_interactions.modsem_da <- function(object, ...) {
   var_interactions.data.frame(parameter_estimates(object), ...)
 }
 
 
+#' Inspect components of a \code{modsem_da} fit
+#' 
+#' \code{modsem_inspect.modsem_da} Lets you
+#' pull matrices, optimiser diagnostics, expected moments, or fit
+#' measures from a \code{\link{modsem_da}} object.
+#' 
+#' @param object A fitted object of class \code{"modsem_da"}.
+#' @param what   Character scalar selecting what to return (see \emph{Details}).
+#'               If \code{NULL} the value \code{"default"} is used.
+#' @param ...    Passed straight to \code{modsem_inspect_da()}.
+#' 
+#' @details
+#' Below is a list of possible values for the \code{what} argument,
+#' organised in several sections.  Keywords are \emph{case-sensitive}.
+#' 
+#' \strong{Presets} 
+#' 
+#' \describe{
+#'   \item{\code{"default"}}{Everything in \emph{Sample information}, \emph{Optimiser diagnostics}
+#'   \emph{Parameter tables}, \emph{Model matrices}, and \emph{Expected-moment matrices} except  
+#'   the raw \code{data} slot}
+#'   \item{\code{"coef"}}{Coefficients and variance-covariance matrix of both free and constrained parameters (same as \code{"coef.all"}).}  
+#'   \item{\code{"coef.all"}}{Coefficients and variance-covariance matrix of both free and constrained parameters (same as \code{"coef"}).}  
+#'   \item{\code{"coef.free"}}{Coefficients and variance-covariance matrix of the free parameters.}  
+#'   \item{\code{"all"}}{All items listed below, including \code{data}.}  
+#'   \item{\code{"matrices"}}{The model matrices.}  
+#'   \item{\code{"optim"}}{Only the items under \emph{Optimiser diagnostics}}.  
+#'   \item{\code{"fit"}}{A list with \code{fit.h0}, \code{fit.h1}, comparative.fit}
+#' }
+#' 
+#' \strong{Sample information:}
+#' 
+#' \describe{
+#' \item{\code{"N"}}{Number of analysed rows (integer).}
+#' }
+#'
+#' \strong{Parameter estimates and standard errors:}
+#' 
+#' \describe{
+#'   \item{\code{"coefficients.free"}}{Free parameter values.}
+#'   \item{\code{"coefficients.all"}}{Both free and constrained parameter values.}
+#'   \item{\code{"vcov.free"}}{Variance–covariance of free coefficients only.}
+#'   \item{\code{"vcov.all"}}{Variance–covariance of both free and constrained coefficients.}
+#' }
+#' 
+#' \strong{Optimiser diagnostics:}  
+#' 
+#' \describe{
+#'   \item{\code{"coefficients.free"}}{Free parameter values.}
+#'   \item{\code{"vcov.free"}}{Variance–covariance of free coefficients only.}
+#'   \item{\code{"information"}}{Fisher information matrix.}
+#'   \item{\code{"loglik"}}{Log-likelihood.}
+#'   \item{\code{"iterations"}}{Optimiser iteration count.}
+#'   \item{\code{"convergence"}}{\code{TRUE}/\code{FALSE} indicating whether the model converged.}
+#' }
+#' 
+#' \strong{Parameter tables:}  
+#' 
+#' \describe{
+#'   \item{\code{"partable"}}{Parameter table with estimated parameters.}
+#'   \item{\code{"partable.input"}}{Parsed model syntax.}
+#' }
+#' 
+#' \strong{Model matrices:}
+#' 
+#' \describe{
+#'   \item{\code{"lambda"}}{\eqn{\Lambda} – Factor loadings.}
+#'   \item{\code{"tau"}}{\eqn{\tau} – Intercepts for indicators.}
+#'   \item{\code{"theta"}}{\eqn{\Theta} – Residual (Co-)Variances for indicators.}
+#'   \item{\code{"gamma.xi"}}{\eqn{\Gamma_{\xi}} – Structural coefficients between exogenous and endogenous variables.}
+#'   \item{\code{"gamma.eta"}}{\eqn{\Gamma_{\eta}} – Structural coefficients between endogenous variables.}
+#'   \item{\code{"omega.xi.xi"}}{\eqn{\Omega_{\xi\xi}} – Interaction effects between exogenous variables}
+#'   \item{\code{"omega.eta.xi"}}{\eqn{\Omega_{\eta\xi}} – Interaction effects between exogenous and endogenous variables}
+#'   \item{\code{"phi"}}{\eqn{\Phi} – (Co-)Variances among exogenous variables.}
+#'   \item{\code{"psi"}}{\eqn{\Psi} – Residual (co-)variances among engoenous variables.}
+#'   \item{\code{"alpha"}}{\eqn{\alpha} – Intercepts for endogenous variables}
+#'   \item{\code{"beta0"}}{\eqn{\beta_0} – Intercepts for exogenous variables}
+#' }
+#' \strong{Model-implied matrices:}  
+#' 
+#' \describe{
+#'   \item{\code{"cov.ov"}}{Model-implied covariance of observed variables.} 
+#'   \item{\code{"cov.lv"}}{Model-implied covariance of latent variables.}
+#'   \item{\code{"cov.all"}}{Joint covariance of observed + latent variables.}
+#'   \item{\code{"cor.ov"}}{Correlation counterpart of \code{"cov.ov"}.} 
+#'   \item{\code{"cor.lv"}}{Correlation counterpart of \code{"cov.lv"}.}
+#'   \item{\code{"cor.all"}}{Correlation counterpart of \code{"cov.all"}.}
+#'   \item{\code{"mean.ov"}}{Expected means of observed variables.}
+#'   \item{\code{"mean.lv"}}{Expected means of latent variables.}
+#'   \item{\code{"mean.all"}}{Joint mean vector.}
+#' }
+#'
+#' \strong{R-squared and standardized residual variances:}
+#'
+#' \describe{
+#'   \item{\code{"r2.all"}}{R-squared values for both observed (i.e., indicators) and latent endogenous variables.}
+#'   \item{\code{"r2.lv"}}{R-squared values for latent endogenous variables.}
+#'   \item{\code{"r2.ov"}}{R-squared values for observed (i.e., indicators) variables.}
+#'   \item{\code{"res.all"}}{Standardized residuals (i.e., \code{1 - R^2}) for both observed (i.e., indicators) and latent endogenous variables.}
+#'   \item{\code{"res.lv"}}{Standardized residuals (i.e., \code{1 - R^2}) for latent endogenous variables.}
+#'   \item{\code{"res.ov"}}{Standardized residuals (i.e., \code{1 - R^2}) for observed variables (i.e., indicators).}
+#' }
+#' 
+#' \strong{Interaction-specific caveats:}  
+#' 
+#' \itemize{
+#'   \item If the model contains an \emph{uncentred} latent interaction term it is centred
+#'     internally before any \code{cov.*}, \code{cor.*}, or \code{mean.*} matrices are
+#'     calculated.  
+#'   \item These matrices should not be used to compute fit-statistics (e.g., 
+#'     chi-square and RMSEA) if there is an interaction term in the model.
+#' }
+#' @return A named list with the extracted information. If a single piece of information is returned,
+#'  it is returned as is; not as a named element in a list.
+#' 
+#' @examples
+#' \dontrun{
+#' m1 <- "
+#'  # Outer Model
+#'  X =~ x1 + x2 + x3
+#'  Y =~ y1 + y2 + y3
+#'  Z =~ z1 + z2 + z3
+#' 
+#'  # Inner model
+#'  Y ~ X + Z + X:Z
+#' "
+#' 
+#' est <- modsem(m1, oneInt, "lms")
+#' 
+#' modsem_inspect(est) # everything except "data"
+#' modsem_inspect(est, what = "optim")
+#' modsem_inspect(est, what = "phi")
+#' }
+#' 
 #' @export
+#' @describeIn modsem_inspect Inspect a \code{\link{modsem_da}} object
 modsem_inspect.modsem_da <- function(object, what = NULL, ...) {
   if (is.null(what)) what <- "default"
   modsem_inspect_da(object, what = what, ...)
@@ -306,17 +465,24 @@ modsem_inspect.modsem_da <- function(object, what = NULL, ...) {
 
 #' @export
 #' @importFrom stats vcov
-vcov.modsem_da <- function(object, ...) {
-  modsem_inspect_da(object, what = "vcov")[[1]]
+vcov.modsem_da <- function(object, type = c("all", "free"), ...) {
+  type <- tolower(type)
+  type <- match.arg(type)
+
+  what <- ifelse(type == "all", yes = "vcov.all", no = "vcov.free")
+  modsem_inspect_da(object, what = what)
 }
 
 
 #' @export
 #' @importFrom stats coefficients
-coefficients.modsem_da <- function(object, type = "all", ...) {
-  what <- ifelse(type == "all", yes = "all.coefficients",
-                 no = "free.coefficients")
-  modsem_inspect_da(object, what = what)[[1]]
+coefficients.modsem_da <- function(object, type = c("all", "free"), ...) {
+  type <- tolower(type)
+  type <- match.arg(type)
+
+  what <- ifelse(type == "all", yes = "coefficients.all",
+                 no = "coefficients.free")
+  modsem_inspect_da(object, what = what)
 }
 
 
@@ -334,28 +500,48 @@ nobs.modsem_da <- function(object, ...) {
 }
 
 
-#' Get standardized estimates with Monte Carlo bootstrapped standard errors
+#' @describeIn standardized_estimates Method for \code{modsem_da} objects
 #'
-#' @param object An object of class \code{modsem_da}
-#' @param monte.carlo Should standard errors be calculated using Monte Carlo simulation. 
-#'   if \code{FALSE} the delta method is used instead. Default is \code{FALSE}.
-#' @param mc.reps Number of Monte Carlo repetitions
-#' @param tolerance.zero Tolerance for zero values. Standard errors smaller than this 
-#'   value will be set to NA.
-#' @param ... Additional arguments passed to other functions
-#' @details The interaction term is not standardized such that \code{var(xz) = 1}.
-#' The interaction term is not an actual variable in the model, meaning that it does not
-#' have a variance. It must therefore be calculated from the other parameters in the model.
-#' Assuming normality and zero-means, the variance is calculated as
-#' \code{var(xz) = var(x) * var(z) + cov(x, z)^2}. Thus setting the variance of the interaction
-#' term to 1 would only be 'correct' if the correlation between \code{x} and \code{z} is zero.
-#' This means that the standardized estimates for the interaction term will
-#' be different from those using \code{lavaan}, since there the interaction term is an
-#' actual latent variable in the model, with a standardized variance of 1.
+#' @param monte.carlo Logical. If \code{TRUE}, use Monte Carlo simulation to estimate
+#' standard errors; if \code{FALSE}, use the delta method (default).
+#' @param mc.reps Number of Monte Carlo repetitions. Default is 10000.
+#' @param tolerance.zero Threshold below which standard errors are set to \code{NA}.
+#'
 #' @export
-standardized_estimates.modsem_da <- function(object, monte.carlo = FALSE, mc.reps = 10000, tolerance.zero = 1e-10, ...) {
-  stdSolution <- standardized_solution_COEFS(
-    object, monte.carlo = monte.carlo, mc.reps = mc.reps, 
+standardized_estimates.modsem_da <- function(object, 
+                                             monte.carlo = FALSE, 
+                                             mc.reps = 10000, 
+                                             tolerance.zero = 1e-10, 
+                                             ...) {
+  stdSolution <- standardizedSolutionCOEFS(
+    object, 
+    monte.carlo = monte.carlo, 
+    mc.reps = mc.reps, 
+    tolerance.zero = tolerance.zero, 
+    ...
+  )
+  
+  stdSolution$parTable
+}
+
+
+#' @describeIn centered_estimates Method for \code{modsem_da} objects
+#'
+#' @param monte.carlo Logical. If \code{TRUE}, use Monte Carlo simulation to estimate
+#' standard errors; if \code{FALSE}, use the delta method (default).
+#' @param mc.reps Number of Monte Carlo repetitions. Default is 10000.
+#' @param tolerance.zero Threshold below which standard errors are set to \code{NA}.
+#'
+#' @export
+centered_estimates.modsem_da <- function(object, 
+                                         monte.carlo = FALSE, 
+                                         mc.reps = 10000, 
+                                         tolerance.zero = 1e-10, ...) {
+
+  stdSolution <- centeredSolutionCOEFS(
+    object, 
+    monte.carlo = monte.carlo, 
+    mc.reps = mc.reps, 
     tolerance.zero = tolerance.zero, ...
   )
   
@@ -363,265 +549,64 @@ standardized_estimates.modsem_da <- function(object, monte.carlo = FALSE, mc.rep
 }
 
 
-standardized_solution_COEFS <- function(object, monte.carlo = FALSE, mc.reps = 10000, tolerance.zero = 1e-10, seed = 123, 
-                                        delta.epsilon = 1e-8, ...) {
-  set.seed(seed)
 
-  stopif(!inherits(object, "modsem_da"), "The object must be of class 'modsem_da'.")
+#' @describeIn modsem_predict 
+#' Computes (optionally standardised) factor scores via the
+#'   regression method using the baseline model unless \code{H0 = FALSE}.
+#'
+#' @param object \code{\link{modsem_da}} object
+#' @param standardized Logical. If \code{TRUE}, return standardized factor scores.
+#' @param H0 Logical. If \code{TRUE} (default), use the baseline model to compute factor scores.
+#'   If \code{FALSE}, use the model specified in \code{object}. Using \code{H0 = FALSE} is not recommended!
+#' @param newdata Compute factor scores based on a different dataset, than the one used in the model estimation.
+#' @param center.data Should data be centered before computing factor scores? Default is \code{TRUE}.
+#' @export
+modsem_predict.modsem_da <- function(object, standardized = FALSE, H0 = TRUE, newdata = NULL, 
+                                     center.data = TRUE, ...) {
+  modelH1 <- object 
 
-  parTable <- parameter_estimates(object)
-  parTable <- parTable[c("lhs", "op", "rhs", "label", "est", "std.error")]
-  parTable <- centerInteraction(parTable) # re-estimate path-coefficients 
-                                          # when intercepts are zero
+  if (H0) {
+    modelH0 <- estimate_h0(modelH1, calc.se = FALSE, warn_no_interaction = FALSE, 
+                           verbose = FALSE)
   
-  lVs      <- getLVs(parTable)
-  intTerms <- getIntTerms(parTable)
-  etas     <- getSortedEtas(parTable, isLV = TRUE)
-  xis      <- getXis(parTable, etas = etas, isLV = TRUE)
-  indsLVs  <- getIndsLVs(parTable, lVs)
-  allInds  <- unique(unlist(indsLVs))
+    if (is.null(modelH0)) modelH0 <- modelH1
+  } else modelH0 <- modelH1
 
-  originalLabels <- parTable$label
-  labels <- getParTableLabels(parTable, labelCol="label")
-  parTable$label <- labels
-
-  V <- vcov(object)
-  coefs <- structure(parTable$est, names = labels)
-
-  # parTable$est <- NULL # no longer needed
-  parTable$std.error <- NA
-
-  isIntercept <- parTable$op == "~1"
-  labels <- unique(labels[!isIntercept]) # remove intercept labels
-  parTable <- parTable[!isIntercept, ]
-
-  V <- expandVCOV(V, labels=labels)
-  coefs <- coefs[labels]
-
-  legalNames <- stringr::str_replace_all(labels, OP_REPLACEMENTS)
-
-  if (monte.carlo) {
-    COEFS <- as.data.frame(mvtnorm::rmvnorm(mc.reps, mean = coefs, sigma = V))
-  } else { # delta method
-    k <- length(coefs)
-    COEFS <- matrix(coefs, nrow=k, ncol=k, byrow=TRUE)
-    DeltaEpsilon <- diag(delta.epsilon, k)
-    isFixed <- abs(diag(V)) < tolerance.zero
-    DeltaEpsilon[isFixed, isFixed] <- 0
-    COEFS_p <- as.data.frame(COEFS + DeltaEpsilon)
-    COEFS_m <- as.data.frame(COEFS - DeltaEpsilon)
-    COEFS <- rbind(COEFS_p, COEFS_m)
-  }
-
-  # Get legal parameter names
-  names(COEFS) <- legalNames
-  names(coefs) <- legalNames
-  COEFS <- rbind(as.data.frame(as.list(coefs)), COEFS) # first row is the original values
-
-  colnames(V) <- legalNames
-  rownames(V) <- legalNames
-  parTable$label <- stringr::str_replace_all(parTable$label, OP_REPLACEMENTS)
+  if (!is.null(newdata)) {
+    cols <- colnames(modelH0$data)
+    cols.present <- cols %in% colnames(newdata)
+    stopif(!all(cols.present), "Missing cols in `newdata`:\n", cols[!cols.present])
   
-  parTable <- parTable[c("lhs", "op", "rhs", "label")]
-  COEFS <- var_interactions_COEFS(parTable, COEFS) # calculate variances of interaction terms
-  # Calculate 
+    newdata <- as.matrix(newdata)[, cols]
 
-  # get variances
-  varianceEquations <- list()
-  variances <- list()
-
-  for (x in allInds) {
-    # get the variance equation for each variable
-    eqVarX <- getCovEqExpr(x=x, y=x, parTable=parTable, measurement.model=TRUE)
-    varianceEquations[[x]] <- eqVarX  
-    variances[[x]] <- eval(eqVarX, envir = COEFS)
-  }
+  } else newdata <- modelH0$data
   
-  for (x in lVs) {
-    # get the variance equation for each variable
-    eqVarX <- getCovEqExpr(x=x, y=x, parTable=parTable)
-    varianceEquations[[x]] <- eqVarX  
-    variances[[x]] <- eval(eqVarX, envir = COEFS)
+  transform.x <- if (center.data) \(x) x - mean(x, na.rm = TRUE) else \(x) x
+
+  parTableH1 <- parameter_estimates(modelH1)
+  parTableH0 <- parameter_estimates(modelH0)
+
+  lVs   <- getLVs(parTableH1)
+  sigma <- modsem_inspect(modelH0, what = "cov.ov")
+
+  sigma.inv <- GINV(sigma)
+  lambda    <- getLambdaParTable(parTableH0, rows = colnames(sigma), cols = lVs)
+
+  X <- apply(as.matrix(newdata), MARGIN = 2, FUN = transform.x)
+  X <- X[, colnames(sigma), drop = FALSE]
+
+  FSC <- GINV(t(lambda) %*% sigma.inv %*% lambda) %*% (t(lambda) %*% sigma.inv)
+
+  alpha <- matrix(getMeans(lVs, parTable = parTableH1), 
+                  nrow = nrow(X), ncol = length(lVs), byrow = TRUE)
+
+  Y <- X %*% t(FSC) + alpha
+
+  if (standardized) {
+    mu <- \(x) mean(x, na.rm = TRUE)
+    s  <- \(x) stats::sd(x, na.rm = TRUE)
+    Y  <- apply(Y, MARGIN = 2, FUN = \(y) (y - mu(y)) / s(y))
   }
 
-  for (xz in intTerms) {
-    labelVarXZ <- getLabelVarXZ(xz)
-    eqVarXZ <- parse(text=labelVarXZ)
-    varianceEquations[[xz]] <- eqVarXZ
-    variances[[xz]] <- eval(eqVarXZ, envir = COEFS)
-  }
-
-  # Factor Loadings
-  lambda     <- NULL
-  selectRows <- NULL
-
-  for (lV in lVs) {
-    for (ind in indsLVs[[lV]]) {
-      selectRows  <- parTable$lhs == lV & parTable$op == "=~" & parTable$rhs == ind
-      label <- parTable[selectRows, "label"]
-
-      # est in parTable
-      scalingCoef <- sqrt(variances[[lV]]) / sqrt(variances[[ind]])
-      lambda      <- COEFS[[label]] * scalingCoef
-
-      COEFS[[label]] <- lambda
-    }
-  }
-
-  # Structural Coefficients
-  gamma               <- NULL
-  selectStrucExprsEta <- NULL
-  structExprsEta      <- NULL
-  selectStrucExprs    <- parTable$op == "~" & parTable$lhs %in% etas
-
-  for (eta in etas) {
-    selectStrucExprsEta <- selectStrucExprs & parTable$lhs == eta
-    structExprsEta      <- parTable[selectStrucExprsEta, ]
-
-    for (xi in structExprsEta$rhs) {
-      selectRows  <- selectStrucExprsEta & parTable$rhs == xi
-      scalingCoef <- sqrt(variances[[xi]]) / sqrt(variances[[eta]])
-      label       <- parTable[selectRows, "label"]
-      gamma       <- COEFS[[label]] * scalingCoef
-      
-      COEFS[[label]] <- gamma
-    }
-  }
-
-  # (Co-) Variances of xis
-  selectCovXis <- parTable$op == "~~" & parTable$lhs %in% xis
-  selectRows   <- NULL
-  combosXis    <- getUniqueCombos(xis, match = TRUE)
-
-  for (i in seq_len(nrow(combosXis))) {
-    xis         <- combosXis[i, , drop = TRUE]
-    selectRows  <- selectCovXis & parTable$lhs %in% xis & parTable$rhs %in% xis
-    scalingCoef <- sqrt(variances[[xis[[1]]]]) * sqrt(variances[[xis[[2]]]])
-
-    if (xis[[1]] != xis[[2]]) {
-      selectRows <- selectRows & parTable$lhs != parTable$rhs
-    }
-
-    label <- parTable[selectRows, "label"]
-    covs <- COEFS[[label]] / scalingCoef
-
-    COEFS[[label]] <- covs
-  }
-
-  # Residual Variances etas
-  selectRows <- NULL
-  residual   <- NULL
-
-  for (eta in etas) {
-    selectRows <- parTable$lhs == eta & parTable$op == "~~" & parTable$rhs == eta
-    label <- parTable[selectRows, "label"]
-    residual <- COEFS[[label]] / variances[[eta]]
-
-    COEFS[[label]] <- residual
-  }
-
-  # residual variances inds
-  for (ind in allInds) {
-    selectRows <- parTable$lhs == ind & parTable$op == "~~" & parTable$rhs == ind
-    label <- parTable[selectRows, "label"]
-    residual <- COEFS[[label]] / variances[[ind]]
-
-    COEFS[[label]] <- residual
-  }
-
-  # recalculate variance of interaction terms
-  # and rescale coefficients for interaction terms
-  COEFS <- var_interactions_COEFS(parTable, COEFS)
-
-  for (xz in intTerms) {
-    selectRows <- parTable$rhs == xz & parTable$op == "~"
-    labels <- parTable[selectRows, "label"]
-    labelVarXZ <- getLabelVarXZ(xz)
-    gamma <- COEFS[labels] / sqrt(COEFS[[labelVarXZ]])
-
-    COEFS[labels] <- gamma 
-  }
-
-  # recalculate custom parameters
-  constrExprs <- sortConstrExprsFinalPt(parTable)
-  for (i in seq_len(NROW(constrExprs))) {
-    row <- constrExprs[i, , drop=FALSE]
-    label <- row$label
-    expr <- parse(text=constrExprs[i, "rhs"])
-    newVals <- eval(expr, envir = COEFS)
-  
-    COEFS[[label]] <- newVals
-  }
-
-  nzeros <- round(log10(1 / tolerance.zero), 0)
-  coefs <- unlist(COEFS[1, ])
-  COEFS <- round(COEFS[2:(nrow(COEFS)), ],  nzeros) # skip first row
-
-  if (monte.carlo) {
-    vcov <- stats::cov(COEFS)
-  } else {
-    # delta method
-    p <- 1:k
-    m <- (k+1):(k + k)
-
-    COEFS_p <- t(COEFS[p, ])
-    COEFS_m <- t(COEFS[m, ])
-
-    J <- (COEFS_p - COEFS_m) / (2 * delta.epsilon)
-    vcov <- J %*% V %*% t(J)
-  }
-
-  # fill parTable
-  std.errors <- suppressWarnings(sqrt(diag(vcov)))
-  warnFunc <- function(type, row) {
-    warning2("Unable to calculate standardized ", type, " for: ", 
-             paste0(row$lhs, row$op, row$rhs))
-  }
-
-  verboseLabels <- stringr::str_replace_all(parTable$label, OP_REPLACEMENTS)
-  for (i in seq_len(nrow(parTable))) {
-    row <- parTable[i, , drop = FALSE]
-    label <- verboseLabels[[i]]
-
-    if (!label %in% names(coefs)) {
-      warnFunc("coefficient", row)
-      est <- NA
-    } else est <- coefs[[label]]
-
-    if (!label %in% names(std.errors)) {
-      warnFunc("std.error", row)
-      se <- NA 
-    } else se <- std.errors[[label]]
-
-    parTable[i, "est"] <- est
-    parTable[i, "std.error"] <- se
-  }
-
-  # Fill in NA on zero-standard errors, and create vcov and coefs
-  parTable[!is.na(parTable$std.error) & 
-           abs(parTable$std.error) < tolerance.zero, "std.error"] <- NA
-
-  isFree <- !is.na(parTable$std.error)
-  coefs <- structure(parTable$est[isFree], names = parTable$label[isFree])
-  params <- intersect(names(coefs), rownames(vcov))
-
-  coefs <- coefs[params]
-  vcov <- vcov[params, params]
-
-  cleanedParamLabels <- stringr::str_replace_all(params, OP_REPLACEMENTS_INV)
-  names(coefs) <- cleanedParamLabels 
-  colnames(vcov) <- rownames(vcov) <- cleanedParamLabels
-
-  # Finalize parTable
-  parTable[!parTable$label %in% originalLabels, "label"] <- "" 
-  parTable$z.value  <- parTable$est / parTable$std.error
-  parTable$p.value  <- 2 * stats::pnorm(-abs(parTable$z.value))
-  parTable$ci.lower <- parTable$est - CI_WIDTH * parTable$std.error
-  parTable$ci.upper <- parTable$est + CI_WIDTH * parTable$std.error
-
-
-  list(parTable = parTable,
-       coefs    = coefs, 
-       vcov     = vcov,
-       COEFS    = COEFS)
+  Y
 }

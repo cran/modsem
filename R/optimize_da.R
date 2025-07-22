@@ -1,4 +1,8 @@
-optimizeStartingParamsDA <- function(model) {
+optimizeStartingParamsDA <- function(model, 
+                                     args = list(orthogonal.x = FALSE,
+                                                 orthogonal.y = FALSE,
+                                                 auto.fix.first = TRUE,
+                                                 auto.fix.sinlge = TRUE)) {
   etas     <- model$info$etas
   indsEtas <- model$info$allIndsEtas
   xis      <- model$info$xis
@@ -9,40 +13,82 @@ optimizeStartingParamsDA <- function(model) {
   syntax <- paste(model$syntax, model$covModel$syntax,
                   model$info$lavOptimizerSyntaxAdditions,
                   sep = "\n")
-  parTable <- modsem_pi(syntax, data, method = "dblcent",
-                        meanstructure = TRUE,
-                        suppress.warnings.lavaan = TRUE)$coefParTable
-  if (is.null(parTable)) {
-    modsem_pi(syntax, data, method = "dblcent", meanstructure = TRUE)
-    stop2("lavaan failed")
-  }
+
+  estPI <- modsem_pi(
+    model.syntax    = syntax, 
+    data            = data, 
+    method          = "dblcent",
+    meanstructure   = TRUE,
+    orthogonal.x    = args$orthogonal.x,
+    orthogonal.y    = args$orthogonal.y,
+    auto.fix.first  = args$auto.fix.first,
+    auto.fix.single = args$auto.fix.single,
+    res.cov.method  = "simple.no.warn",
+    res.cov.across  = TRUE,
+    match           = TRUE,
+    match.recycle   = TRUE,
+    suppress.warnings.match = TRUE,
+    suppress.warnings.lavaan = TRUE
+  )
+
+  parTable <- parameter_estimates(estPI, colon.pi = TRUE)
+ 
+  stopif(is.null(parTable), "lavaan failed!")
+
   # Main Model
   matricesMain <- model$matrices
   LambdaX <- findEstimatesParTable(matricesMain$lambdaX, parTable, op = "=~",
-                                   rows_lhs = FALSE)
+                                   rows_lhs = FALSE, fill = 0.7)
   LambdaY <- findEstimatesParTable(matricesMain$lambdaY, parTable, op = "=~",
-                                   rows_lhs = FALSE)
+                                   rows_lhs = FALSE, fill = 0.7)
 
-  ThetaEpsilon <- findEstimatesParTable(matricesMain$thetaEpsilon, parTable, op = "~~")
-  ThetaDelta   <- findEstimatesParTable(matricesMain$thetaDelta, parTable, op = "~~")
+  ThetaEpsilon <- findEstimatesParTable(matricesMain$thetaEpsilon, parTable, 
+                                        op = "~~", fill = 0.2)
+  ThetaDelta   <- findEstimatesParTable(matricesMain$thetaDelta, parTable, 
+                                        op = "~~", fill = 0.2)
 
-  Psi <- findEstimatesParTable(matricesMain$psi, parTable, op = "~~")
-  Phi <- findEstimatesParTable(matricesMain$phi, parTable, op = "~~")
+  Psi <- findEstimatesParTable(matricesMain$psi, parTable, op = "~~", fill = 0)
+  Phi <- findEstimatesParTable(matricesMain$phi, parTable, op = "~~", fill = 0)
 
-  A <- findEstimatesParTable(matricesMain$A, parTable, op = "~~")
-  A[upper.tri(A)] <- t(A[lower.tri(A)])
-  A <- t(tryCatch(chol(A), error = function(x) diag(ncol(A))))
+  A <- findEstimatesParTable(matricesMain$A, parTable, op = "~~", fill = 0)
+
+  correctDiag <- function(M, fill = 1, tol = 0) {
+    M[M < tol & is.diag(M)] <- fill
+    M
+  }
+
+  # Check for negative diagonals
+  ThetaEpsilon <- correctDiag(ThetaEpsilon, tol = 0) # no negative values
+  ThetaDelta   <- correctDiag(ThetaDelta, tol = 0) # no negative values
+  Psi          <- correctDiag(Psi, tol = 0) # no negative values
+  Phi          <- correctDiag(Phi, tol = 0) # no negative values
+  A            <- correctDiag(A, tol = 0)
+
+  as.I <- function(M) { # If Phi/A is non-invertible we want I instead
+    I <- diag(NROW(M))
+    dimnames(I) <- dimnames(M)
+    I
+  }
+
+  if (!is.invertible(Phi))          Phi <- as.I(Phi)
+  # Residuals don't need to be invertible...
+  # if (!is.invertible(Psi))          Psi <- as.I(Psi)
+  # if (!is.invertible(ThetaEpsilon)) ThetaEpsilon <- as.I(ThetaEpsilon)
+  # if (!is.invertible(ThetaDelta))   ThetaDelta   <- as.I(ThetaDelta)
+
+  A[upper.tri(A)] <- t(A)[upper.tri(A)]
+  A <- t(tryCatch(chol(A), error = function(x) as.I(A)))
 
   beta0 <- findInterceptsParTable(matricesMain$beta0, parTable, fill = 0)
   alpha <- findInterceptsParTable(matricesMain$alpha, parTable, fill = 0)
 
-  GammaEta <- findEstimatesParTable(matricesMain$gammaEta, parTable, op = "~")
-  GammaXi  <- findEstimatesParTable(matricesMain$gammaXi, parTable, op = "~")
+  GammaEta <- findEstimatesParTable(matricesMain$gammaEta, parTable, op = "~", fill = 0)
+  GammaXi  <- findEstimatesParTable(matricesMain$gammaXi, parTable, op = "~", fill = 0)
 
   OmegaEtaXi <- findInteractionEstimatesParTable(matricesMain$omegaEtaXi,
-                                                 parTable = parTable)
+                                                 parTable = parTable, fill = 0)
   OmegaXiXi <- findInteractionEstimatesParTable(matricesMain$omegaXiXi,
-                                                parTable = parTable)
+                                                parTable = parTable, fill = 0)
   tauX <- findInterceptsParTable(matricesMain$tauX, parTable, fill = 0)
   tauY <- findInterceptsParTable(matricesMain$tauY, parTable, fill = 0)
 
@@ -65,17 +111,20 @@ optimizeStartingParamsDA <- function(model) {
   # Cov Model
   matricesCov <- model$covModel$matrices
   if (!is.null(matricesCov)) {
-    PsiCovModel <- findEstimatesParTable(matricesCov$psi, parTable, op = "~~")
-    PhiCovModel <- findEstimatesParTable(matricesCov$phi, parTable, op = "~~")
-    ACovModel <- findEstimatesParTable(matricesCov$A, parTable, op = "~~")
-    ACovModel[upper.tri(ACovModel)] <- t(ACovModel[lower.tri(ACovModel)])
-    ACovModel <- t(tryCatch(chol(ACovModel), error = function(x)
-                            diag(ncol(ACovModel))))
-    GammaEtaCovModel <- findEstimatesParTable(matricesCov$gammaEta, parTable, op = "~")
-    GammaXiCovModel <- findEstimatesParTable(matricesCov$gammaXi, parTable, op = "~")
+    PsiCovModel <- findEstimatesParTable(matricesCov$psi, parTable, op = "~~", fill = 0)
+    PhiCovModel <- findEstimatesParTable(matricesCov$phi, parTable, op = "~~", fill = 0)
+    
+    GammaEtaCovModel <- findEstimatesParTable(matricesCov$gammaEta, parTable, op = "~", fill = 0)
+    GammaXiCovModel <- findEstimatesParTable(matricesCov$gammaXi, parTable, op = "~", fill = 0)
+ 
+    PhiCovModel <- correctDiag(PhiCovModel, tol = 0)
+    PsiCovModel <- correctDiag(PsiCovModel, tol = 0)
+
+    if (!is.invertible(PhiCovModel)) PhiCovModel <- as.I(PhiCovModel)
+    # Residuals don't need to be invertible...
+    # if (!is.invertible(PsiCovModel)) PsiCovModel <- as.I(PsiCovModel)
 
     thetaCov <- unlist(list(PhiCovModel[is.na(matricesCov$phi)],
-                            ACovModel[is.na(matricesCov$A)],
                             PsiCovModel[is.na(matricesCov$psi)],
                             GammaXiCovModel[is.na(matricesCov$gammaXi)],
                             GammaEtaCovModel[is.na(matricesCov$gammaEta)]))
@@ -121,7 +170,7 @@ findInterceptsParTable <- function(mat, parTable, fill = NULL) {
 }
 
 
-findInteractionEstimatesParTable <- function(omega, parTable) {
+findInteractionEstimatesParTable <- function(omega, parTable, fill = NULL) {
   rows <- rownames(omega)
   cols <- colnames(omega)
 
@@ -129,9 +178,9 @@ findInteractionEstimatesParTable <- function(omega, parTable) {
     if (!is.na(omega[row, col])) next
     eta <- getEtaRowLabelOmega(row)
     x   <- getXiRowLabelOmega(row)
-    xz  <- createDoubleIntTerms(x = x, z = col, sep = "")
-    omega[row, col] <- extractFromParTable(eta, "~", xz, parTable,
-                                           rows_lhs = TRUE)
+    xz  <- createDoubleIntTerms(x = x, z = col, sep = ":")
+    omega[row, col] <- extractFromParTable(eta, "~", xz, parTable = parTable,
+                                           rows_lhs = TRUE, fill = fill)
   }
   omega
 }
@@ -154,11 +203,12 @@ extractFromParTable <- function(row, op, col, parTable, rows_lhs = TRUE, fill = 
   }
 
   if (length(out) == 0) {
-    if (is.null(fill)) stop("No match found")
+    stopif(is.null(fill), "No match found")
     out <- fill
   }
 
-  if (length(out) > 1) stop("Incorrect length of matches")
+  stopif(length(out) > 1, "Incorrect length of matches")
+
   out
 }
 
@@ -173,4 +223,38 @@ sortParTable <- function(parTable, lhs, op, rhs) {
     }
   }
   out$est
+}
+
+
+parameterEstimatesLavSAM <- function(syntax, data, ...) {
+  parTable <- modsemify(syntax)
+
+  if (!any(grepl(":", parTable$rhs) | grepl(":", parTable$lhs))) {
+    fitSEM <- lavaan::sem(syntax, data = data, meanstructure = TRUE, ...)
+    return(lavaan::parameterEstimates(fitSEM))
+  }
+
+  # Get SAM structural model with measurement model from a CFA
+  lVs <- getLVs(parTable)
+
+  getCFARows <- function(pt) {
+    pt[pt$op == "=~" | 
+       pt$op == "~1" |
+      (pt$op == "~~" & !pt$lhs %in% lVs & !pt$rhs %in% lVs), ]
+  }
+
+  parTableOuter <- getCFARows(parTable)
+
+  syntaxCFA <- parTableToSyntax(parTableOuter)
+  syntaxSAM <- parTableToSyntax(parTable)
+
+  fitCFA <- suppressWarnings(lavaan::cfa(syntaxCFA, data = data, meanstructure = TRUE))
+  fitSAM <- suppressWarnings(lavaan::sam(syntaxSAM, data = data, se = "none"))
+
+  measr  <- getCFARows(lavaan::parameterEstimates(fitCFA))
+  struct <- suppressWarnings(centered_estimates(fitSAM))
+
+  addlab <- \(pt) if (!"label" %in% colnames(pt)) {pt$label <- ""; pt} else pt
+  cols <- c("lhs", "op", "rhs", "label", "est")
+  rbind(addlab(measr)[cols], addlab(struct)[cols])
 }
