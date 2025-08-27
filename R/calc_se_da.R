@@ -13,7 +13,8 @@ calcFIM_da <- function(model,
                        EFIM.S = 3e4,
                        epsilon = 1e-8,
                        R.max = 1e6,
-                       verbose = FALSE) {
+                       verbose = FALSE,
+                       cr1s = TRUE) {
   if (!calc.se) return(list(FIM = NULL, vcov = NULL, vcov.sub = NULL, type = "none",
                             raw.labels = names(theta), n.additions = 0))
   if (verbose) printf("Calculating standard errors (%s)\n", FIM)
@@ -22,17 +23,21 @@ calcFIM_da <- function(model,
      lms =
        switch(FIM,
           observed = calcOFIM_LMS(model, theta = theta, data = data,
-                                  epsilon = epsilon, hessian = hessian, P = P),
-          expected = calcEFIM_LMS(model, finalModel = finalModel, theta = theta, 
-                                  data = data, epsilon = epsilon, S = EFIM.S, 
+                                  epsilon = epsilon, hessian = hessian, P = P,
+                                  robust.se = robust.se, cluster = data$cluster,
+                                  cr1s = cr1s),
+          expected = calcEFIM_LMS(model, finalModel = finalModel, theta = theta,
+                                  data = data, epsilon = epsilon, S = EFIM.S,
                                   parametric = EFIM.parametric, verbose = verbose,
                                   R.max = R.max, P = P),
           stop2("FIM must be either expected or observed")),
      qml =
        switch(FIM,
           observed = calcOFIM_QML(model, theta = theta, data = data,
-                                  hessian = hessian, epsilon = epsilon),
-          expected = calcEFIM_QML(model, finalModel = finalModel, theta = theta, 
+                                  hessian = hessian, epsilon = epsilon,
+                                  robust.se = robust.se, cluster = data$cluster,
+                                  cr1s = cr1s),
+          expected = calcEFIM_QML(model, finalModel = finalModel, theta = theta,
                                   data = data, epsilon = epsilon, S = EFIM.S,
                                   parametric = EFIM.parametric, verbose = verbose,
                                   R.max = R.max),
@@ -75,7 +80,7 @@ fdHESS <- function(pars, ...) {
     nlme::fdHess(pars = pars, ...)$Hessian,
     error = function(e) {
       warning2("Calculation of Hessian matrix failed...\n  ", e$message)
-      matrix(NA, nrow = length(pars), ncol = length(pars)) 
+      matrix(NA, nrow = length(pars), ncol = length(pars))
     }
   )
 }
@@ -86,19 +91,24 @@ calcHessian <- function(model, theta, data, method = "lms",
   if (method == "lms") {
     if (is.null(P)) P <- estepLms(model, theta = theta, data = data)
     # negative hessian (sign = -1)
-    fH <- \(model) hessianObsLogLikLms(model = model, data = data, P = P, theta = theta,  sign = -1,
-                                       .relStep = .Machine$double.eps^(1/5))
+    fH <- \(model) observedInfoFromLouisLms(model = model, theta = theta,
+                                            data = data, P = P)$I.obs
 
-    H <- tryCatch(fH(model), error = function(e) {
-      warning2("Optimized calculation of Hessian failed, attempting to switch!")
+    H <- tryCatch(suppressWarnings(fH(model)), error = function(e) {
+      warning2("Optimized calculation of Hessian failed, attempting to switch!\n", e)
       model$gradientStruct$hasCovModel <- TRUE
-      fH(model)
+
+      suppressWarnings(fH(model))
     })
 
   } else if (method == "qml") {
     # negative hessian (sign = -1)
-    H <- fdHESS(pars = theta, fun = logLikQml, model = model, sign = -1,
-                .relStep = .Machine$double.eps^(1/5))
+    suppressWarnings({
+
+    H <- fdHESS(pars = theta, fun = logLikQml, model = model,
+                sign = -1, .relStep = .Machine$double.eps^(1/5))
+
+    })
   }
 
   H
@@ -144,21 +154,56 @@ calcSE_da <- function(calc.se = TRUE, vcov, rawLabels, NA__ = -999) {
 
 
 calcOFIM_LMS <- function(model, theta, data, hessian = FALSE,
-                         epsilon = 1e-6, P = NULL) {
+                         epsilon = 1e-6, P = NULL,
+                         robust.se = FALSE,
+                         cluster   = NULL,
+                         cr1s      = TRUE) {
   if (is.null(P)) P <- estepLms(model, theta = theta, data = data)
 
-  N <- nrow(data)
   if (hessian) {
     # negative hessian (sign = -1)
-    I <- calcHessian(model, theta = theta, data = data, 
+    I <- calcHessian(model, theta = theta, data = data,
                      method = "lms", epsilon = epsilon, P = P)
-
     return(I)
   }
 
-  S <- gradientObsLogLikLms_i(theta, model = model, data = data,
-                              P = P, sign = 1, epsilon = epsilon)
-  crossprod(S)
+  # S: N x k matrix of individual score contributions (OPG)
+  S <- suppressWarnings(
+    gradientObsLogLikLms_i(theta, model = model, data = data,
+                           P = P, sign = +1, epsilon = epsilon)
+  )
+
+  if (!robust.se || is.null(cluster)) {
+    # classic OFIM via outer product of gradients (BHHH)
+    return(crossprod(S))
+  }
+
+  stopif(length(cluster) != nrow(S),
+         "Length of 'cluster' must equal the number of rows in the data / scores.")
+
+  f <- as.factor(cluster)
+  G <- nlevels(f)
+  k <- ncol(S)
+
+  # aggregate scores by cluster: s_g = sum_{i in g} s_i
+  Sg <- matrix(0, nrow = G, ncol = k)
+  lev <- levels(f)
+  for (g in seq_len(G)) {
+    idx <- which(f == lev[g])
+    Sg[g, ] <- colSums(S[idx, , drop = FALSE])
+  }
+
+  B <- crossprod(Sg)  # meat = sum_g s_g s_g'
+
+  # optional CR1S small-sample correction
+  if (isTRUE(cr1s)) {
+    N <- nrow(S); q <- ncol(S)
+    if (G > 1 && N > q) {
+      B <- B * (G / (G - 1)) * ((N - 1) / (N - q))
+    }
+  }
+
+  B
 }
 
 
@@ -170,24 +215,32 @@ calcEFIM_LMS <- function(model, finalModel = NULL, theta, data,
                          R.max      = 1e6,
                          P          = NULL) {
   k <- length(theta)                       # number of free parameters
-  N <- nrow(data)
+  N <- data$n
   R <- min(R.max, N * S)
   warnif(R.max <= N, "R.max is less than N!")
 
+  ovs <- colnames(data$data.full)
+
   if (parametric) {
-    stopif(is.null(finalModel), "`finalModel` is needed when parametric = TRUE")
+    stopif(is.null(finalModel), "finalModel must be included in calcEFIM_LMS")
+
     parTable   <- modelToParTable(finalModel, method = "lms")
-    population <- simulateDataParTable(parTable, N = R,
-                                       colsOVs = colnames(data))$oV
+    population <- simulateDataParTable(parTable, N = R, colsOVs = ovs)$oV
+
   } else {
-    population <- data[sample(nrow(data), R, replace = TRUE), , drop = FALSE]
+    population <- data$data.full[sample(data$n, R, replace = TRUE), , drop = FALSE]
+
   }
 
+  population <- patternizeMissingDataFIML(population)
+  
   popEstep <- estepLms(model      = model,
                        theta      = theta,
                        data       = population,
                        recalcQuad = TRUE,
                        lastQuad   = if(!is.null(P)) P$quad else NULL)
+
+  suppressWarnings({
 
   J <- gradientObsLogLikLms_i(theta = theta,
                               model = model,
@@ -195,6 +248,7 @@ calcEFIM_LMS <- function(model, finalModel = NULL, theta, data,
                               P     = popEstep,
                               sign  = +1,
                               epsilon = epsilon)      # R × k matrix
+  })
 
   I <- matrix(0, nrow = k, ncol = k)
   for (i in seq_len(S)) {
@@ -202,7 +256,64 @@ calcEFIM_LMS <- function(model, finalModel = NULL, theta, data,
       # non-overlapping split
       idx1 <- (i - 1) * N + 1
       sub  <- idx1:(idx1 + N - 1)
-    } else {                    
+    } else {
+      sub <- sample(R, N)
+    }
+
+    I <- I + crossprod(J[sub, , drop = FALSE])
+  }
+
+  if (verbose) cat("\n")
+
+  I / S
+}
+
+
+calcEFIM_QML <- function(model, finalModel = NULL, theta, data, S = 100,
+                         parametric = TRUE, epsilon = 1e-8, verbose = FALSE,
+                         R.max = 1e6) {
+  k <- length(theta)                       # number of free parameters
+  N <- data$n
+  R <- min(R.max, N * S)
+  warnif(R.max <= N, "R.max is less than N!")
+
+  ovs <- colnames(data$data.full)
+
+  if (parametric) {
+    stopif(is.null(finalModel), "finalModel must be included in calcEFIM_QML")
+
+    parTable <- modelToParTable(finalModel, method = "qml")
+    population <- tryCatch(
+      simulateDataParTable(parTable, N = R, colsOVs = ovs)$oV,
+
+      error = function(e) {
+        warning2("Unable to simulate data for EFIM, using stochastic sampling instead")
+        calcEFIM_QML(model = model, theta = theta, data = data, S = S,
+                     parametric = FALSE, epsilon = epsilon)
+      }
+    )
+
+  } else population <- data$data.full[sample(N, R, replace = TRUE), ]
+
+  model$data <- patternizeMissingDataFIML(population)
+
+  if (!is.null(model$matrices$fullU)) {
+    fullU <- model$matrices$fullU
+    model$matrices$fullU <- fullU[rep(seq_len(N), length.out = R), , drop = FALSE]
+  }
+
+  suppressWarnings({
+    J <- gradientLogLikQml_i(theta = theta, model = model, sign = +1,
+                             epsilon = epsilon)
+  })
+
+  I <- matrix(0, nrow = k, ncol = k)
+  for (i in seq_len(S)) {
+    if (R == N * S) {
+      # non-overlapping split
+      idx1 <- (i - 1) * N + 1
+      sub  <- idx1:(idx1 + N - 1)
+    } else {
       sub <- sample(R, N)
     }
 
@@ -216,62 +327,55 @@ calcEFIM_LMS <- function(model, finalModel = NULL, theta, data,
 
 
 calcOFIM_QML <- function(model, theta, data, hessian = FALSE,
-                         epsilon = 1e-8) {
+                         epsilon = 1e-8,
+                         robust.se = FALSE,
+                         cluster   = NULL,
+                         cr1s      = TRUE) {
   N <- nrow(model$data)
 
   if (hessian) {
     # negative hessian (sign = -1)
-    I <- fdHESS(pars = theta, fun = logLikQml, model = model,
-                sign = -1, .relStep = .Machine$double.eps^(1/5))
+    I <- calcHessian(model = model, theta = theta, data = data,
+                     method = "qml", epsilon = epsilon)
     return(I)
   }
 
-  S <- gradientLogLikQml_i(theta, model = model, sign = 1, epsilon = epsilon)
-  crossprod(S)
-}
+  # S: N x k matrix of individual score contributions (sign = +1 => score)
+  S <- suppressWarnings(
+    gradientLogLikQml_i(theta, model = model, sign = +1, epsilon = epsilon)
+  )
 
-
-calcEFIM_QML <- function(model, finalModel = NULL, theta, data, S = 100,
-                         parametric = TRUE, epsilon = 1e-8, verbose = FALSE,
-                         R.max = 1e6) {
-  k <- length(theta)                       # number of free parameters
-  N <- nrow(data)
-  R <- min(R.max, N * S)
-  warnif(R.max <= N, "R.max is less than N!")
-
-  if (parametric) {
-    if (is.null(finalModel)) stop2("finalModel must be included in calcEFIM_QML")
-    parTable <- modelToParTable(finalModel, method = "qml")
-    population <- tryCatch(
-      simulateDataParTable(parTable, N = R, colsOVs = colnames(data))$oV,
-      error = function(e) {
-        warning2("Unable to simulate data for EFIM, using stochastic sampling instead")
-        calcEFIM_QML(model = model, theta = theta, data = data, S = S, 
-                     parametric = FALSE, epsilon = epsilon)
-      }
-    )
-
-  } else population <- data[sample(R, N, replace = TRUE), ]
-
-  J <- gradientLogLikQml(theta = theta, model = model, sign = +1, 
-                         epsilon = epsilon, data = population)
-
-  I <- matrix(0, nrow = k, ncol = k)
-  for (i in seq_len(S)) {
-    if (R == N * S) {
-      # non-overlapping split
-      idx1 <- (i - 1) * N + 1
-      sub  <- idx1:(idx1 + N - 1)
-    } else {                    
-      sub <- sample(R, N)
-    }
-
-    I <- I + crossprod(J[sub, , drop = FALSE])
+  if (!robust.se || is.null(cluster)) {
+    # classic OFIM (BHHH / OPG)
+    return(crossprod(S))
   }
 
-  if (verbose) cat("\n")
+  stopif(length(cluster) != nrow(S),
+         "Length of 'cluster' must equal the number of rows in the data / scores.")
 
-  I / S
+  f <- as.factor(cluster)
+  G <- nlevels(f)
+  k <- ncol(S)
+
+  # s_g = sum_{i in g} s_i
+  Sg <- matrix(0, nrow = G, ncol = k)
+  lev <- levels(f)
+  for (g in seq_len(G)) {
+    idx <- which(f == lev[g])
+    Sg[g, ] <- colSums(S[idx, , drop = FALSE])
+  }
+
+  B <- crossprod(Sg)  # meat = sum_g s_g s_g'
+
+  # Optional CR1S small-sample correction
+  if (isTRUE(cr1s)) {
+    q <- ncol(S)
+    if (G > 1 && N > q) {
+      B <- B * (G / (G - 1)) * ((N - 1) / (N - q))
+    }
+  }
+
+  B
 }
 
 

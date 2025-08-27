@@ -48,18 +48,18 @@ summary(lms1, standardized = TRUE)
 Here is the same example using the `QML` approach:
 
 ```{r}
-qml1 <- modsem(m1, oneInt, method = "qml")
-summary(qml1)
+qml1 <- modsem(m1, oneInt, method = "qml", robust.se = TRUE) # get robust standard errors
+summary(qml1, fit = TRUE, adjusted = TRUE) # get additional fit indices
 ```
 
 ## A More Complicated Example
 
-Below is an example of a more complex model based on the theory of planned behavior (TPB), which includes two endogenous variables and an interaction between an endogenous and exogenous variable. When estimating more complex models with the `LMS` approach, it is recommended to increase the number of nodes used for numerical integration. By default, the number of nodes is set to 16, but this can be increased using the `nodes` argument. The `nodes` argument has no effect on the `QML` approach.
+Below is an example of a more complex model based on the theory of planned behavior (TPB), which includes two endogenous variables and an interaction between an endogenous and exogenous variable. When estimating more complex models with the `LMS` approach, it is recommended to increase the number of nodes used for numerical integration. By default, the number of nodes is set to 24, but this can be increased using the `nodes` argument. The `nodes` argument has no effect on the `QML` approach.
 
 When there is an interaction effect between an endogenous and exogenous variable, it is recommended to use at least 32 nodes for the `LMS` approach. You can also obtain robust standard errors by setting `robust.se = TRUE` in the `modsem()` function.
 
-**NOTE**: If you want the `LMS` approach to produce results as similar as possible to `Mplus`, 
-you should consider increasing the number of nodes using the `nodes` argument, and or 
+**NOTE**: If you want the `LMS` approach to produce results as similar as possible to `Mplus`,
+you should consider increasing the number of nodes using the `nodes` argument, and or
 using a quasi-adaptive quadrature by setting `adaptive.quad=TRUE`.
 
 ```{r}
@@ -68,7 +68,7 @@ using a quasi-adaptive quadrature by setting `adaptive.quad=TRUE`.
 # INT = Intention
 # SN = Subjective Norms
 # BEH = Behavior
-tpb <- ' 
+tpb <- '
 # Outer Model (Based on Hagger et al., 2007)
   ATT =~ att1 + att2 + att3 + att4 + att5
   SN =~ sn1 + sn2
@@ -78,8 +78,8 @@ tpb <- '
 
 # Inner Model (Based on Steinmetz et al., 2011)
   INT ~ ATT + SN + PBC
-  BEH ~ INT + PBC 
-  BEH ~ INT:PBC  
+  BEH ~ INT + PBC
+  BEH ~ INT:PBC
 '
 
 lms2 <- modsem(tpb, TPB, method = "lms", nodes = 32)

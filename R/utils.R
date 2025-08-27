@@ -13,7 +13,8 @@ stopif <- function(cond, ...) {
 }
 
 
-warnif <- function(cond, ...) {
+warnif <- function(cond, ..., .newline = FALSE) {
+  if (cond && .newline) cat("\n")
   if (cond) warning2(...)
 }
 
@@ -30,7 +31,7 @@ calcCovParTable <- function(x, y, parTable, measurement.model = FALSE, maxlen = 
 
 
 calcVarParTable <- function(x, parTable, measurement.model = FALSE, maxlen = 100) {
-  var <- calcCovParTable(x = x, y = x, parTable = parTable, 
+  var <- calcCovParTable(x = x, y = x, parTable = parTable,
                          measurement.model = measurement.model, maxlen = maxlen)
   structure(var, names = x)
 }
@@ -97,10 +98,10 @@ getXis <- function(parTable, etas = NULL, isLV = TRUE, checkAny = TRUE) {
   stopif(checkAny && !length(xis), "No xis found")
   xis
 }
-   
+
 
 getIndicators <- function(parTable, observed=TRUE) {
-  indicators <- unique(parTable[!grepl(":", parTable$rhs) & 
+  indicators <- unique(parTable[!grepl(":", parTable$rhs) &
                                 parTable$op == "=~", "rhs"])
 
   if (observed) indicators <- indicators[!indicators %in% getLVs(parTable)]
@@ -109,7 +110,7 @@ getIndicators <- function(parTable, observed=TRUE) {
 
 
 getProdNames <- function(parTable) {
-  unique(parTable[grepl(":", parTable$rhs) & 
+  unique(parTable[grepl(":", parTable$rhs) &
          parTable$op %in% c("~", "=~"), "rhs"])
 }
 
@@ -139,7 +140,7 @@ getHigherOrderLVs <- function(parTable) {
   for (lV in lVs) {
     inds <- parTable[parTable$lhs == lV & parTable$op == "=~", "rhs"] |>
       stringr::str_split(pattern = ":") |> unlist()
-     
+
     if (any(inds %in% lVs)) isHigherOrder[[lV]] <- TRUE
   }
 
@@ -210,7 +211,7 @@ getUniqueCombos <- function(x, match = FALSE) {
   # Base case, x is 1 length long and there are no unique combos
   if (length(x) <= 1) return(NULL)
 
-  rest <- getUniqueCombos(x[-1], match = match)
+  rest <- getUniqueCombos(x[-1], match = FALSE) # this is not a mistake!
   combos <- data.frame(V1 = rep(x[[1]], length(x) - 1),
                        V2 = x[-1])
   if (match) combos <- rbind(data.frame(V1 = x, V2 = x), combos)
@@ -301,7 +302,7 @@ centerInteractions <- function(parTable, center.means = TRUE) {
     XZ <- unlist(stringr::str_split(rows[i, "rhs"], ":"))
     X <- XZ[[1]]
     Z <- XZ[[2]]
-    
+
     meanX <- getMean(X, parTable)
     meanZ <- getMean(Z, parTable)
 
@@ -332,19 +333,19 @@ meanInteractions <- function(parTable, ignore.means = FALSE) {
   intTerms <- unique(parTable[grepl(":", parTable$rhs), "rhs"])
 
   # remove existing
-  parTable <- parTable[!(parTable$op == "~1" & parTable$lhs %in% intTerms), 
+  parTable <- parTable[!(parTable$op == "~1" & parTable$lhs %in% intTerms),
                        , drop = FALSE]
- 
+
   present  <- colnames(parTable)
   newcols  <- c("lhs", "op", "rhs", "label", "est")
   newcols  <- intersect(newcols, present)
-  fillcols <- setdiff(present, newcols) 
+  fillcols <- setdiff(present, newcols)
 
   for (intTerm in intTerms) {
     XZ <- unlist(stringr::str_split(intTerm, ":"))
     X <- XZ[[1]]
     Z <- XZ[[2]]
- 
+
     meanX <- if (!ignore.means) getMean(X, parTable) else 0
     meanZ <- if (!ignore.means) getMean(Z, parTable) else 0
 
@@ -403,7 +404,7 @@ printf <- function(...) {
   cat(sprintf(...))
   utils::flush.console()
 }
-  
+
 
 clearConsoleLine <- function() {
   printf(paste0("\r", strrep(" ", getOption("width", default=0L)), "\r"))
@@ -444,7 +445,7 @@ strRemovIfString <- function(x, pattern) {
 getParTableLabels <- function(parTable, labelCol="label", replace.dup = FALSE) {
   if (replace.dup) {
 		labels <- unique(parTable[[labelCol]][parTable[[labelCol]] != ""])
-		
+
 		for (label in labels) {
 			match <- parTable[[labelCol]] == label
 			first <- which.max(match)
@@ -456,7 +457,7 @@ getParTableLabels <- function(parTable, labelCol="label", replace.dup = FALSE) {
   custom <- parTable$op == ":="
   parTable[custom, c("op", "rhs")] <- ""
 
-  ifelse(parTable[[labelCol]] == "", 
+  ifelse(parTable[[labelCol]] == "",
          yes = paste0(parTable$lhs, parTable$op, parTable$rhs),
          no = parTable[[labelCol]])
 }
@@ -467,7 +468,7 @@ CI_WIDTH <- qnorm(.975)
 
 padCharMatrix <- function(X, n=1) {
   pad <- strrep(" ", n)
-  matrix(paste0(pad, X), nrow = nrow(X), ncol = ncol(X), 
+  matrix(paste0(pad, X), nrow = nrow(X), ncol = ncol(X),
          dimnames = dimnames(X))
 }
 
@@ -488,7 +489,7 @@ formatParameters <- function(...) {
   names <- format(args, justify = "left")
   values <- format(c(...), justify = "right")
 
-  paste0(sprintf("%s%s = %s\n", pad, names, values), 
+  paste0(sprintf("%s%s = %s\n", pad, names, values),
          collapse = "")
 }
 
@@ -500,8 +501,8 @@ padString <- function(x, pad) {
 
 
 getCoefsRows <- function(y, x, parTable) {
-  row <- parTable[parTable$lhs %in% y & 
-                  parTable$rhs %in% x & 
+  row <- parTable[parTable$lhs %in% y &
+                  parTable$rhs %in% x &
                   parTable$op == "~", , drop = FALSE]
 }
 
@@ -563,7 +564,7 @@ sortConstrExprs <- function(parTable) {
 
   labelled <- unique(parTable$mod[parTable$mod != ""])
   isConst  <- canBeNumeric(rows$rhs)
-  
+
   rows <- rows[!(isConst & rows$op %in% BOUNDUARY_OPS), ] # not relevant
 
   if (!all(rows$lhs %in% labelled)) {
@@ -612,7 +613,7 @@ sortConstrExprsFinalPt <- function(parTable) {
   # wrapr for sortConstrExprs meant to be used on the final output parTable
   # not for the input parTable (e.g., mod -> label)
   constrExprs <- sortConstrExprs(rename(parTable, label="mod"))
- 
+
   if (is.null(constrExprs)) NULL else rename(constrExprs, mod="label")
 }
 
@@ -630,8 +631,11 @@ GINV <- function(X) {
 
 
 cov2cor <- function(vcov) {
+  if (is.null(vcov))
+    return(NULL)
+
   sd <- sqrt(abs(diag(vcov))) # use `abs()`, in case some variances are negative
-  
+
   D <- diag(1 / sd)
   structure(D %*% vcov %*% D, dimnames = dimnames(vcov))
 }
@@ -655,8 +659,11 @@ leftJoin <- function(left, right, by = intersect(colnames(left), colnames(right)
 }
 
 
-eraseConsoleLines <- function(n = 1) {
-  if (n < 1 || !interactive()) return(invisible())
+eraseConsoleLines <- function(n = 1L) {
+  if (n < 1L || !interactive() || !.isOnUnix())
+    return(invisible()) # if we're not in interactive mode, or on UNIX
+                        # there is not point
+
   seq <- paste0(rep("\033[1A\033[2K", n), collapse = "")
   # bring cursor to start of the line we landed on
   cat(seq, "\033[1G", sep = "")
@@ -678,4 +685,10 @@ is.invertible <- function(M) {
     solve(M)
     TRUE
   }, error = \(e) FALSE)
+}
+
+
+.isOnUnix <- function(.onFail = FALSE) {
+  tryCatch(tolower(.Platform$OS.type) == "unix",
+           error = \(e) .onFail)
 }

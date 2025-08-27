@@ -17,7 +17,7 @@
 #' est_dca <- modsem(m1, oneInt)
 #'
 #' pars <- parameter_estimates(est_dca) # no correction
-#' 
+#'
 #' # Pretty summary
 #' summarize_partable(pars)
 #'
@@ -37,84 +37,6 @@ parameter_estimates <- function(object, ...) {
 #' @export
 var_interactions <- function(object, ...) {
   UseMethod("var_interactions")
-}
-
-
-#' @export
-var_interactions.data.frame <- function(object, ignore.means = FALSE, ...) {
-
-  # Preparation
-  PT <- removeInteractionVariances(fillColsParTable(object))
-
-  ## interaction (and square) terms explicitly declared in the model
-  intTerms <- unique(PT$rhs[PT$op == "~" & grepl(":", PT$rhs)])
-  if (length(intTerms) == 0L)
-    return(modsemParTable(PT))                 # nothing to do
-
-  # Gather first‑ and second‑order moments for the base variables --
-  vars <- sort(unique(unlist(strsplit(intTerms, ":", fixed = TRUE))))
-
-  if (ignore.means) mu <- stats::setNames(numeric(length(vars)), vars)
-  else              mu <-  sapply(vars, getMean, parTable = PT)
-
-  getCov <- function(a, b) calcCovParTable(a, b, PT)
-  Sigma  <- outer(vars, vars, getCov)
-  dimnames(Sigma) <- list(vars, vars)
-
-  # Helper functions for the Gaussian fourth‑moment identity
-  cov_PX <- function(i, j, k)
-    mu[i] * Sigma[j, k] + mu[j] * Sigma[i, k]
-
-  cov_PP <- function(i, j, k, l)
-    Sigma[i, k] * Sigma[j, l] + Sigma[i, l] * Sigma[j, k] +
-    mu[i] * mu[j] * Sigma[k, l] + mu[k] * mu[l] * Sigma[i, j] +
-    mu[i] * mu[k] * Sigma[j, l] + mu[j] * mu[k] * Sigma[i, l] +
-    mu[i] * mu[l] * Sigma[j, k] + mu[j] * mu[l] * Sigma[i, k]
-
-  # Split product names once to avoid repetition
-  prodPairs  <- lapply(intTerms, function(s) sort(strsplit(s, ":", fixed = TRUE)[[1L]]))
-  names(prodPairs) <- intTerms                # keep original order/labels
-
-  # Assemble rows to append
-  rows <- vector("list", 0L)
-
-  for (P in names(prodPairs)) {
-
-    ij <- prodPairs[[P]];  i <- ij[1L];  j <- ij[2L]
-
-    ## variance of the product term itself
-    varP <- cov_PP(i, j, i, j)
-    rows[[length(rows) + 1L]] <-
-      data.frame(lhs = P, op = "~~", rhs = P, label = "",
-                 est = varP, std.error = NA, z.value = NA,
-                 p.value = NA, ci.lower = NA, ci.upper = NA)
-
-    ## covariances with the *original* variables
-    for (k in vars) {
-      rows[[length(rows) + 1L]] <-
-        data.frame(lhs = k, op = "~~", rhs = P, label = "",
-                   est = cov_PX(i, j, k), std.error = NA, z.value = NA,
-                   p.value = NA, ci.lower = NA, ci.upper = NA)
-    }
-  }
-
-  # Covariances among the declared product terms
-  if (length(prodPairs) > 1L) {
-    comb <- utils::combn(names(prodPairs), 2L)
-    for (cc in seq_len(ncol(comb))) {
-      P1 <- comb[1L, cc];  P2 <- comb[2L, cc]
-      ij <- prodPairs[[P1]];  kl <- prodPairs[[P2]]
-      rows[[length(rows) + 1L]] <-
-        data.frame(lhs = P1, op = "~~", rhs = P2, label = "",
-                   est = cov_PP(ij[1L], ij[2L], kl[1L], kl[2L]),
-                   std.error = NA, z.value = NA,
-                   p.value = NA, ci.lower = NA, ci.upper = NA)
-    }
-  }
-
-  # Bind & return
-  PT <- rbind(PT, do.call(rbind, rows))
-  modsemParTable(PT)
 }
 
 
@@ -138,11 +60,11 @@ var_interactions.data.frame <- function(object, ignore.means = FALSE, ...) {
 #' @details
 #' Standard errors can either be calculated using the delta method, or a monte.carlo simulation
 #'   (\code{monte.carlo} is not available for \code{\link{modsem_pi}} objects if \code{correction == FALSE}.).
-#'   \strong{NOTE} that the standard errors of the standardized paramters change the assumptions of the 
+#'   \strong{NOTE} that the standard errors of the standardized paramters change the assumptions of the
 #'   model, and will in most cases yield different z and p-values, compared to the unstandardized solution.
 #'   In almost all cases, significance testing should be based on the unstandardized solution. Since,
 #'   the standardization process changes the model assumptions, it also changes what the p-statistics measure.
-#'   I.e., the test statistics for the standardized and unstandardized solutions belong to different sets of 
+#'   I.e., the test statistics for the standardized and unstandardized solutions belong to different sets of
 #'   hypothesis, which are not exactly equivalent to each other.
 #'
 #' For \code{modsem_da} and \code{modsem_mplus} objects, the interaction term is not a formal
@@ -194,7 +116,7 @@ standardized_estimates <- function(object, ...) {
 #'
 #' Computes centered estimates of model parameters. This is relevant when there is an
 #'  interaction term in the model, as the simple main effects depend upon the mean structure
-#'  of the structural model. Currenlty only available for 
+#'  of the structural model. Currenlty only available for
 #'  \code{\link{modsem_da}} and \code{lavaan} object.
 #'  It is not relevant for the PI approaches (excluding the "pind" method, which is not recommended),
 #'  since the indicators are centered before computing the product terms.
@@ -230,7 +152,7 @@ centered_estimates <- function(object, ...) {
 #' @export
 standardized_estimates.data.frame <- function(object, intercepts = FALSE, ...) {
   parTable <- object[c("lhs", "op", "rhs", "label", "est", "std.error")]
-  parTable <- centerInteractions(parTable) # re-estimate path-coefficients 
+  parTable <- centerInteractions(parTable) # re-estimate path-coefficients
                                           # when intercepts are zero
 
   if (!intercepts) {
@@ -254,7 +176,7 @@ standardized_estimates.data.frame <- function(object, intercepts = FALSE, ...) {
   variancesIntTerms <- structure(numeric(length(intTerms)), names = intTerms)
 
   for (xz in intTerms) {
-    variancesIntTerms[[xz]] <- parTable[parTable$lhs == xz & 
+    variancesIntTerms[[xz]] <- parTable[parTable$lhs == xz &
                                         parTable$rhs == xz &
                                         parTable$op == "~~", "est"]
   }
@@ -353,13 +275,13 @@ standardized_estimates.data.frame <- function(object, intercepts = FALSE, ...) {
 
     expr      <- parse(text=constrExprs[i, "rhs"])
     labelList <- parTableLabelsToList(parTable) # must be updated for each iteration
-  
+
     oldVal <- row$est
     newVal <- eval(expr, envir = labelList)
 
     ratio  <- newVal / oldVal
     values <- row[ , selectCols]
-   
+
     row[, selectCols] <- values * ratio
 
     parTable <- rbind(parTable, row)
@@ -382,7 +304,7 @@ standardized_estimates.data.frame <- function(object, intercepts = FALSE, ...) {
 #' @description function used to inspect fitted object. Similar to \code{lavaan::lavInspect}
 #' argument \code{what} decides what to inspect
 #' @details For \code{\link{modsem_pi}} objects, it is just a wrapper for \code{lavaan::lavInspect}.
-#'  For \code{\link{modsem_da}} objects an internal function is called, which takes different 
+#'  For \code{\link{modsem_da}} objects an internal function is called, which takes different
 #'  keywords for the \code{what} argument.
 #' @export
 modsem_inspect <- function(object, what = NULL, ...) {
@@ -438,7 +360,7 @@ modsem_nobs <- function(object, ...) {
 #'   currently ignored by the \code{\link{modsem_da}} method.
 #'
 #' @return
-#' * For \code{\link{modsem_pi}}: whatever \code{lavaan::predict()}, which usually 
+#' * For \code{\link{modsem_pi}}: whatever \code{lavaan::predict()}, which usually
 #'   returns a matrix of factor scores.
 #' * For \code{\link{modsem_da}}: a numeric matrix \eqn{n \times p}, where \eqn{n} is the number of
 #'   (complete) observations in the dataset, and \eqn{p} the number of latent variables. Each
@@ -451,7 +373,7 @@ modsem_nobs <- function(object, ...) {
 #'   X =~ x1 + x2 + x3
 #'   Z =~ z1 + z2 + z3
 #'   Y =~ y1 + y2 + y3
-#' 
+#'
 #' # Inner Model
 #'   Y ~ X + Z + X:Z
 #' '

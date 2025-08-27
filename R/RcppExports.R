@@ -13,28 +13,28 @@ sigmaLmsCpp <- function(model, z) {
     .Call(`_modsem_sigmaLmsCpp`, model, z)
 }
 
-gradLogLikLmsCpp <- function(modelR, P, block, row, col, symmetric, eps = 1e-6) {
-    .Call(`_modsem_gradLogLikLmsCpp`, modelR, P, block, row, col, symmetric, eps)
+completeLogLikLmsCpp <- function(modelR, P, quad, colidxR, n, d, npatterns = 1L) {
+    .Call(`_modsem_completeLogLikLmsCpp`, modelR, P, quad, colidxR, n, d, npatterns)
 }
 
-completeLogLikLmsCpp <- function(modelR, P, quad) {
-    .Call(`_modsem_completeLogLikLmsCpp`, modelR, P, quad)
+gradLogLikLmsCpp <- function(modelR, P, block, row, col, symmetric, colidxR, n, d, npatterns = 1L, eps = 1e-6, ncores = 1L) {
+    .Call(`_modsem_gradLogLikLmsCpp`, modelR, P, block, row, col, symmetric, colidxR, n, d, npatterns, eps, ncores)
 }
 
-gradObsLogLikLmsCpp <- function(modelR, data, P, block, row, col, symmetric, eps = 1e-6, ncores = 1L) {
-    .Call(`_modsem_gradObsLogLikLmsCpp`, modelR, data, P, block, row, col, symmetric, eps, ncores)
+gradObsLogLikLmsCpp <- function(modelR, dataR, colidxR, P, block, row, col, symmetric, n, eps = 1e-6, npatterns = 1L, ncores = 1L) {
+    .Call(`_modsem_gradObsLogLikLmsCpp`, modelR, dataR, colidxR, P, block, row, col, symmetric, n, eps, npatterns, ncores)
 }
 
-observedLogLikLmsCpp <- function(modelR, data, P, ncores = 1L) {
-    .Call(`_modsem_observedLogLikLmsCpp`, modelR, data, P, ncores)
+observedLogLikLmsCpp <- function(modelR, dataR, colidxR, P, n, npatterns = 1L, ncores = 1L) {
+    .Call(`_modsem_observedLogLikLmsCpp`, modelR, dataR, colidxR, P, n, npatterns, ncores)
 }
 
-hessObsLogLikLmsCpp <- function(modelR, data, P, block, row, col, symmetric, relStep = 1e-6, minAbs = 0.0, ncores = 1L) {
-    .Call(`_modsem_hessObsLogLikLmsCpp`, modelR, data, P, block, row, col, symmetric, relStep, minAbs, ncores)
+hessObsLogLikLmsCpp <- function(modelR, dataR, P, block, row, col, symmetric, colidxR, n, npatterns = 1L, relStep = 1e-6, minAbs = 0.0, ncores = 1L) {
+    .Call(`_modsem_hessObsLogLikLmsCpp`, modelR, dataR, P, block, row, col, symmetric, colidxR, n, npatterns, relStep, minAbs, ncores)
 }
 
-hessCompLogLikLmsCpp <- function(modelR, P, block, row, col, symmetric, relStep = 1e-6, minAbs = 0.0, ncores = 1L) {
-    .Call(`_modsem_hessCompLogLikLmsCpp`, modelR, P, block, row, col, symmetric, relStep, minAbs, ncores)
+hessCompLogLikLmsCpp <- function(modelR, P, block, row, col, symmetric, colidxR, n, d, npatterns = 1L, relStep = 1e-6, minAbs = 0.0, ncores = 1L) {
+    .Call(`_modsem_hessCompLogLikLmsCpp`, modelR, P, block, row, col, symmetric, colidxR, n, d, npatterns, relStep, minAbs, ncores)
 }
 
 muQmlCpp <- function(m, t, ncores = 1L) {
@@ -53,10 +53,6 @@ calcBinvCpp <- function(m, t, ncores = 1L) {
     .Call(`_modsem_calcBinvCpp`, m, t, ncores)
 }
 
-logNormalPdf <- function(X, mu, sigmaDiag, ncores = 1L) {
-    .Call(`_modsem_logNormalPdf`, X, mu, sigmaDiag, ncores)
-}
-
 dnormCpp <- function(x, mu, sigma, ncores = 1L) {
     .Call(`_modsem_dnormCpp`, x, mu, sigma, ncores)
 }
@@ -67,6 +63,10 @@ varZCpp <- function(Omega, Sigma1, numEta) {
 
 multiplyIndicatorsCpp <- function(df) {
     .Call(`_modsem_multiplyIndicatorsCpp`, df)
+}
+
+checkOpenMP_Cpp <- function() {
+    .Call(`_modsem_checkOpenMP_Cpp`)
 }
 
 dmvnrm_arma_mc <- function(x, mean, sigma, log = TRUE, ncores = 1L) {

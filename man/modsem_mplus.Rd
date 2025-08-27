@@ -9,12 +9,14 @@ modsem_mplus(
   data,
   estimator = "ml",
   type = "random",
+  cluster = NULL,
   algorithm = "integration",
   processors = 2,
   integration = 15,
   rcs = FALSE,
   rcs.choose = NULL,
   rcs.scale.corrected = TRUE,
+  output.std = TRUE,
   ...
 )
 }
@@ -23,15 +25,17 @@ modsem_mplus(
 
 \item{data}{dataset}
 
-\item{estimator}{estimator argument passed to \code{Mplus}}
+\item{estimator}{estimator argument passed to \code{Mplus}.}
 
-\item{type}{type argument passed to \code{Mplus}}
+\item{type}{type argument passed to \code{Mplus}.}
 
-\item{algorithm}{algorithm argument passed to \code{Mplus}}
+\item{cluster}{cluster argument passed to \code{Mplus}.}
 
-\item{processors}{processors argument passed to \code{Mplus}}
+\item{algorithm}{algorithm argument passed to \code{Mplus}.}
 
-\item{integration}{integration argument passed to \code{Mplus}}
+\item{processors}{processors argument passed to \code{Mplus}.}
+
+\item{integration}{integration argument passed to \code{Mplus}.}
 
 \item{rcs}{Should latent variable indicators be replaced with reliability-corrected
 single item indicators instead? See \code{\link{relcorr_single_item}}.}
@@ -43,6 +47,8 @@ as the \code{choose} argument.}
 \item{rcs.scale.corrected}{Should reliability-corrected items be scale-corrected? If \code{TRUE}
 reliability-corrected single items are corrected for differences in factor loadings between
 the items. Default is \code{TRUE}.}
+
+\item{output.std}{Should \code{STANDARDIZED} be added to \code{OUTPUT}?}
 
 \item{...}{arguments passed to other functions}
 }
@@ -58,7 +64,7 @@ m1 <- '
 # Outer Model
   X =~ x1 + x2
   Z =~ z1 + z2
-  Y =~ y1 + y2 
+  Y =~ y1 + y2
 
 # Inner model
   Y ~ X + Z + X:Z

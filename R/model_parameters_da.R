@@ -54,7 +54,7 @@ createTheta <- function(model, start = NULL) {
                                    etas = etas)
 
   thetaMain <- allModelValues[is.na(allModelValues)]
-  thetaMain <- fillThetaIfStartNULL(start = start, theta = thetaMain, 
+  thetaMain <- fillThetaIfStartNULL(start = start, theta = thetaMain,
                                     lavlab = lavLabelsMain)
   theta     <- c(thetaLabel, thetaCov, thetaMain)
 
@@ -62,7 +62,7 @@ createTheta <- function(model, start = NULL) {
   lavLabels <- combineLavLabels(lavLabelsMain = lavLabelsMain,
                                 lavLabelsCov = lavLabelsCov,
                                 currentLabels = allLabels)
-  
+
   list(theta = theta, lenThetaMain = length(thetaMain),
        lenThetaLabel = length(thetaLabel),
        totalLenThetaLabel = length(totalThetaLabel),
@@ -92,12 +92,12 @@ createThetaCovModel <- function(covModel, start = NULL) {
 }
 
 
-fillThetaIfStartNULL <- function(start, 
-                                 theta, 
-                                 lavlab = NULL, 
+fillThetaIfStartNULL <- function(start,
+                                 theta,
+                                 lavlab = NULL,
                                  var = 1,
-                                 cov = 0, 
-                                 meas = 0.7, 
+                                 cov = 0,
+                                 meas = 0.7,
                                  mean = 0,
                                  reg = 0) {
   if (!is.null(start)) {
@@ -108,11 +108,11 @@ fillThetaIfStartNULL <- function(start,
       OP <- "~~|=~|~1|~"
       op <- stringr::str_extract(lavlab, pattern = OP)
       lr <- stringr::str_split_fixed(lavlab, pattern = OP, n = 2)
-      
+
       lhs <- lr[, 1]
       rhs <- lr[, 2]
       op[is.na(op)] <- "~"
-    
+
       theta.filled                          <- theta
       theta.filled[op == "~"]               <- reg
       theta.filled[op == "=~"]              <- meas
@@ -122,7 +122,7 @@ fillThetaIfStartNULL <- function(start,
       theta.filled[is.na(theta.filled)]     <- reg
 
       theta.filled
-    }, error = \(e) 
+    }, error = \(e)
         fillThetaIfStartNULL(start = start, theta = theta, lavlab = NULL)
     )
   } else {
@@ -246,11 +246,11 @@ getParamBounds <- function(model) {
   upper.type    <- bound.type == "<"
   lower.type <- bound.type == ">"
 
-  bound.upper <- structure(bound.value[upper.type], 
+  bound.upper <- structure(bound.value[upper.type],
                            names = bound.param[upper.type])
   bound.lower <- structure(bound.value[lower.type],
                            names = bound.param[lower.type])
-   
+
   upper[names(bound.upper)] <- bound.upper
   lower[names(bound.lower)] <- bound.lower
 
@@ -312,10 +312,10 @@ LMS_BLOCKS = list(
   thetaEpsilon = 5,
   A            = 6,
   psi          = 7,
-  alpha        = 8, 
+  alpha        = 8,
   beta0        = 9,
   gammaXi      = 10,
-  gammaEta     = 11, 
+  gammaEta     = 11,
   omegaXiXi    = 12,
   omegaEtaXi   = 13,
   phi          = NA
@@ -323,7 +323,7 @@ LMS_BLOCKS = list(
 
 
 SYMMETRIC_BLOCKS_LMS = c(
-  thetaDelta = 4, 
+  thetaDelta = 4,
   thetaEpsilon = 5,
   psi = 7,
   phi = NA
@@ -347,7 +347,7 @@ getParamLocationsMatrices <- function(matrices, isFree = is.na) {
   locations <- data.frame(param = NULL, block = NULL, row = NULL, col = NULL)
   for (blockname in names(matrices)) {
     X <- matrices[[blockname]]
-    n <- nrow(X) 
+    n <- nrow(X)
     m <- ncol(X)
 
     if (!any(isFree(X))) next
@@ -381,9 +381,9 @@ getGradientStruct <- function(model, theta) {
     getGradientStructSimple(model = model, theta = theta),
     error = function(e) {
       warning2("Failed to compute gradient structure: ", e$message)
-      
+
       list(
-        locations   = NULL, 
+        locations   = NULL,
         Jacobian    = NULL,
         nlinDerivs  = NULL,
         evalTheta   = NULL,
@@ -400,11 +400,11 @@ getGradientStructSimple <- function(model, theta) {
 
   if (hasCovModel) {
     out <- list(
-      locations   = NULL, 
+      locations   = NULL,
       Jacobian    = NULL,
       nlinDerivs  = NULL,
       evalTheta   = NULL,
-      hasCovModel = TRUE, 
+      hasCovModel = TRUE,
       isNonLinear = TRUE  # may not be true, but we should behave as if it is
     )
 
@@ -414,9 +414,22 @@ getGradientStructSimple <- function(model, theta) {
   parTable <- model$parTable
   parTable <- parTable[!parTable$op %in% BOUNDUARY_OPS, , drop = FALSE] # not relevant
 
+  customParams <- parTable[parTable$op %in% c(":=", "=="), , drop = FALSE]
+  for (i in seq_len(NROW(customParams))) {
+    row <- customParams[i, , drop = FALSE]
+    eq  <- sprintf("(%s)", row$rhs)
+    pattern <- sprintf("(?<![A-z_\\.])%s(?![A-z_\\.])", row$lhs)
+
+    mask <- parTable$op %in% CONSTRAINT_OPS
+    parTable$rhs[mask] <- stringr::str_replace_all(
+      parTable$rhs[mask], pattern = pattern, replacement = eq
+    )
+  }
+
   isConstraint <- parTable$op %in% CONSTRAINT_OPS & !canBeNumeric(parTable$rhs)
   constraints  <- parTable[isConstraint, ]
   restParTable <- parTable[!isConstraint, ]
+  # TODO: find better way of removing unecessary constraints
   constraints  <- constraints[constraints$lhs %in% restParTable$mod, ]
 
   derivatives <- list()
@@ -434,7 +447,7 @@ getGradientStructSimple <- function(model, theta) {
   linDerivs   <- derivatives[isLinear]
   nlinDerivs  <- derivatives[!isLinear]
   nlinDerivs2 <- derivatives2[!isLinear]
-  evalTheta   <- \(theta) c(theta, suppressWarnings(calcThetaLabel(theta, constraints))) # This could be made a bit better
+  evalTheta   <- \(theta) c(theta, suppressWarnings(calcThetaLabel(theta, model$constrExprs))) # This could be made a bit better
 
   locations <- rbind(
     getParamLocationsMatrices(model$matrices, isFree=is.na),
@@ -449,11 +462,11 @@ getGradientStructSimple <- function(model, theta) {
 
   ordering <- structure(seq_along(theta), names = param.part)
   ordering <- ordering[param.full]
-  
+
   locations  <- locations[order(ordering), ]
   param.full <- locations$param
 
-  Jacobian <- matrix(0, nrow = m, ncol = k,  
+  Jacobian <- matrix(0, nrow = m, ncol = k,
                      dimnames = list(param.part, param.full))
   Jacobian2 <- Jacobian
 
@@ -475,7 +488,7 @@ getGradientStructSimple <- function(model, theta) {
   }
 
   list(
-    locations   = locations, 
+    locations   = locations,
     Jacobian    = Jacobian,
     Jacobian2   = Jacobian2,
     nlinDerivs  = nlinDerivs,
@@ -489,9 +502,16 @@ getGradientStructSimple <- function(model, theta) {
 
 derivateConstraint <- function(constr) {
   f <- stats::formula(paste0("~", constr))
-  eq <- Deriv::Deriv(f, combine = "list")
+  eq <- Deriv::Deriv(f, combine = "list", cache.exp = FALSE)
 
-  if (is.null(names(eq))) {
+  vars <- all.vars(f)
+  k    <- length(vars)
+
+  if (k == 0) return(NULL)
+
+  if (is.null(names(eq)) && k == 1L) {
+    eq <- stats::setNames(list(eq), nm = vars)
+  } else if (is.null(names(eq))) {
     names(eq) <- all.vars(f)
   } else {
     eq <- as.list(eq)[-1]
@@ -503,16 +523,26 @@ derivateConstraint <- function(constr) {
 
 secondDerivateConstraint <- function(constr) {
   f <- stats::formula(paste0("~", constr))
-  eq <- Deriv::Deriv(f, nderiv = 2, combine = "list")
+  eq <- Deriv::Deriv(f, nderiv = 2, combine = "list", cache.exp = FALSE)
+
+  vars <- all.vars(f)
+  k    <- length(vars)
+
+  if (k == 0) return(NULL)
 
   out <- list()
-  if (is.null(names(eq))) {
+  if (is.null(names(eq)) && k == 1L) {
+    eq <- stats::setNames(list(eq), nm = vars)
+    return(eq)
+
+  } else if (is.null(names(eq))) {
     names(eq) <- all.vars(f)
+    return(eq)
+
   } else {
     for (indep in all.vars(f)) {
       out[[indep]] <- eq[[indep]][[indep]]
     }
+    return(out)
   }
-
-  out
 }

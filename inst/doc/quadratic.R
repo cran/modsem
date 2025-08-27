@@ -45,7 +45,6 @@ knitr::opts_chunk$set(
 # '
 # 
 # est2_lms <- modsem(m2, data = jordan, method = "lms",
-#                    nodes = 15, OFIM.hessian = FALSE,
-#                    mean.observed = FALSE)
+#                    nodes = 15, mean.observed = FALSE)
 # summary(est2_lms)
 

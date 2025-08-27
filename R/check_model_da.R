@@ -1,4 +1,4 @@
-preCheckModel <- function(model, covModel = NULL, method = "lms") {
+preCheckModel <- function(model, covModel = NULL, method = "lms", missing = "complete") {
   hasCovModel <- !is.null(model$covModel$matrices)
 
   checkCovModelVariables(covModel = covModel, modelXis = model$info$xis)
@@ -22,6 +22,8 @@ preCheckModel <- function(model, covModel = NULL, method = "lms") {
   checkCovEtaXi(parTable = model$covModel$parTable, canBeCausedByCovModel = FALSE)
 
   checkOmegaEtaXi(model = model, method = method)
+
+  checkMissingMethod(method = method, missing = missing)
 }
 
 
@@ -32,17 +34,15 @@ checkAConstraints <- function(model, covModel, method = "lms") {
   Al <- model$labelMatrices$A
 
   isOKALabel <- all(Al == "")
-  isOKANumeric <- all(is.na(An[lower.tri(An, diag = TRUE)])) || 
+  isOKANumeric <- all(is.na(An[lower.tri(An, diag = TRUE)])) ||
                  !any(is.na(An[lower.tri(An)]))
 
   warnif(!isOKALabel || !isOKANumeric,
          "Variances and covariances of exogenous variables aren't truely ",
-         "free parameters in the LMS approach. Using them in model constraints ",
-         "affecting the model estimation will likely not work as expected!\n\n",
-         "If the label is unused, or only used to compute custom parameters (using `:=`) ",
-         "which don't affect the model estimation, you can ignore this warning.\n\n",
+         "free parameters in the LMS approach.\n\n",
+         "Using them in model constraints will likely not work as intended!\n\n",
          'To fix this you can pass an empty model to `cov.syntax`, for example: \n',
-         '    `modsem(my_model, data = my_data, method = "lms", cov.syntax = "")`\n'
+         '    `modsem(my_model, data = my_data, method = "lms", cov.syntax = "")`'
   )
 }
 
@@ -63,11 +63,12 @@ checkCovModelVariables <- function(covModel, modelXis, method = "lms") {
 
 checkZeroVariances <- function(model, method = "lms") {
   if (method != "lms") return(NULL)
-  
+
   nonLinearXis <- model$info$nonLinearXis
   inds <- model$info$indsXis[nonLinearXis]
 
-  thetaDelta <- model$matrices$thetaDelta 
+  thetaDelta    <- model$matrices$thetaDelta
+  thetaDeltaLab <- model$labelMatrices$thetaDelta
 
   message <- paste(
       "The variance of a moderating variable of integration",
@@ -85,8 +86,9 @@ checkZeroVariances <- function(model, method = "lms") {
   error <- FALSE
   for (lv in nonLinearXis) for (ind in inds[[lv]]) {
     est <- thetaDelta[ind, ind]
+    lab <- thetaDeltaLab[ind, ind]
 
-    if (!is.na(est) && est == 0) {
+    if (!is.na(est) && est == 0 && lab == "") {
       error <- TRUE
       message <- paste(message, m1(ind), sep = "\n")
     }
@@ -136,7 +138,7 @@ checkNodesLms <- function(parTableMain,
 
 
 checkCovEtaXi <- function(parTable, canBeCausedByCovModel = FALSE) {
-  if (!NROW(parTable)) 
+  if (!NROW(parTable))
     return(NULL)
 
   etas <- getEtas(parTable, checkAny = FALSE, isLV = FALSE)
@@ -154,7 +156,7 @@ checkCovEtaXi <- function(parTable, canBeCausedByCovModel = FALSE) {
     msgcov <- paste0(
       "\nThis may be because the model has been split into linear and non-linear parts!\n",
       "You can try passing `auto.split.syntax=FALSE` and `cov.syntax=NULL`..."
-    ) 
+    )
   } else msgcov <- ""
 
   msg <- paste0(
@@ -174,7 +176,7 @@ checkOmegaEtaXi <- function(model, method = "qml", zero.tol = 1e-10) {
   omegaEtaXi <- model$matrices$omegaEtaXi
   problematic <- any(is.na(omegaEtaXi) | abs(omegaEtaXi) > zero.tol)
 
-  warnif(problematic, 
+  warnif(problematic,
          "Interactions between exogenous and enodgenous variables in the QML\n",
          "approach can be biased in some cases...\n",
          "You can try passing `auto.split.syntax=FALSE` and `cov.syntax=NULL`...")
@@ -190,6 +192,15 @@ checkOVsInStructuralModel <- function(parTableMain, parTableCov) {
          "Observed variables are not allowed in the structural model in LMS/QML directly. ",
          "Please redefine them as latent.\nSee:\n",
          "  vignette(\"observed_lms_qml\", \"modsem\")")
+}
+
+
+checkMissingMethod <- function(method, missing) {
+  method  <- tolower(method)
+  missing <- tolower(missing)
+
+  stopif(method == "qml" && missing == "fiml",
+         "Using FIML with QML is not available (yet), use LMS instead!")
 }
 
 
@@ -238,18 +249,21 @@ checkParTableEstimates <- function(parTable) {
 checkVariances <- function(expected.matrices, rel.diff.tol = 1000) {
   variances.lv <- diag(expected.matrices$sigma.lv)
   variances.ov <- diag(expected.matrices$sigma.ov)
+  residuals.lv <- expected.matrices$res.lv
+  residuals.ov <- expected.matrices$res.ov
 
-  check <- function(variances, type) {
+  check <- function(variances, type, rel.check = TRUE) {
     minVar <- min(variances, na.rm = TRUE) # should never be any NA, but just in case...
-    maxVar <- max(variances, na.rm = TRUE) 
+    maxVar <- max(variances, na.rm = TRUE)
     relDiff <- maxVar / minVar
 
     anyNeg <- any(variances < 0)
-    warnif(anyNeg, "Some estimated %s variances are negative!", immediate. = FALSE)
-    
+    warnif(anyNeg, sprintf("Some estimated %s variances are negative!", type),
+           immediate. = FALSE)
+
     warnif(
-      relDiff > rel.diff.tol,
-      sprintf("Some estimated %s variances are (at least) a factor %i times larger than others", 
+      relDiff > rel.diff.tol && rel.check,
+      sprintf("Some estimated %s variances are (at least) a factor %i times larger than others",
               type, rel.diff.tol),
       immediate. = FALSE
     )
@@ -257,13 +271,16 @@ checkVariances <- function(expected.matrices, rel.diff.tol = 1000) {
 
   check(variances.lv, type = "lv")
   check(variances.ov, type = "ov")
+  check(residuals.lv, type = "residual lv", rel.check = FALSE)
+  check(residuals.ov, type = "residual ov", rel.check = FALSE)
 }
 
 
 checkVCOV <- function(vcov, calc.se = TRUE, tol.eigen = .Machine$double.eps ^ (3/4)) {
-  if (!calc.se) return(NULL) # checks not relevant
+  if (!calc.se || is.null(vcov)) return(NULL) # checks not relevant
 
-  eigenvalues <- eigen(vcov, only.values = TRUE)$values 
+  eigenvalues <- tryCatch(eigen(vcov, only.values = TRUE)$values,
+                          error = \(e) rep(NA, min(1L, NCOL(vcov))))
 
   if (all(is.na(eigenvalues))) {
     warning2("Unable to compute eigenvalues of the variance-covariance matrix!")
@@ -272,7 +289,7 @@ checkVCOV <- function(vcov, calc.se = TRUE, tol.eigen = .Machine$double.eps ^ (3
 
   minval <- min(eigenvalues, na.rm = TRUE) # should never be any NA, but just in case...
   if (minval < tol.eigen) {
-    warnif(minval >= 0, 
+    warnif(minval >= 0,
            "The variance-covariance matrix of the estimated\n",
            "parameters (vcov) does not appear to be positive\n",
            sprintf("definite! The smallest eigenvalue (= %e) is close\n", minval),

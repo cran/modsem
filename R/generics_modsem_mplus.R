@@ -2,7 +2,7 @@
 #'
 #' @param object modsem object to summarized
 #' @param scientific print p-values in scientific notation
-#' @param standardize standardize estimates
+#' @param standardized standardize estimates
 #' @param ci print confidence intervals
 #' @param digits number of digits to print
 #' @param loadings print loadings
@@ -15,7 +15,7 @@
 #' @export
 summary.modsem_mplus <- function(object,
                                  scientific = FALSE,
-                                 standardize = FALSE,
+                                 standardized = FALSE,
                                  ci = FALSE,
                                  digits = 3,
                                  loadings = TRUE,
@@ -24,7 +24,9 @@ summary.modsem_mplus <- function(object,
                                  intercepts = TRUE,
                                  variances = TRUE,
                                  ...) {
-  if (standardize) object$parTable <- standardized_estimates(object)
+  if (standardized)
+    object$parTable <- standardized_estimates(object)
+
   object$format <- list(digits = digits,
                         scientific = scientific,
                         ci = ci,
@@ -72,9 +74,35 @@ var_interactions.modsem_mplus <- function(object, ...) {
 }
 
 
+#' @describeIn standardized_estimates Retrieve standardized estimates from \code{\link{modsem_mplus}} object.
+#' @param type Type of standardized estimates to retrieve. Can be one of: \code{"stdyx", "stdy", "std", "un", "modsem"}.
 #' @export
-standardized_estimates.modsem_mplus <- function(object, ...) {
-  standardized_estimates.data.frame(parameter_estimates(object))
+standardized_estimates.modsem_mplus <- function(object, type = "stdyx", mc.reps = 1e6, ...) {
+  useMplus <- type != "modsem"
+
+  if (useMplus) {
+    tryCatch({
+      coefsTable <- coef(object$model, type = type)
+
+      mplusTableToParTable(
+        coefsTable    = coefsTable,
+        intTerms      = object$info$intTerms,
+        intTermsMplus = object$info$intTermsMplus,
+        indicators    = object$info$indicators
+      )
+    }, error = \(e)
+        standardized_estimates.modsem_mplus(object, type = "modsem")
+    )
+
+  } else {
+    stdSolution <- standardizedSolutionCOEFS(
+      object,
+      mc.reps = mc.reps,
+      ...
+    )
+
+    stdSolution$parTable
+  }
 }
 
 
@@ -82,4 +110,18 @@ standardized_estimates.modsem_mplus <- function(object, ...) {
 #' @importFrom stats nobs
 nobs.modsem_mplus <- function(object, ...) {
   NROW(object$data)
+}
+
+
+#' @export
+#' @importFrom stats vcov
+vcov.modsem_mplus <- function(object, ...) {
+  object$vcov
+}
+
+
+#' @export
+#' @importFrom stats coef
+coef.modsem_mplus <- function(object, ...) {
+  object$coefs
 }

@@ -1,5 +1,5 @@
 # Functions for constructing matrices for LMS and QML.
-EMPTY_MATSTRUCT <- list(numeric = matrix(nrow = 0, ncol = 0), 
+EMPTY_MATSTRUCT <- list(numeric = matrix(nrow = 0, ncol = 0),
                         label = matrix(nrow = 0, ncol = 0))
 
 
@@ -244,7 +244,7 @@ constructA <- function(xis, method = "lms", cov.syntax = NULL,
     A <- setMatrixConstraints(X = A, parTable = parTable, op = "~~",
                               RHS = xis, LHS = xis, type = "symmetric",
                               nonFreeParams = FALSE)
-   
+
     if (!any(is.na(A$numeric))) {
       Phi <- A$numeric
       Phi[upper.tri(Phi)] <- t(Phi)[upper.tri(Phi)]
@@ -271,7 +271,7 @@ constructAlpha <- function(etas, parTable, mean.observed = TRUE) {
       eta <- etas[[i]]
       fill <- if (intTermsAffectLV(eta, parTable)) NA else 0
       alpha[eta, 1] <- fill
-    } 
+    }
   }
 
   setMatrixConstraints(X = alpha, parTable = parTable, op = "~1",
@@ -436,7 +436,7 @@ getScalingInds <- function(indsEtas, R, latentEtas, method = "qml") {
 }
 
 
-selectThetaEpsilon <- function(indsEtas, thetaEpsilon, scalingInds,
+selectThetaEpsilon1 <- function(indsEtas, thetaEpsilon, scalingInds,
                                 method = "qml") {
   if (method != "qml") return(NULL)
   selectThetaEpsilon <- as.logical.matrix(thetaEpsilon)
@@ -446,12 +446,43 @@ selectThetaEpsilon <- function(indsEtas, thetaEpsilon, scalingInds,
 }
 
 
-constructSubThetaEpsilon <- function(indsEtas, thetaEpsilon, scalingInds,
-                                     method = "qml") {
+selectThetaEpsilon2 <- function(indsEtas, thetaEpsilon, scalingInds,
+                                method = "qml") {
+  if (method != "qml") return(NULL)
+  selectThetaEpsilon <- as.logical.matrix(thetaEpsilon)
+  selectThetaEpsilon[TRUE] <- FALSE
+
+  allScalingInds <- vapply(indsEtas, FUN.VALUE = character(1L), FUN = \(x) x[1L])
+  nonLatentScalingInds <- allScalingInds[!allScalingInds %in% scalingInds]
+
+  diag(selectThetaEpsilon)[nonLatentScalingInds] <- TRUE
+  selectThetaEpsilon
+}
+
+
+constructSubThetaEpsilon1 <- function(indsEtas, thetaEpsilon, scalingInds,
+                                      method = "qml") {
   if (method != "qml") return(NULL)
   subThetaEpsilon <- matrix(0, nrow = length(scalingInds),
                             ncol = length(scalingInds),
                             dimnames = list(scalingInds, scalingInds))
+  diag(subThetaEpsilon) <- NA
+  subThetaEpsilon
+}
+
+
+constructSubThetaEpsilon2 <- function(indsEtas, thetaEpsilon, scalingInds,
+                                      method = "qml") {
+  if (method != "qml") return(NULL)
+
+  allScalingInds <- vapply(indsEtas, FUN.VALUE = character(1L), FUN = \(x) x[1L])
+  nonLatentScalingInds <- allScalingInds[!allScalingInds %in% scalingInds]
+
+  subThetaEpsilon <- matrix(0, nrow = length(nonLatentScalingInds),
+                            ncol = length(nonLatentScalingInds),
+                            dimnames = list(nonLatentScalingInds,
+                                            nonLatentScalingInds))
+
   diag(subThetaEpsilon) <- NA
   subThetaEpsilon
 }
@@ -486,8 +517,8 @@ sortXisConstructOmega <- function(xis, varsInts, etas, intTerms,
                                     varsInts = varsInts,
                                     intTerms = intTerms)
 
-  list(sortedXis = sortedXis, nonLinearXis = nonLinearXis, 
-       omegaXiXi = omegaXiXi, omegaEtaXi = omegaEtaXi, 
+  list(sortedXis = sortedXis, nonLinearXis = nonLinearXis,
+       omegaXiXi = omegaXiXi, omegaEtaXi = omegaEtaXi,
        k = length(nonLinearXis))
 }
 
@@ -501,7 +532,7 @@ sortXis <- function(xis, varsInts, etas, intTerms, double) {
 
   sortedXis <- c(allVarsInInts, xis[!xis %in% allVarsInInts])
   nonLinearXis <- character(0L)
-  
+
   for (interaction in varsInts) {
     if (any(interaction %in% nonLinearXis) && !double ||
         all(interaction %in% nonLinearXis) && double) next # no need to add it again

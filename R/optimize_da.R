@@ -1,23 +1,46 @@
-optimizeStartingParamsDA <- function(model, 
+optimizeStartingParamsDA <- function(model,
                                      args = list(orthogonal.x = FALSE,
                                                  orthogonal.y = FALSE,
                                                  auto.fix.first = TRUE,
-                                                 auto.fix.sinlge = TRUE)) {
+                                                 auto.fix.sinlge = TRUE,
+                                                 robust.se = FALSE)) {
   etas     <- model$info$etas
   indsEtas <- model$info$allIndsEtas
   xis      <- model$info$xis
   numXis   <- model$info$numXis
   indsXis  <- model$info$allIndsXis
-  data     <- model$data
+  data     <- model$data.raw
+  missing  <- tolower(args$missing)
+
+  robust.se       <- args$robust.se
+  has.interaction <- model$info$has.interaction
 
   syntax <- paste(model$syntax, model$covModel$syntax,
                   model$info$lavOptimizerSyntaxAdditions,
                   sep = "\n")
 
+  acceptable.missing <- c("listwise", "ml", "direct", "fiml")
+  if (has.interaction && missing %in% c("ml", "fiml", "direct")) {
+    # It is not worth the extra compute to use fiml (if fiml is set)
+    # for getting good starting estiamtes for the model, for non-linear models.
+    # FIML can be very slow if there are a lot of product indicators.
+    # However, if the model is linear, the estimates should be the
+    # exact same, and product indicators aren't an issue. Thus
+    # we will save time.
+    missing <- "listwise"
+  } else if (!missing %in% acceptable.missing) missing <- "listwise"
+
+  if (!has.interaction && robust.se) {
+    estimator <- "MLR"
+
+    # Not worth the extra compute for non-linear models
+  } else estimator <- "ML"
+
   estPI <- modsem_pi(
-    model.syntax    = syntax, 
-    data            = data, 
+    model.syntax    = syntax,
+    data            = data,
     method          = "dblcent",
+    estimator       = estimator,
     meanstructure   = TRUE,
     orthogonal.x    = args$orthogonal.x,
     orthogonal.y    = args$orthogonal.y,
@@ -27,30 +50,65 @@ optimizeStartingParamsDA <- function(model,
     res.cov.across  = TRUE,
     match           = TRUE,
     match.recycle   = TRUE,
+    missing         = missing,
     suppress.warnings.match = TRUE,
     suppress.warnings.lavaan = TRUE
   )
 
   parTable <- parameter_estimates(estPI, colon.pi = TRUE)
- 
+
   stopif(is.null(parTable), "lavaan failed!")
 
+  # labelled parameters
+  thetaLabel <- getLabeledParamsLavaan(parTable, model$constrExprs$fixedParams)
+
+  fillLabelsMatrix <- function(matNumeric, matLabel, symmetric = FALSE) {
+    if (all(matLabel == ""))
+      return(matNumeric)
+
+    labels <- c(matLabel[matLabel != ""])
+    labels <- labels[labels %in% names(thetaLabel)]
+
+    for (label in labels)
+      matNumeric[matLabel == label] <- thetaLabel[[label]]
+
+    if (symmetric)
+      matNumeric[upper.tri(matNumeric)] <- t(matNumeric)[upper.tri(matNumeric)]
+
+    matNumeric
+  }
+
   # Main Model
-  matricesMain <- model$matrices
+  matricesMain      <- model$matrices
+  labelMatricesMain <- model$labelMatrices
+
   LambdaX <- findEstimatesParTable(matricesMain$lambdaX, parTable, op = "=~",
                                    rows_lhs = FALSE, fill = 0.7)
   LambdaY <- findEstimatesParTable(matricesMain$lambdaY, parTable, op = "=~",
                                    rows_lhs = FALSE, fill = 0.7)
 
-  ThetaEpsilon <- findEstimatesParTable(matricesMain$thetaEpsilon, parTable, 
+  ThetaEpsilon <- findEstimatesParTable(matricesMain$thetaEpsilon, parTable,
                                         op = "~~", fill = 0.2)
-  ThetaDelta   <- findEstimatesParTable(matricesMain$thetaDelta, parTable, 
+  ThetaDelta   <- findEstimatesParTable(matricesMain$thetaDelta, parTable,
                                         op = "~~", fill = 0.2)
 
   Psi <- findEstimatesParTable(matricesMain$psi, parTable, op = "~~", fill = 0)
   Phi <- findEstimatesParTable(matricesMain$phi, parTable, op = "~~", fill = 0)
+  A   <- findEstimatesParTable(matricesMain$A, parTable, op = "~~", fill = 0)
 
-  A <- findEstimatesParTable(matricesMain$A, parTable, op = "~~", fill = 0)
+  # Matrices which can be corrected to ensure viable starting parameters need to
+  # get filled in using labels as well, just for the checks them selves
+  Psi <- fillLabelsMatrix(Psi, labelMatricesMain$psi, symmetric = TRUE)
+  Phi <- fillLabelsMatrix(Phi, labelMatricesMain$phi, symmetric = TRUE)
+  A   <- fillLabelsMatrix(A, labelMatricesMain$A, symmetric = FALSE)
+
+  ThetaEpsilon <- fillLabelsMatrix(ThetaEpsilon,
+                                   labelMatricesMain$thetaEpsilon,
+                                   symmetric = TRUE)
+
+  ThetaDelta <- fillLabelsMatrix(ThetaDelta,
+                                 labelMatricesMain$thetaDelta,
+                                 symmetric = TRUE)
 
   correctDiag <- function(M, fill = 1, tol = 0) {
     M[M < tol & is.diag(M)] <- fill
@@ -70,7 +128,7 @@ optimizeStartingParamsDA <- function(model,
     I
   }
 
-  if (!is.invertible(Phi))          Phi <- as.I(Phi)
+  if (!is.invertible(Phi)) Phi <- as.I(Phi)
   # Residuals don't need to be invertible...
   # if (!is.invertible(Psi))          Psi <- as.I(Psi)
   # if (!is.invertible(ThetaEpsilon)) ThetaEpsilon <- as.I(ThetaEpsilon)
@@ -109,16 +167,20 @@ optimizeStartingParamsDA <- function(model,
                            OmegaEtaXi[is.na(matricesMain$omegaEtaXi)]))
 
   # Cov Model
-  matricesCov <- model$covModel$matrices
+  matricesCov      <- model$covModel$matrices
+  labelMatricesCov <- model$covModel$labelMatrices
+
   if (!is.null(matricesCov)) {
     PsiCovModel <- findEstimatesParTable(matricesCov$psi, parTable, op = "~~", fill = 0)
     PhiCovModel <- findEstimatesParTable(matricesCov$phi, parTable, op = "~~", fill = 0)
-    
+
     GammaEtaCovModel <- findEstimatesParTable(matricesCov$gammaEta, parTable, op = "~", fill = 0)
     GammaXiCovModel <- findEstimatesParTable(matricesCov$gammaXi, parTable, op = "~", fill = 0)
- 
+
     PhiCovModel <- correctDiag(PhiCovModel, tol = 0)
     PsiCovModel <- correctDiag(PsiCovModel, tol = 0)
+
+    PhiCovModel <- fillLabelsMatrix(PhiCovModel, labelMatricesCov$phi, symmetric = TRUE)
 
     if (!is.invertible(PhiCovModel)) PhiCovModel <- as.I(PhiCovModel)
     # Residuals don't need to be invertible...
@@ -130,9 +192,6 @@ optimizeStartingParamsDA <- function(model,
                             GammaEtaCovModel[is.na(matricesCov$gammaEta)]))
   } else thetaCov <- NULL
 
-  # labelTheta
-  thetaLabel <- getLabeledParamsLavaan(parTable, model$constrExprs$fixedParams)
-
   # Combinging the two
   theta <- c(thetaLabel, thetaCov, thetaMain)
   if (length(theta) == length(model$theta)) {
@@ -140,6 +199,7 @@ optimizeStartingParamsDA <- function(model,
     model$theta <- theta
   }
 
+  model$lavaan.fit <- extract_lavaan(estPI)
   model
 }
 
@@ -238,7 +298,7 @@ parameterEstimatesLavSAM <- function(syntax, data, ...) {
   lVs <- getLVs(parTable)
 
   getCFARows <- function(pt) {
-    pt[pt$op == "=~" | 
+    pt[pt$op == "=~" |
        pt$op == "~1" |
       (pt$op == "~~" & !pt$lhs %in% lVs & !pt$rhs %in% lVs), ]
   }

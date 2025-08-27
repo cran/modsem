@@ -1,8 +1,12 @@
-OP_REPLACEMENTS <- c("~~" = "___COVARIANCE___",
-                     "=~" = "___MEASUREMENT___",
-                     ":=" = "___CUSTOM___",
-                     "~"  = "___REGRESSION___",
-                     ":"  = "___INTERACTION___")
+OP_REPLACEMENTS <- c("~~"  = "___COVARIANCE___",
+                     "=~"  = "___MEASUREMENT___",
+                     ":="  = "___CUSTOM___",
+                     "~"   = "___REGRESSION___",
+                     ":"   = "___INTERACTION___",
+                     "<->" = "___MPLUS_COVARIANCE___",
+                     "<-"  = "___MPLUS_REGRESSION___",
+                     "\\|" = "___THRESHOLD___")
+
 OP_REPLACEMENTS_INV <- structure(names(OP_REPLACEMENTS), names = OP_REPLACEMENTS)
 
 
@@ -41,7 +45,7 @@ removeInteractions <- function(model) {
 dmvn <- function(X, mean, sigma, log = FALSE) {
   tryCatch({
     csigma <- suppressWarnings(chol(sigma))
-    mvnfast::dmvn(X, mu=mean, sigma=csigma, log=log, 
+    mvnfast::dmvn(X, mu=mean, sigma=csigma, log=log,
                   ncores = ThreadEnv$n.threads, isChol=TRUE)
   }, error = function(e) mvtnorm::dmvnorm(X, mean, sigma, log))
 }
@@ -51,14 +55,14 @@ totalLogDmvn <- function(mu, sigma, nu, S, n, d) {
   # X: n x d matrix of observations (rows = samples, cols = features)
   # mu: d-dimensional mean vector
   # sigma: d x d covariance matrix
-  if (any(diag(sigma) < 0)) 
+  if (any(diag(sigma) < 0))
     return(NaN)
 
   tryCatch({
     sigma_inv <- chol2inv(chol(sigma))
 
     log_det_sigma <- determinant(sigma, logarithm = TRUE)$modulus
-    
+
     trace_term <- sum(sigma_inv * S)  # Efficient trace of product
     mean_diff <- matrix(nu - mu, nrow = 1)
     mahalanobis_term <- n * (mean_diff %*% sigma_inv %*% t(mean_diff))
@@ -77,7 +81,7 @@ totalLogDvmnW <- function(X, mu, sigma, nu, S, tgamma, n, d) {
   # gamma: n-dimensional vector of weights
   # nu: weighted observed means
   # S: weighted observed covariance matrix
-  if (any(diag(sigma) < 0)) 
+  if (any(diag(sigma) < 0))
     return(NaN)
 
   tryCatch({
@@ -124,12 +128,15 @@ diagPartitionedMat <- function(X, Y) {
 }
 
 
-formatNumeric <- function(x, digits = 3) {
+formatNumeric <- function(x, digits = 3, scientific = FALSE,
+                          justify = "right", width = NULL) {
   if (is.numeric(x)) {
     format(round(x, digits), nsmall = digits, digits = digits,
-           trim = FALSE, justify = "right")
+           trim = FALSE, justify = justify, scientific = scientific,
+           width = width)
   } else {
-    format(x, trim = FALSE, justify = "right")
+    format(x, trim = FALSE, justify = justify, scientific = scientific,
+           width = width)
   }
 }
 
@@ -189,35 +196,138 @@ castDataNumericMatrix <- function(data) {
 }
 
 
-handleMissingData <- function(data, impute.na = FALSE) {
+patternizeMissingDataFIML <- function(data) {
+  # if we are not using fiml, the missing data should already have been removed...
+  CLUSTER <- attr(data, "cluster")
+
+  Y   <- as.matrix(data)
+  obs <- !is.na(Y)
+
+  rowMissingAll <- apply(obs, MARGIN = 1, FUN = \(x) !any(x))
+  colMissingAll <- apply(obs, MARGIN = 2, FUN = \(x) !any(x))
+  stopif(any(colMissingAll),
+         "Please remove variables with only missing values:\n  ",
+         paste0(colnames(obs)[colMissingAll], collapse = ", "))
+
+  patterns <- unique(obs, MARING = 2)
+
+  if (any(rowMissingAll)) { # remove patterns where all are missing
+    # This shouldn't really happen, as it should be handled already in
+    # `handleMissingData()`. Regardless, we should handle it if it ever happens
+    return(patternizeMissingDataFIML(data[!rowMissingAll, , drop = FALSE]))
+  }
+
+  ids <- seq_len(NROW(patterns))
+  n   <- NROW(Y)
+  k   <- NCOL(Y)
+
+  rowidx <- vector("list", length = NROW(ids))
+  colidx <- vector("list", length = NROW(ids))
+  data.split  <- vector("list", length = NROW(ids))
+  n.pattern  <- numeric(NROW(ids))
+  d.pattern  <- numeric(NROW(ids))
+
+  for (id in ids) {
+    mask  <- matrix(patterns[id, ], nrow = n, ncol = k, byrow = TRUE)
+    match <- apply(obs == mask, MARGIN = 1, FUN = all)
+    ridx  <- which(match)
+    cidx  <- which(patterns[id, ])
+
+    rowidx[[id]] <- ridx
+    colidx[[id]] <- cidx
+    data.split[[id]] <- Y[ridx, cidx, drop = FALSE]
+    n.pattern[[id]] <- sum(match)
+    d.pattern[[id]] <- length(cidx)
+  }
+
+  list(
+    ids        = ids,
+    rowidx     = rowidx,
+    colidx     = colidx,
+    colidx0    = lapply(colidx, FUN = \(idx) idx - 1),
+    patterns   = patterns,
+    data.split = data.split,
+    n.pattern  = n.pattern,
+    d.pattern  = d.pattern,
+    n          = NROW(data),
+    k          = NCOL(data),
+    p          = length(ids),
+    data.full  = data,
+    is.fiml    = length(ids) > 1L,
+    cluster    = CLUSTER
+  )
+}
+
+
+handleMissingData <- function(data, missing = "listwise", CLUSTER = NULL) {
+  missing       <- tolower(missing)
   completeCases <- stats::complete.cases(data)
   anyMissing    <- any(!completeCases)
+  allMissing    <- all(!completeCases)
 
-  if (!anyMissing) return(data)
+  if (!anyMissing){
+    attr(data, "cluster") <- CLUSTER
+    return(data)
 
-  if (!impute.na) {
-    warning2("Removing missing values case-wise!\n",
-             "Consider using `impute.na = TRUE`, or the `modsem_mimpute()` function!\n")
+  } else if (allMissing) {
+    missingAllCol <- apply(data, MARGIN = 2, FUN = \(x) all(is.na(x)))
+    colsMissing   <- colnames(data)[missingAllCol]
 
-    return(data[completeCases, ])
+    stop2("Please remove variables with only missing values:\n  ",
+          paste0(colsMissing, collapse = ", "))
+  }
 
-  } else {
+  if (missing %in% c("listwise", "casewise", "complete")) {
+    warning2("Removing missing values list-wise!\n",
+             "Consider using `missing=\"fiml\"`, `missing=\"impute\"`, ",
+             "or the `modsem_mimpute()` function!\n")
+
+    out <- data[completeCases, ]
+    attr(out, "cluster") <- CLUSTER
+
+    return(out)
+
+  } else if (missing == "impute") {
     message("Imputing missing values. Consider using the `modsem_mimpute()` function!")
 
     imp  <- Amelia::amelia(data, m = 1, p2s = 0)
+
     imp1 <- as.matrix(as.data.frame(imp$imputations[[1]]))
+    attr(imp1, "cluster") <- CLUSTER
 
     return(imp1)
+
+  } else if (missing %in% c("fiml", "ml", "direct")) {
+    attr(data, "cluster") <- CLUSTER
+
+    rowMissingAll <- apply(data, MARGIN = 1, FUN = \(x) all(is.na(x)))
+    data          <- data[!rowMissingAll, , drop = FALSE] # we've already know that
+                                                          # all(rowMissingAll) != TRUE
+    return(data)
+
+  } else {
+    stop2(sprintf("Unrecognized value for `missing`: `%s`", missing))
   }
 }
 
 
-cleanAndSortData <- function(data, allIndsXis, allIndsEtas, impute.na = FALSE) {
-  if (is.null(data)) return(NULL)
-  # sort Data before optimizing starting params
+prepDataModsemDA <- function(data, allIndsXis, allIndsEtas, missing = "listwise",
+                             cluster = NULL) {
+
+  if (is.null(data) || !NROW(data))
+    return(list(data.full = NULL, n = 0, k = 0, p = 0, cluster = NULL))
+
+  if (!is.null(cluster)) {
+    stopif(length(cluster) > 1L, "`cluster` must be a single variable!")
+
+    CLUSTER <- as.factor(data[, cluster])
+
+  } else CLUSTER <- NULL
+
   sortData(data, allIndsXis,  allIndsEtas) |>
-    castDataNumericMatrix() |> 
-    handleMissingData(impute.na = impute.na)
+    castDataNumericMatrix() |>
+    handleMissingData(missing = missing, CLUSTER = CLUSTER) |>
+    patternizeMissingDataFIML()
 }
 
 
@@ -263,12 +373,13 @@ getEmptyModel <- function(parTable, cov.syntax, parTableCovModel,
   }
 
   specifyModelDA(
-    parTable         = parTable, method = method,
+    parTable         = parTable,
+    method           = method,
     cov.syntax       = cov.syntax,
     parTableCovModel = parTableCovModel,
     mean.observed    = mean.observed,
     auto.fix.first   = FALSE,
-    auto.fix.single  = FALSE, 
+    auto.fix.single  = FALSE,
     createTheta      = FALSE,
     checkModel       = FALSE
   )
@@ -421,13 +532,13 @@ nNegativeLast <- function(x, n = 10) {
 
 
 getDegreesOfFreedom <- function(p, coef, mean.structure = TRUE) {
-  fm <- \(c) (p * (p + c)) / 2 
+  fm <- \(c) (p * (p + c)) / 2
 
   # c = 1 for a model without a meanstructure
   # c = 3 for a model with meanstructure
   # Without meanstructure:
   #   m = p * (p + 1) / 2
-  # With meanstructure 
+  # With meanstructure
   #   m = p * (p + 1) / 2 + p
   #     = (p * (p + 1) + p) / 2
   #     = p * (1 + p + 1 + 1) / 2
@@ -473,7 +584,7 @@ getXiRowLabelOmega <- function(label) {
 
 expandVCOV <- function(vcov, labels) {
   labels_vcov <- colnames(vcov)
-  labels_vv <- intersect(labels, labels_vcov) 
+  labels_vv <- intersect(labels, labels_vcov)
   labels_zz <- setdiff(labels, labels_vcov)
 
   m <- length(labels_vv)
@@ -533,13 +644,13 @@ getLambdaParTable <- function(parTable, rows = NULL, cols = NULL, fill.missing =
   if (fill.missing) {
     missingCols <- setdiff(cols, colnames(lambda))
     missingRows <- setdiff(rows, rownames(lambda))
-  
+
     if (length(missingCols)) {
       newCols <- matrix(0, nrow = NROW(lambda), ncol = length(missingCols),
                         dimnames = list(rownames(lambda), missingCols))
       lambda <- cbind(lambda, newCols)
     }
-  
+
     if (length(missingRows) && fill.missing) {
       newRows <- matrix(0, nrow = length(missingRows), ncol = NCOL(lambda),
                         dimnames = list(missingRows, colnames(lambda)))
@@ -606,8 +717,8 @@ isPureEta <- function(eta, parTable) {
 
 calcExpectedMatricesDA <- function(parTable, xis = NULL, etas = NULL, intTerms = NULL) {
   parTable <- removeInteractionVariances(parTable)
-  parTable <- centerInteractions(parTable, center.means = FALSE) |> 
-    var_interactions(ignore.means = TRUE) |> 
+  parTable <- centerInteractions(parTable, center.means = FALSE) |>
+    var_interactions(ignore.means = TRUE) |>
     meanInteractions(ignore.means = TRUE)
 
   if (is.null(intTerms))
@@ -638,9 +749,9 @@ calcExpectedMatricesDA <- function(parTable, xis = NULL, etas = NULL, intTerms =
     for (i in seq_len(NROW(reg))) {
       predictor <- reg[i, "rhs"]
       est       <- reg[i, "est"]
-      
+
       if      (predictor %in% xis)  gammaXi[eta, predictor] <- est
-      else if (predictor %in% etas) gammaEta[eta, predictor] <- est                   
+      else if (predictor %in% etas) gammaEta[eta, predictor] <- est
       else warning("Unexpected type of predictor: ", predictor)
     }
   }
@@ -695,7 +806,7 @@ calcExpectedMatricesDA <- function(parTable, xis = NULL, etas = NULL, intTerms =
   sigma.lv <- rbind(cbind(phi, t(covEtaXi)),
                     cbind(covEtaXi, covEtaEta))
   sigma.ov <- lambda %*% sigma.lv %*% t(lambda) + theta
-  
+
   # lower left corner cov-lv-ov
   sigma.lv.ov <- lambda %*% sigma.lv
   sigma.ov.lv <- t(sigma.lv.ov)
@@ -723,7 +834,7 @@ calcExpectedMatricesDA <- function(parTable, xis = NULL, etas = NULL, intTerms =
   res.ov   <- res.all[inds]
 
   list(
-    sigma.all = sigma.all, 
+    sigma.all = sigma.all,
     sigma.lv  = sigma.lv,
     sigma.ov  = sigma.ov,
     mu.all    = mu.all,
@@ -735,11 +846,11 @@ calcExpectedMatricesDA <- function(parTable, xis = NULL, etas = NULL, intTerms =
     res.all   = res.all,
     res.lv    = res.lv,
     res.ov    = res.ov,
-    lambda    = lambda, 
-    gammaXi   = gammaXi, 
-    gammaEta  = gammaEta, 
-    psi       = psi, 
-    phi       = phi, 
+    lambda    = lambda,
+    gammaXi   = gammaXi,
+    gammaEta  = gammaEta,
+    psi       = psi,
+    phi       = phi,
     theta     = theta
   )
 }
@@ -752,13 +863,13 @@ getInternalCoefsDA <- function(model) {
 
 getXisModelDA <- function(model) {
   covModelEtas <- model$covModel$info$etas
-  allXis <- unique(c(model$info$xis, model$covModel$info$xis))
+  allXis <- unique(c(model$covModel$info$xis, model$info$xis))
   allXis[!allXis %in% covModelEtas]
 }
 
 
 getEtasModelDA <- function(model) {
-  unique(c(model$info$etas, model$covModel$info$etas))
+  unique(c(model$covModel$info$etas, model$info$etas))
 }
 
 
@@ -770,14 +881,14 @@ splitParTableEtas <- function(parTable, parTableCov = NULL, splitEtas, allEtas,
   for (eta in splitEtas) {
     isReg <- parTable$lhs == eta & parTable$op == "~"
     isCov <- (parTable$lhs == eta | parTable$rhs == eta) & parTable$op == "~~"
-    isLinear <- !parTable$lhs %in% nonLinearEtas & 
+    isLinear <- !parTable$lhs %in% nonLinearEtas &
                 !parTable$rhs %in% nonLinearEtas
-   
+
     parTableEta <- parTable[isReg | isCov & isLinear, ]
 
     vars <- unique(c(parTableEta$rhs, parTableEta$lhs))
     downstreamEtas <- vars[vars != eta & vars %in% allEtas]
-   
+
     parTable    <- parTable[!(isReg | isCov & isLinear), ]
     parTableCov <- rbind(parTableCov, parTableEta)
 
@@ -799,7 +910,7 @@ splitParTable <- function(parTable) {
   empty <- list(parTable = parTable, parTableCov = NULL)
   if (!length(intTerms))
     return(empty)
-  
+
   intVars  <- unique(unlist(stringr::str_split(intTerms, pattern = ":")))
   etas    <- getEtas(parTable)
 
@@ -807,7 +918,7 @@ splitParTable <- function(parTable) {
     return(empty)
 
   isNonLinear <- vapply(
-    X = etas, 
+    X = etas,
     FUN.VALUE = logical(1L),
     FUN = intTermsAffectLV,
     parTable = parTable
@@ -821,8 +932,62 @@ splitParTable <- function(parTable) {
     return(empty)
 
   splitParTableEtas(
-    parTable = parTable, allEtas = etas, 
+    parTable = parTable, allEtas = etas,
     splitEtas = etasCovModel,
     nonLinearEtas = nonLinearEtas
   )
+}
+
+
+sortParTableDA <- function(parTable, model) {
+  parTable.input <- model$parTable
+
+  etas <- getEtasModelDA(model)
+
+  # xis <- getXisModelDA(model)
+  # we don't want xis as they are sorted in the model
+  # xis in the model are sorted to fit `OmegaXiXi`
+  # and `OmegaEtaXi`, which doesn't match the sorting
+  # in the model.syntax input. Instead we use getXis() on
+  # parTable.input
+
+  xis      <- getXis(parTable.input, checkAny = FALSE, etas = etas)
+  indsXis  <- model$info$allIndsXis
+  indsEtas <- model$info$allIndsEtas
+
+  opOrder <- c("=~", "~", "~1", "~~", "|", ":=")
+  varOrder <- unique(c(indsXis, indsEtas, xis, etas))
+
+  getScore <- function(x, order.by) {
+    order.by <- unique(c(order.by, x)) # ensure that all of x is in order.by
+    mapping  <- stats::setNames(seq_along(order.by), nm = order.by)
+    score    <- mapping[x]
+
+    if (length(score) != length(x)) {
+      warning2("Sorting of parameter estimates failed!\n",
+               immediate. = FALSE)
+
+      return(seq_along(x))
+    }
+
+    score
+  }
+
+  scoreLhs <- getScore(x = parTable$lhs, order.by = varOrder)
+  scoreOp  <- getScore(x = parTable$op,  order.by = opOrder)
+  scoreRhs <- getScore(x = parTable$rhs, order.by = varOrder)
+
+  out <- parTable[order(scoreOp, scoreLhs, scoreRhs), , drop = FALSE]
+  rownames(out) <- NULL
+
+  out
+}
+
+
+updateStatusLog <- function(iterations, mode, logLikNew, deltaLL, relDeltaLL, verbose = FALSE) {
+  if (verbose) {
+    clearConsoleLine()
+    printf("\rIter=%d Mode=%s LogLik=%.2f \u0394LL=%.2g rel\u0394LL=%.2g",
+           iterations, mode, logLikNew, deltaLL, relDeltaLL)
+  }
 }

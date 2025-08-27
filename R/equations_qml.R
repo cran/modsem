@@ -15,9 +15,9 @@ incrementIterations <- function(logLik) {
   relDeltaLL <- diffLL$rel
 
   clearConsoleLine() # clear before printing
-  printf("\rEval=%d LogLik=%.2f \u0394LL=%.2g rel\u0394LL=%.2g", 
-         eval, logLik, deltaLL, relDeltaLL)
-  
+  printf("\rEval=%d LogLik=%.2f \u0394LL=%.2g rel\u0394LL=%.2g",
+         eval, logLik, abs(deltaLL), abs(relDeltaLL))
+
   OptimizerInfoQML$eval    <- eval
   OptimizerInfoQML$logLiks <- logLiks
 }
@@ -36,10 +36,21 @@ logLikQml <- function(theta, model, sum = TRUE, sign = -1, verbose = FALSE) {
   m$kOmegaEta <- kOmegaEta
 
   m$tauX      <- m$tauX + m$lambdaX %*% m$beta0
-  m$x <- model$data[, model$info$allIndsXis, drop = FALSE]
-  m$y <- model$data[, model$info$allIndsEtas, drop = FALSE]
+  m$x <- model$data$data.full[, model$info$allIndsXis, drop = FALSE]
+  m$y <- model$data$data.full[, model$info$allIndsEtas, drop = FALSE]
   m$x <- centerIndicators(m$x, tau = m$tauX)
   m$y <- centerIndicators(m$y, tau = m$tauY)
+
+  # Fill in residual variances for latent etas with only a single indicator
+  # only needed if the resiudal variances are non-zero
+  if (any(m$selectThetaEpsilon2)) {
+    m$subThetaEpsilon2[is.na(m$subThetaEpsilon2)] <-
+      m$thetaEpsilon[m$selectThetaEpsilon2]
+
+    selectRows <- apply(m$selectSubSigma2ThetaEpsilon, MARGIN = 1, FUN = \(x) all(!x))
+    selectCols <- apply(m$selectSubSigma2ThetaEpsilon, MARGIN = 2, FUN = \(x) all(!x))
+    m$fullSigma2ThetaEpsilon[selectRows, selectCols] <- m$subThetaEpsilon2
+  }
 
   t <- NROW(m$x)
   if (!is.null(m$emptyR)) {
@@ -49,16 +60,16 @@ logLikQml <- function(theta, model, sum = TRUE, sign = -1, verbose = FALSE) {
     m$u <- m$y %*% t(m$fullR)
     m$fullU[, m$colsU] <- m$u
     m$Beta <- m$lambdaY[m$selectBetaRows, latentEtas]
-    m$subThetaEpsilon <- m$subThetaEpsilon
-    m$subThetaEpsilon[is.na(m$subThetaEpsilon)] <-
-      m$thetaEpsilon[m$selectThetaEpsilon]
+
+    m$subThetaEpsilon1[is.na(m$subThetaEpsilon1)] <-
+      m$thetaEpsilon[m$selectThetaEpsilon1]
 
     m$RER <- m$R %*% m$thetaEpsilon[m$colsR, m$colsR] %*% t(m$R)
     invRER <- solve(m$RER)
-    m$L2 <- -m$subThetaEpsilon %*% t(m$Beta) %*% invRER
+    m$L2 <- -m$subThetaEpsilon1 %*% t(m$Beta) %*% invRER
     m$fullL2[m$selectSubL2] <- m$L2
 
-    m$Sigma2ThetaEpsilon <- m$subThetaEpsilon - m$subThetaEpsilon ^ 2 %*%
+    m$Sigma2ThetaEpsilon <- m$subThetaEpsilon1 - m$subThetaEpsilon1 ^ 2 %*%
       t(m$Beta) %*% invRER %*% m$Beta
 
     m$fullSigma2ThetaEpsilon[m$selectSubSigma2ThetaEpsilon] <-
@@ -112,9 +123,9 @@ probf2 <- function(matrices, normalInds, sigma, sum=FALSE) {
 
 
 probf3 <- function(matrices, nonNormalInds, expected, sigma, t, numEta, sum = FALSE) {
-  if (numEta == 1) 
+  if (numEta == 1)
     p <- dnormCpp(matrices$y[, 1], mu = expected, sigma = sqrt(sigma), ncores = ThreadEnv$n.threads)
-  else 
+  else
     p <- rep_dmvnorm(matrices$y[, nonNormalInds], expected = expected,
                      sigma = sigma, t = t, ncores = ThreadEnv$n.threads)
   if (sum) sum(p) else p
@@ -150,7 +161,7 @@ gradientLogLikQml_i <- function(theta, model, sign = -1, epsilon = 1e-8) {
   lapplyMatrix(seq_along(theta), FUN = function(i) {
     theta[[i]] <- theta[[i]] + epsilon
     (logLikQml_i(theta, model, sign = sign) - baseLL) / epsilon
-  }, FUN.VALUE = numeric(nrow(model$data)))
+  }, FUN.VALUE = numeric(model$data$n))
 }
 
 
@@ -176,7 +187,7 @@ mstepQml <- function(model,
     est <- stats::nlminb(start = theta, objective = logLikQml, model = model,
                          gradient = gradient, sign = -1, verbose = verbose,
                          upper = model$info$bounds$upper,
-                         lower = model$info$bounds$lower, 
+                         lower = model$info$bounds$lower,
                          control = control, ...) |> suppressWarnings()
 
   } else if (optimizer == "L-BFGS-B") {

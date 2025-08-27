@@ -44,8 +44,8 @@ plot_interaction(x = "INT", z = "PBC", y = "BEH",
                  vals_z = c(-0.5, 0.5), model = est2)
 
 ## -----------------------------------------------------------------------------
-m1 <-  ' 
-  visual  =~ x1 + x2 + x3 
+m1 <-  '
+  visual  =~ x1 + x2 + x3
   textual =~ x4 + x5 + x6
   speed   =~ x7 + x8 + x9
 
@@ -71,7 +71,7 @@ tpb <- "
 "
 
 est2 <- modsem(tpb, TPB, method = "qml")
-plot_jn(x = "INT", z = "PBC", y = "BEH", model = est2, 
+plot_jn(x = "INT", z = "PBC", y = "BEH", model = est2,
         min_z = -1.5, max_z = -0.5)
 
 ## ----eval = EVAL_DEFAULT------------------------------------------------------

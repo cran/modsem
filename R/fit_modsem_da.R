@@ -4,13 +4,21 @@
 #' @description Calculates chi-sq test and p-value, as well as RMSEA for
 #' the LMS and QML models. Note that the Chi-Square based fit measures should be calculated
 #' for the baseline model, i.e., the model without the interaction effect
+#'
 #' @param model fitted model. Thereafter, you can use 'compare_fit()'
 #' to assess the comparative fit of the models. If the interaction effect makes
 #' the model better, and e.g., the RMSEA is good for the baseline model,
 #' the interaction model likely has a good RMSEA as well.
+#'
 #' @param chisq should Chi-Square based fit-measures be calculated?
+#'
+#' @param lav.fit Should fit indices from the \code{lavaan} model used to optimize
+#'   the starting parameters be included (if available)? This is usually only approprioate
+#'   for linear models (i.e., no interaction effects), where the parameter estimates
+#'   for LMS and QML are equivalent to ML estimates from lavaan.
+#'
 #' @export
-fit_modsem_da <- function(model, chisq = TRUE) {
+fit_modsem_da <- function(model, chisq = TRUE, lav.fit = FALSE) {
   parTable <- model$parTable
   warnif(any(grepl(":", parTable$rhs)) && chisq,
          "Chi-Square based fit-measures for LMS and QML ",
@@ -18,64 +26,52 @@ fit_modsem_da <- function(model, chisq = TRUE) {
          "i.e., the model without the interaction effect",
          immediate. = FALSE)
 
-
+  data   <- model$data$data.full
   t      <- nFreeInterceptsDA(model)
   mean.s <- model$args$mean.observed || t > 0
   logLik <- model$logLik
-  O      <- stats::cov(model$data)
-  mu     <- apply(model$data, 2, mean)
-  mu     <- matrix(mu, ncol = 1, dimnames = list(colnames(model$data), "~1"))
-  N      <- NROW(model$data)
-  p      <- NCOL(model$data)
+  O      <- stats::cov(data, use = "pairwise.complete.obs")
+  mu     <- apply(data, 2, mean, na.rm = TRUE)
+  mu     <- matrix(mu, ncol = 1, dimnames = list(colnames(data), "~1"))
+  N      <- NROW(data)
+  p      <- NCOL(data)
   coef   <- coef(model, type = "free")
   k      <- length(coef)
   df     <- getDegreesOfFreedom(p = p, coef = coef, mean.structure = mean.s)
- 
-  expected.matrices <- model$expected.matrices
 
-  matrices <- model$model$matrices
-  gammaXi  <- matrices$gammaXi
-  gammaEta <- matrices$gammaEta
-  phi      <- matrices$phi
-  psi      <- matrices$psi
-  lambdaX  <- matrices$lambdaX
-  lambdaY  <- matrices$lambdaY
-  thetaY   <- matrices$thetaEpsilon
-  thetaX   <- matrices$thetaDelta
-  tauX     <- matrices$tauX
-  tauY     <- matrices$tauY
-  alpha    <- matrices$alpha
-  Ieta     <- matrices$Ieta
-  beta0    <- matrices$beta0
-  Binv     <- solve(Ieta - gammaEta)
+  expected.matrices <- model$expected.matrices
+  matrices <- modsem_inspect(model, what = "matrices")
 
   if (chisq) {
     E <- expected.matrices$sigma.ov
 
     if (mean.s) {
-      muHat <- expected.matrices$mu.ov
-    } else muHat <- mu
+      mu.hat <- expected.matrices$mu.ov
+    } else mu.hat <- mu
 
     # Make sure the order of the rows and columns of E matches O
     E <- E[rownames(O), colnames(O), drop = FALSE]
-    muHat <- muHat[rownames(O), , drop = FALSE]
+    mu.hat <- mu.hat[rownames(O), , drop = FALSE]
 
-    chisqValue <- calcChiSqr(O = O, E = E, N = N, p = p, mu = mu, muHat = muHat)
+    chisqValue <- calcChiSqr(O = O, E = E, N = N, p = p, mu = mu, mu.hat = mu.hat)
     chisqP     <- stats::pchisq(chisqValue, df, lower.tail = FALSE)
     RMSEA      <- calcRMSEA(chisqValue, df, N)
+    SRMR       <- calcSRMR_Mplus(S = O, M = mu, Sigma.hat = E, Mu.hat = mu.hat,
+                                 mean.structure = mean.s)
 
   } else {
     E          <- NULL
     chisqValue <- NULL
     chisqP     <- NULL
     df         <- NULL
-    muHat      <- NULL
+    mu.hat     <- NULL
+    SRMR       <- NULL
     RMSEA      <- list(
-      RMSEA          = NULL, 
-      RMSEA.lower    = NULL, 
-      RMSEA.upper    = NULL, 
+      RMSEA          = NULL,
+      RMSEA.lower    = NULL,
+      RMSEA.upper    = NULL,
       RMSEA.ci.level = NULL,
-      RMSEA.pvalue   = NULL, 
+      RMSEA.pvalue   = NULL,
       RMSEA.close.h0 = NULL
     )
   }
@@ -85,33 +81,48 @@ fit_modsem_da <- function(model, chisq = TRUE) {
   BIC  <- calcBIC(logLik, k = k, N = N)
   aBIC <- calcAdjBIC(logLik, k = k, N = N)
 
+  if (lav.fit) {
+    lavfit <- tryCatch(
+      lavaan::fitMeasures(model$model$lavaan.fit),
+      error = function(e) {
+        warning2("Unable to retrieve fit measures for lavaan model!\n",
+                 "Message: ", conditionMessage(e), immediate. = FALSE)
+        NULL
+      }
+    )
+  } else lavfit <- NULL
+
+
   list(
-    sigma.observed = modsemMatrix(O, symmetric = TRUE), 
+    lav.fit = lavfit,
+
+    sigma.observed = modsemMatrix(O, symmetric = TRUE),
     sigma.expected = modsemMatrix(E, symmetric = TRUE),
     mu.observed    = modsemMatrix(mu),
-    mu.expected    = modsemMatrix(muHat),
+    mu.expected    = modsemMatrix(mu.hat),
 
-    chisq.value  = chisqValue, 
+    chisq.value  = chisqValue,
     chisq.pvalue = chisqP,
     chisq.df     = df,
 
     AIC  = AIC,
     AICc = AICc,
     BIC  = BIC,
-    aBIC = aBIC, 
+    aBIC = aBIC,
+    SRMR = SRMR,
 
     RMSEA          = RMSEA$rmsea,
     RMSEA.lower    = RMSEA$lower,
     RMSEA.upper    = RMSEA$upper,
     RMSEA.ci.level = RMSEA$ci.level,
-    RMSEA.pvalue   = RMSEA$pvalue, 
+    RMSEA.pvalue   = RMSEA$pvalue,
     RMSEA.close.h0 = RMSEA$close.h0
   )
 }
 
 
-calcChiSqr <- function(O, E, N, p, mu, muHat) {
-  diff_mu <- mu - muHat
+calcChiSqr <- function(O, E, N, p, mu, mu.hat) {
+  diff_mu <- mu - mu.hat
   Einv    <- solve(E)
   as.vector(
     (N - 1) * (t(diff_mu) %*% Einv %*% diff_mu +
@@ -144,7 +155,7 @@ calcRMSEA <- function(chi.sq, df, N, ci.level = 0.90, close.h0=0.05) {
   rmseaHat    <- fRMSEA(point)
   rmseaPvalue <- 1 - stats::pchisq(chi.sq, df=df, ncp=df*(N-1)*close.h0^2)
 
-  list(rmsea = rmseaHat, lower = rmseaLower, upper = rmseaUpper, 
+  list(rmsea = rmseaHat, lower = rmseaLower, upper = rmseaUpper,
        ci.level = ci.level, pvalue = rmseaPvalue, close.h0 = close.h0)
 }
 
@@ -167,4 +178,38 @@ calcBIC <- function(logLik, k, N) {
 
 calcAdjBIC <- function(logLik, k, N) {
   log((N + 2) / 24) * k - 2 * logLik
+}
+
+
+calcSRMR_Mplus <- function(S, M, Sigma.hat, Mu.hat, mean.structure = TRUE) {
+  # Bollen approach: simply using cov2cor ('correlation residuals')
+  S.cor <- cov2cor(S)
+  Sigma.cor <- cov2cor(Sigma.hat)
+  R.cor <- (S.cor - Sigma.cor)
+  nvar  <- NCOL(Sigma.cor)
+
+  # meanstructure
+  if (mean.structure) {
+    # standardized residual mean vector
+    R.cor.mean <- M / sqrt(diag(S)) - Mu.hat / sqrt(diag(Sigma.hat))
+
+    e <- nvar * (nvar + 1) / 2 + nvar
+    srmr.mplus <-
+      sqrt((sum(R.cor[lower.tri(R.cor, diag = FALSE)]^2) +
+            sum(R.cor.mean^2) +
+            sum(((diag(S) - diag(Sigma.hat)) / diag(S))^2)) / e)
+
+    e <- nvar * (nvar + 1) / 2
+    srmr.mplus.nomean <-
+      sqrt((sum(R.cor[lower.tri(R.cor, diag = FALSE)]^2) +
+            sum(((diag(S) - diag(Sigma.hat)) / diag(S))^2)) / e)
+  } else {
+    e <- nvar * (nvar + 1) / 2
+    srmr.mplus.nomean <- srmr.mplus <-
+      sqrt((sum(R.cor[lower.tri(R.cor, diag = FALSE)]^2) +
+            sum(((diag(S) - diag(Sigma.hat)) / diag(S))^2)) / e)
+  }
+
+  attr(srmr.mplus, "nomean") <- srmr.mplus.nomean
+  srmr.mplus
 }

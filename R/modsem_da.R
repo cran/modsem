@@ -19,20 +19,21 @@
 #'   For simple models, somewhere between 16-24 nodes should be enough; for more complex models, higher numbers may be needed.
 #'   For models where there is an interaction effect between an endogenous and exogenous variable,
 #'   the number of nodes should be at least 32, but practically (e.g., ordinal/skewed data), more than 32 is recommended. In cases
-#'   where data is non-normal, it might be better to use the \code{qml} approach instead. 
+#'   where data is non-normal, it might be better to use the \code{qml} approach instead.
 #'   You can also consider setting \code{adaptive.quad = TRUE}.
 #'
-#' @param impute.na Should missing values be imputed? If \code{FALSE} missing values
-#'   are removed case-wise. If \code{TRUE} values are imputed using \code{Amelia::amelia}.
-#'   Default is \code{FALSE}. If you want more fine-grained control over how the missing data 
-#'   is imputed, you should consider imputing it yourself.
+#' @param missing How should missing values be handled? If \code{"listwise"} (default) missing values
+#'   are removed list-wise (alias: \code{"complete"} or \code{"casewise"}).
+#'   If \code{impute} values are imputed using \code{Amelia::amelia}.
+#'   If \code{"fiml"} (alias: \code{"ml"} or \code{"direct"}), full information maximum
+#'   likelihood (FIML) is used. FIML can be (very) computationally intensive.
 #'
-#' @param convergence.abs Absolute convergence criterion. 
+#' @param convergence.abs Absolute convergence criterion.
 #'   Lower values give better estimates but slower computation. Not relevant when
 #'   using the QML approach. For the LMS approach the EM-algorithm stops whenever
 #'   the relative or absolute convergence criterion is reached.
 #'
-#' @param convergence.rel Relative convergence criterion. 
+#' @param convergence.rel Relative convergence criterion.
 #'   Lower values give better estimates but slower computation.
 #'   For the LMS approach the EM-algorithm stops whenever
 #'   the relative or absolute convergence criterion is reached.
@@ -75,7 +76,7 @@
 #'
 #' @param FIM should the Fisher information matrix be calculated using the observed or expected values? Must be either \code{"observed"} or \code{"expected"}.
 #'
-#' @param EFIM.S if the expected Fisher information matrix is computed, \code{EFIM.S} selects the number of Monte Carlo samples. Defaults to 100. 
+#' @param EFIM.S if the expected Fisher information matrix is computed, \code{EFIM.S} selects the number of Monte Carlo samples. Defaults to 100.
 #'   \strong{NOTE}: This number should likely be increased for better estimates (e.g., 1000), but it might drasticly increase computation time.
 #'
 #' @param OFIM.hessian Logical. If \code{TRUE} (default), standard errors are
@@ -84,15 +85,15 @@
 #'   of individual score vectors (OPG). For correctly specified models,
 #'   these two matrices are asymptotically equivalent; yielding nearly identical
 #'   standard errors in large samples. The Hessian usually shows smaller finite-sample
-#'   variance (i.e., it's more consistent), and is therefore the default. 
+#'   variance (i.e., it's more consistent), and is therefore the default.
 #'
 #'   Note, that the Hessian is not always positive definite, and is more computationally
-#'   expensive to calculate. The OPG should always be positive definite, and a lot 
+#'   expensive to calculate. The OPG should always be positive definite, and a lot
 #'   faster to compute. If the model is correctly specified, and the sample size is large,
-#'   then the two should yield similar results, and switching to the OPG can save a 
+#'   then the two should yield similar results, and switching to the OPG can save a
 #'   lot of time. Note, that the required sample size depends on the complexity of the model.
 #'
-#'   A large difference between Hessian and OPG suggests misspecification, and 
+#'   A large difference between Hessian and OPG suggests misspecification, and
 #'   \code{robust.se = TRUE} should be set to obtain sandwich (robust) standard errors.
 #'
 #' @param EFIM.parametric should data for calculating the expected Fisher information matrix be
@@ -113,32 +114,56 @@
 #'
 #' @param epsilon finite difference for numerical derivatives.
 #'
-#' @param quad.range range in z-scores to perform numerical integration in LMS using, 
+#' @param quad.range range in z-scores to perform numerical integration in LMS using,
 #'   when using quasi-adaptive Gaussian-Hermite Quadratures. By default \code{Inf}, such that \code{f(t)} is integrated from -Inf to Inf,
 #'   but this will likely be inefficient and pointless at a large number of nodes. Nodes outside
 #'   \code{+/- quad.range} will be ignored.
-#' 
+#'
 #' @param adaptive.quad should a quasi adaptive quadrature be used? If \code{TRUE}, the quadrature nodes will be adapted to the data.
-#'   If \code{FALSE}, the quadrature nodes will be fixed. Default is \code{FALSE}. The adaptive quadrature does not fit an adaptive 
-#'   quadrature to each participant, but instead tries to place more nodes where posterior distribution is highest. Compared with a 
+#'   If \code{FALSE}, the quadrature nodes will be fixed. Default is \code{FALSE}. The adaptive quadrature does not fit an adaptive
+#'   quadrature to each participant, but instead tries to place more nodes where posterior distribution is highest. Compared with a
 #'   fixed Gauss Hermite quadrature this usually means that less nodes are placed at the tails of the distribution.
 #'
-#' @param adaptive.frequency How often should the quasi-adaptive quadrature be calculated? Defaults to 3, meaning 
+#' @param adaptive.frequency How often should the quasi-adaptive quadrature be calculated? Defaults to 3, meaning
 #'   that it is recalculated every third EM-iteration.
 #'
-#' @param adaptive.quad.tol Relative error tolerance for quasi adaptive quadrature. Defaults to \code{1e-12}. 
+#' @param adaptive.quad.tol Relative error tolerance for quasi adaptive quadrature. Defaults to \code{1e-12}.
 #'
 #' @param n.threads number of threads to use for parallel processing. If \code{NULL}, it will use <= 2 threads.
 #'   If an integer is specified, it will use that number of threads (e.g., \code{n.threads = 4} will use 4 threads).
 #'   If \code{"default"}, it will use the default number of threads (2).
 #'   If \code{"max"}, it will use all available threads, \code{"min"} will use 1 thread.
 #'
-#' @param algorithm algorithm to use for the EM algorithm. Can be either \code{"EM"} or \code{"EMA"}. 
+#' @param algorithm algorithm to use for the EM algorithm. Can be either \code{"EM"} or \code{"EMA"}.
 #'   \code{"EM"} is the standard EM algorithm. \code{"EMA"} is an
 #'   accelerated EM procedure that uses Quasi-Newton and Fisher Scoring
 #'   optimization steps when needed. Default is \code{"EM"}.
 #'
 #' @param em.control a list of control parameters for the EM algorithm. See \code{\link{default_settings_da}} for defaults.
+#'
+#' @param ordered Variables to be treated as ordered. The scale of the ordinal variables
+#'   is scaled to correct for unequal intervals. The underlying continous distributions
+#'   are estimated using a Monte-Carlo bootstrap approach. The ordinal values are replaced with
+#'   the expected values for each interval. Using \code{ordered=TRUE} should yield estimates
+#'   which are more robust to unequal intervals in ordinal variables. I.e., the estimates
+#'   should be more consistent, and less biased.
+#'
+#' @param ordered.iter Maximum number of sampling iterations used to sample the underlying continuous distribution of the
+#'   ordinal variables. The default is set to \code{100}.
+#'
+#' @param ordered.warmup Number of sampling iterations in the warmup phase.
+#'
+#' @param cluster Clusters used to compute standard errors robust to non-indepence of observations. Must be paired with
+#'   \code{robust.se = TRUE}.
+#'
+#' @param cr1s Logical; if \code{TRUE}, apply the CR1S small-sample correction factor
+#'   to the cluster-robust variance estimator. The CR1S factor is
+#'   \eqn{(G / (G - 1)) \cdot ((N - 1) / (N - q))}, where \eqn{G} is the number of
+#'   clusters, \eqn{N} is the total number of observations, and \eqn{q} is the number
+#'   of free parameters. This adjustment inflates standard errors to reduce the
+#'   small-sample downward bias present in the basic cluster-robust (CR0) estimator,
+#'   especially when \eqn{G} is small. If \code{FALSE}, the unadjusted CR0 estimator
+#'   is used. Defaults to \code{TRUE}. Only relevant if \code{cluster} is specified.
 #'
 #' @param rcs Should latent variable indicators be replaced with reliability-corrected
 #'   single item indicators instead? See \code{\link{relcorr_single_item}}.
@@ -146,45 +171,45 @@
 #' @param rcs.choose Which latent variables should get their indicators replaced with
 #'   reliability-corrected single items? It is passed to \code{\link{relcorr_single_item}}
 #'   as the \code{choose} argument.
-#'   
+#'
 #' @param rcs.scale.corrected Should reliability-corrected items be scale-corrected? If \code{TRUE}
 #'   reliability-corrected single items are corrected for differences in factor loadings between
 #'   the items. Default is \code{TRUE}.
 #'
-#' @param orthogonal.x If \code{TRUE}, all covariances among exogenous latent variables only are set to zero. 
+#' @param orthogonal.x If \code{TRUE}, all covariances among exogenous latent variables only are set to zero.
 #'  Default is \code{FALSE}.
 #'
-#' @param orthogonal.y If \code{TRUE}, all covariances among endogenous latent variables only are set to zero. 
-#'  If \code{FALSE} residual covariances are added between pure endogenous variables; 
+#' @param orthogonal.y If \code{TRUE}, all covariances among endogenous latent variables only are set to zero.
+#'  If \code{FALSE} residual covariances are added between pure endogenous variables;
 #'  those that are predicted by no other endogenous variable in the structural model.
 #'  Default is \code{FALSE}.
 #'
-#' @param orthogonal.y If \code{TRUE}, all covariances among endogenous latent variables only are set to zero. 
-#'  If \code{FALSE} residual covariances are added between pure endogenous variables; 
+#' @param orthogonal.y If \code{TRUE}, all covariances among endogenous latent variables only are set to zero.
+#'  If \code{FALSE} residual covariances are added between pure endogenous variables;
 #'  those that are predicted by no other endogenous variable in the structural model.
 #'  Default is \code{FALSE}.
 #'
-#' @param auto.fix.first If \code{TRUE} the factor loading of the first indicator, for 
+#' @param auto.fix.first If \code{TRUE} the factor loading of the first indicator, for
 #'  a given latent variable is fixed to \code{1}. If \code{FALSE} no loadings are fixed
 #'  (automatically). Note that that this might make it such that the model no longer is
-#'  identified. Default is \code{TRUE}. \strong{NOTE} this behaviour is overridden 
+#'  identified. Default is \code{TRUE}. \strong{NOTE} this behaviour is overridden
 #'  if the first loading is labelled, where it gets treated as a free parameter instead. This
 #'  differs from the default behaviour in \code{lavaan}.
 #'
-#' @param auto.fix.single If \code{TRUE}, the residual variance of 
+#' @param auto.fix.single If \code{TRUE}, the residual variance of
 #'  an observed indicator is set to zero if it is the only indicator of a latent variable.
 #'  If \code{FALSE} the residual variance is not fixed to zero, and treated as a free parameter
-#'  of the model. Default is \code{TRUE}. \strong{NOTE} this behaviour is overridden 
-#'  if the first loading is labelled, where it gets treated as a free parameter instead. 
+#'  of the model. Default is \code{TRUE}. \strong{NOTE} this behaviour is overridden
+#'  if the first loading is labelled, where it gets treated as a free parameter instead.
 #'
-#' @param auto.split.syntax Should the model syntax automatically be split into a 
-#'   linear and non-linear part? This is done by moving the structural model for 
+#' @param auto.split.syntax Should the model syntax automatically be split into a
+#'   linear and non-linear part? This is done by moving the structural model for
 #'   linear endogenous variables (used in interaction terms) into the \code{cov.syntax}
 #'   argument. This can potentially allow interactions between two endogenous variables
-#'   given that both are linear (i.e., not affected by interaction terms). This is 
+#'   given that both are linear (i.e., not affected by interaction terms). This is
 #'   \code{FALSE} by default for the LMS approach.
-#'   When using the QML approach interation effects between exogenous and endogenous 
-#'   variables can in some cases be biased, if the model is not split beforehand. 
+#'   When using the QML approach interation effects between exogenous and endogenous
+#'   variables can in some cases be biased, if the model is not split beforehand.
 #'   The default is therefore \code{TRUE} for the QML approach.
 #'
 #' @param ... additional arguments to be passed to the estimation function.
@@ -250,7 +275,7 @@ modsem_da <- function(model.syntax = NULL,
                       verbose = NULL,
                       optimize = NULL,
                       nodes = NULL,
-                      impute.na = NULL,
+                      missing = NULL,
                       convergence.abs = NULL,
                       convergence.rel = NULL,
                       optimizer = NULL,
@@ -279,6 +304,11 @@ modsem_da <- function(model.syntax = NULL,
                       n.threads = NULL,
                       algorithm = NULL,
                       em.control = NULL,
+                      ordered = NULL,
+                      ordered.iter = 100L,
+                      ordered.warmup = 25L,
+                      cluster = NULL,
+                      cr1s = FALSE,
                       rcs = FALSE,
                       rcs.choose = NULL,
                       rcs.scale.corrected = TRUE,
@@ -296,6 +326,61 @@ modsem_da <- function(model.syntax = NULL,
     stop2("The provided model syntax is not of length 1")
   }
 
+  if (length(ordered) || any(sapply(data, FUN = is.ordered))) {
+    out <- modsemOrderedScaleCorrection(
+       model.syntax        = model.syntax,
+       data                = data,
+       method              = method,
+       verbose             = verbose,
+       iter                = ordered.iter,
+       warmup              = ordered.warmup,
+       optimize            = optimize,
+       nodes               = nodes,
+       missing             = missing,
+       convergence.abs     = convergence.abs,
+       convergence.rel     = convergence.rel,
+       optimizer           = optimizer,
+       center.data         = center.data,
+       standardize.data    = standardize.data,
+       standardize.out     = standardize.out,
+       standardize         = standardize,
+       mean.observed       = mean.observed,
+       cov.syntax          = cov.syntax,
+       double              = double,
+       calc.se             = calc.se,
+       FIM                 = FIM,
+       EFIM.S              = EFIM.S,
+       OFIM.hessian        = OFIM.hessian,
+       EFIM.parametric     = EFIM.parametric,
+       robust.se           = robust.se,
+       R.max               = R.max,
+       max.iter            = max.iter,
+       max.step            = max.step,
+       start               = start,
+       epsilon             = epsilon,
+       quad.range          = quad.range,
+       adaptive.quad       = adaptive.quad,
+       adaptive.frequency  = adaptive.frequency,
+       adaptive.quad.tol   = adaptive.quad.tol,
+       n.threads           = n.threads,
+       algorithm           = algorithm,
+       em.control          = em.control,
+       ordered             = ordered,
+       cluster             = cluster,
+       cr1s                = cr1s,
+       rcs                 = rcs,
+       rcs.choose          = rcs.choose,
+       rcs.scale.corrected = rcs.scale.corrected,
+       orthogonal.x        = orthogonal.x,
+       orthogonal.y        = orthogonal.y,
+       auto.fix.first      = auto.fix.first,
+       auto.fix.single     = auto.fix.single,
+       auto.split.syntax   = auto.split.syntax,
+       ...)
+
+    return(out)
+  }
+
   if (is.null(data)) {
     stop2("No data provided")
   } else if (!is.data.frame(data)) {
@@ -304,7 +389,7 @@ modsem_da <- function(model.syntax = NULL,
 
   if (rcs) { # use reliability-correct single items?
     corrected <- relcorr_single_item(
-      syntax          = model.syntax, 
+      syntax          = model.syntax,
       data            = data,
       choose          = rcs.choose,
       scale.corrected = rcs.scale.corrected,
@@ -353,12 +438,13 @@ modsem_da <- function(model.syntax = NULL,
           n.threads          = n.threads,
           algorithm          = algorithm,
           em.control         = em.control,
-          impute.na          = impute.na,
+          missing            = missing,
           orthogonal.x       = orthogonal.x,
           orthogonal.y       = orthogonal.y,
           auto.fix.first     = auto.fix.first,
           auto.fix.single    = auto.fix.single,
-          auto.split.syntax  = auto.split.syntax
+          auto.split.syntax  = auto.split.syntax,
+          cr1s               = cr1s
         )
     )
 
@@ -382,12 +468,13 @@ modsem_da <- function(model.syntax = NULL,
     quad.range         = args$quad.range,
     adaptive.quad      = args$adaptive.quad,
     adaptive.frequency = args$adaptive.frequency,
-    impute.na          = args$impute.na,
+    missing            = args$missing,
     orthogonal.x       = args$orthogonal.x,
     orthogonal.y       = args$orthogonal.y,
     auto.fix.first     = args$auto.fix.first,
     auto.fix.single    = args$auto.fix.single,
-    auto.split.syntax  = args$auto.split.syntax
+    auto.split.syntax  = args$auto.split.syntax,
+    cluster            = cluster
   )
 
   if (args$optimize) {
@@ -417,8 +504,18 @@ modsem_da <- function(model.syntax = NULL,
     model$theta <- start
   }
 
+  # We want to limit the number of threads available to OpenBLAS.
+  # Depending on the OpenBLAS version, it might not be compatible with
+  # OpenMP. If `n.blas > 1L` you might end up getting this message:
+  #> OpenBLAS Warning : Detect OpenMP Loop and this application may hang.
+  #>                    Please rebuild the library with USE_OPENMP=1 option.
+  # We don't want to restrict OpenBLAS in any other setttings in other settings,
+  # e.g., lavaan::sem, so we reset after the model has been estimated.
+  setThreads(n = args$n.threads, n.blas = 1L)
+  on.exit(resetThreads()) # clean up at end of function
+
   est <- tryCatch(switch(method,
-    "qml" = estQml(model,
+    qml = estQml(model,
       verbose         = args$verbose,
       convergence     = args$convergence.rel,
       calc.se         = args$calc.se,
@@ -431,9 +528,10 @@ modsem_da <- function(model.syntax = NULL,
       epsilon         = args$epsilon,
       optimizer       = args$optimizer,
       R.max           = args$R.max,
+      cr1s            = args$cr1s,
       ...
     ),
-    "lms" = emLms(model,
+    lms = emLms(model,
       verbose           = args$verbose,
       convergence.abs   = args$convergence.abs,
       convergence.rel   = args$convergence.rel,
@@ -453,23 +551,22 @@ modsem_da <- function(model.syntax = NULL,
       adaptive.quad     = args$adaptive.quad,
       quad.range        = args$quad.range,
       adaptive.quad.tol = args$adaptive.quad.tol,
+      nodes             = args$nodes,
+      cr1s              = args$cr1s,
       ...
   )),
   error = function(e) {
     if (args$verbose) cat("\n")
-    message <- paste0("modsem [%s]: Model estimation failed!\n", 
+    message <- paste0("modsem [%s]: Model estimation failed!\n",
                       "Message: %s")
     stop2(sprintf(message, method, e$message))
   })
-
-  # clean up
-  resetThreads()
 
   # Finalize the model object
   # Expected means and covariances
   est$expected.matrices <- tryCatch(
     calcExpectedMatricesDA(
-      parTable = est$parTable, 
+      parTable = est$parTable,
       xis  = getXisModelDA(model), # taking both the main model and cov model into account
       etas = getEtasModelDA(model)  # taking both the main model and cov model into account
     ),
@@ -482,7 +579,7 @@ modsem_da <- function(model.syntax = NULL,
   est$args <- args
   class(est) <- c("modsem_da", "modsem")
 
-  # Check the results 
+  # Check the results
   postCheckModel(est)
 
   # Return

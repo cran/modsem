@@ -26,8 +26,8 @@ knitr::opts_chunk$set(
 # summary(lms1, standardized = TRUE)
 
 ## -----------------------------------------------------------------------------
-# qml1 <- modsem(m1, oneInt, method = "qml")
-# summary(qml1)
+# qml1 <- modsem(m1, oneInt, method = "qml", robust.se = TRUE) # get robust standard errors
+# summary(qml1, fit = TRUE, adjusted = TRUE) # get additional fit indices
 
 ## -----------------------------------------------------------------------------
 # # ATT = Attitude
