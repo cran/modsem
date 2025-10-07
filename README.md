@@ -19,14 +19,14 @@ install.packages("modsem")
 install.packages("devtools")
 devtools::install_github("kss2k/modsem", build_vignettes = TRUE)
 ```
-
-**Note**: The package needs to be compiled from source on `macOS` and `Linux`.
+**Note**: The package needs to be compiled from source on `macOS` (if installing via `GitHub`) and `Linux`.
 If you have issues installing the package on `macOS`, you might need to install the `gfortran` compiler.
 A `C++` compiler is also required, but should be installed by default on most systems.
 See the [R for macOs](https://cran.r-project.org/bin/macosx/tools/) page for more information.
 
 If you're using `Windows`, consider installing [`OpenBLAS in R for Windows`](https://github.com/david-cortes/R-openblas-in-windows) 
-for better perfmance.
+for better perfmance. If you're using a `Linux` distribution, consider installing
+the [`ropenblas` package](https://CRAN.R-project.org/package=ropenblas)
 
 # Methods/Approaches
 
@@ -49,14 +49,15 @@ Product Indicator (PI) and Distribution Analytic (DA) approaches.
 ## Distribution Analytic (DA) Approaches
 - `"lms"` = The Latent Moderated Structural equations (LMS) approach, see the [vignette](https://modsem.org/articles/lms_qml.html)
 - `"qml"` = The Quasi Maximum Likelihood (QML) approach, see the [vignette](https://modsem.org/articles/lms_qml.html)
-- `"mplus"` 
-  - estimates model through Mplus, if it is installed
+- `"mplus"` = `Mplus`
+  - estimates model through `Mplus`, if it is installed
 
 # Examples 
 
 ## Elementary Interaction Model (Kenny & Judd, 1984; Jaccard & Wan, 1995)
 ```R
 library(modsem)
+
 m1 <- '
   # Outer Model
   X =~ x1 + x2 +x3

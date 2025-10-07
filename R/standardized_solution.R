@@ -10,20 +10,21 @@ transformedSolutionCOEFS <- function(object,
   stopif(!inherits(object, c("modsem_da", "modsem_pi", "lavaan", "modsem_mplus")),
          "The model must be of class `modsem_da`, `modsem_mplus`, `modsem_pi` or `lavaan`!")
 
-  isLav <- inherits(object, "lavaan")
-  isDA  <- inherits(object, c("modsem_da", "modsem_mplus"))
+  isLav   <- inherits(object, "lavaan")
+  isDA    <- inherits(object, "modsem_da")
+  isMplus <- inherits(object, "modsem_mplus")
 
   if (isLav) {
     vcov <- lavaan::vcov # load vcov and coef from lavaan if dealing with a lavaan object
     coef <- lavaan::coef
   }
 
-  parTable <- parameter_estimates(object, colon.pi = TRUE)
+  parTable <- parameter_estimates(object, colon.pi = TRUE, high.order.as.measr = FALSE)
   parTable <- subsetByGrouping(parTable, grouping = grouping) # if NULL no subsetting
 
   if (!NROW(parTable)) return(NULL)
 
-  if (isDA) {
+  if (isDA || isMplus) {
     parTable <- parTable[c("lhs", "op", "rhs", "label", "est", "std.error")]
 
   } else { # modsem_pi or lavaan
@@ -34,12 +35,20 @@ transformedSolutionCOEFS <- function(object,
     parTable <- rename(parTable, se = "std.error")
   }
 
-  if (center && (isLav || isDA)) { # not relevant for modsem_pi
-    warnif(isLav, "Replacing interaction (co-)",
-           "variances when centering the model!\n", immediate. = FALSE)
+  if (center && (isLav || isDA || isMplus)) { # not relevant for modsem_pi
+    if (isDA || isMplus)
+      parTable <- meanInteractions(parTable) # get means for interaction terms
 
-    if (isDA) parTable <- meanInteractions(parTable) # get means for interaction terms
-    parTable <- var_interactions(parTable, ignore.means = TRUE, mc.reps = mc.reps)
+    # if we had to center the solution, we have to replace the existing variances
+    # if we're using LMS/QML/Mplus there aren't any variances
+    isNonCentered <- isNonCenteredParTable(parTable)
+    missingVars   <- !hasIntTermVariances(parTable)
+    addVariances  <- (isNonCentered && isLav) || isMplus || isDA || missingVars
+
+    if (addVariances) {
+      warnif(isLav, "Replacing interaction (co-)", "variances when centering the model!\n", immediate. = FALSE)
+      parTable <- var_interactions(parTable, ignore.means = TRUE, mc.reps = mc.reps)
+    }
   }
 
   lVs      <- getLVs(parTable)
@@ -296,6 +305,13 @@ transformedSolutionCOEFS <- function(object,
   labelInOrig       <- parTable$label %in% originalLabels
   parTable[!labelInOrig, "label"] <- ""
 
+  if (isDA) {
+    indsHigherOrderLVs <- object$model$info$indsHigherOrderLVs
+    parTable <- higherOrderStruct2Measr(parTable = parTable,
+                                        indsHigherOrderLVs = indsHigherOrderLVs)
+    parTable <- sortParTableDA(parTable, model = object$model)
+  }
+
   # Reset index
   rownames(parTable) <- NULL
 
@@ -494,12 +510,12 @@ centerInteractionsCOEFS <- function(parTable, COEFS, center.means = TRUE,
 
     if (length(labelGammaX) == 1) {
       gammaX  <- COEFS[[labelGammaX]]
-      COEFS[[labelGammaX]]  <- gammaX + gammaXZ * meanZ
+      COEFS[[labelGammaX]] <- gammaX + gammaXZ * meanZ
     }
 
     if (length(labelGammaZ) == 1) {
       gammaZ  <- COEFS[[labelGammaZ]]
-      COEFS[[labelGammaZ]]  <- gammaZ + gammaXZ * meanX
+      COEFS[[labelGammaZ]] <- gammaZ + gammaXZ * meanX
     }
   }
 

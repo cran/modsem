@@ -711,15 +711,27 @@ getLevelsParTable <- function(parTable) {
 
 isPureEta <- function(eta, parTable) {
   predictors <- unique(parTable[parTable$op == "~", "rhs"])
-  !eta %in% predictors
+  indicators <- unique(parTable[parTable$op == "=~", "rhs"])
+  !eta %in% c(predictors, indicators)
 }
 
 
-calcExpectedMatricesDA <- function(parTable, xis = NULL, etas = NULL, intTerms = NULL) {
+getCoefMatricesDA <- function(parTable,
+                              xis = NULL,
+                              etas = NULL,
+                              intTerms = NULL,
+                              centered = TRUE) {
+
   parTable <- removeInteractionVariances(parTable)
-  parTable <- centerInteractions(parTable, center.means = FALSE) |>
-    var_interactions(ignore.means = TRUE) |>
-    meanInteractions(ignore.means = TRUE)
+
+  if (centered) {
+    parTable <- centerInteractions(parTable, center.means = FALSE) |>
+      var_interactions(ignore.means = TRUE) |>
+      meanInteractions(ignore.means = TRUE)
+  } else {
+    parTable <- var_interactions(parTable, ignore.means = FALSE) |>
+      meanInteractions(ignore.means = FALSE)
+  }
 
   if (is.null(intTerms))
     intTerms <- unique(parTable[grepl(":", parTable$rhs), "rhs"])
@@ -799,8 +811,38 @@ calcExpectedMatricesDA <- function(parTable, xis = NULL, etas = NULL, intTerms =
   beta0 <- createBeta(xis)
   tau   <- createBeta(inds)
 
-  # Sigma ----------------------------------------------------------------------
   Binv <- solve(diag(nrow(gammaEta)) - gammaEta)
+
+  list(gammaXi = gammaXi, gammaEta = gammaEta, Binv = Binv, psi = psi,
+       phi = phi, theta = theta, alpha = alpha, beta0 = beta0, tau = tau,
+       lambda = lambda, inds = inds, xis = xis, etas = etas, lVs = lVs)
+}
+
+
+calcExpectedMatricesDA <- function(parTable, xis = NULL, etas = NULL, intTerms = NULL) {
+  matricesCentered <- getCoefMatricesDA(parTable, xis = xis, etas = etas,
+                                        intTerms = intTerms, centered = TRUE)
+  matricesNonCentered <- getCoefMatricesDA(parTable, xis = xis, etas = etas,
+                                           intTerms = intTerms, centered = FALSE)
+
+  lVs  <- matricesCentered$lVs
+  xis  <- matricesCentered$xis
+  etas <- matricesCentered$etas
+  inds <- matricesCentered$inds
+
+  # Sigma ----------------------------------------------------------------------
+  # Uses centered solution
+  gammaXi  <- matricesCentered$gammaXi
+  gammaEta <- matricesCentered$gammaEta
+  phi      <- matricesCentered$phi
+  psi      <- matricesCentered$psi
+  Binv     <- matricesCentered$Binv
+  tau      <- matricesCentered$tau
+  lambda   <- matricesCentered$lambda
+  alpha    <- matricesCentered$alpha
+  beta0    <- matricesCentered$beta0
+  theta    <- matricesCentered$theta
+
   covEtaEta <- Binv %*% (gammaXi %*% phi %*% t(gammaXi) + psi) %*% t(Binv)
   covEtaXi <- Binv %*% gammaXi %*% phi
   sigma.lv <- rbind(cbind(phi, t(covEtaXi)),
@@ -814,13 +856,8 @@ calcExpectedMatricesDA <- function(parTable, xis = NULL, etas = NULL, intTerms =
   sigma.all <- rbind(cbind(sigma.lv, sigma.ov.lv),
                      cbind(sigma.lv.ov, sigma.ov))
 
-  # Mu -------------------------------------------------------------------------
-  mu.eta <- Binv %*% (alpha + gammaXi %*% beta0)
-  mu.lv  <- rbind(beta0, mu.eta)
-  mu.ov  <- tau + lambda %*% mu.lv
-  mu.all <- rbind(mu.lv, mu.ov)
-
   # Residuals and R^2 ----------------------------------------------------------
+  # Uses centered solution
   eta.all <- c(etas, inds)
   var.eta.all <- diag(sigma.all[eta.all, eta.all, drop = FALSE])
   res.eta.all <- c(diag(psi), diag(theta))
@@ -831,7 +868,24 @@ calcExpectedMatricesDA <- function(parTable, xis = NULL, etas = NULL, intTerms =
 
   res.all <- 1 - r2.all
   res.lv  <- res.all[etas]
-  res.ov   <- res.all[inds]
+  res.ov  <- res.all[inds]
+
+  # Mu -------------------------------------------------------------------------
+  # Uses uncentered solution
+  gammaXiNc  <- matricesNonCentered$gammaXi
+  gammaEtaNc <- matricesNonCentered$gammaEta
+  phiNc      <- matricesNonCentered$phi
+  psiNc      <- matricesNonCentered$psi
+  BinvNc     <- matricesNonCentered$Binv
+  tauNc      <- matricesNonCentered$tau
+  lambdaNc   <- matricesNonCentered$lambda
+  alphaNc    <- matricesNonCentered$alpha
+  beta0Nc    <- matricesNonCentered$beta0
+
+  mu.eta <- BinvNc %*% (alphaNc + gammaXiNc %*% beta0Nc)
+  mu.lv  <- rbind(beta0Nc, mu.eta)
+  mu.ov  <- tauNc + lambdaNc %*% mu.lv
+  mu.all <- rbind(mu.lv, mu.ov)
 
   list(
     sigma.all = sigma.all,
@@ -942,7 +996,10 @@ splitParTable <- function(parTable) {
 sortParTableDA <- function(parTable, model) {
   parTable.input <- model$parTable
 
-  etas <- getEtasModelDA(model)
+  etas.input <- getEtas(parTable.input)
+  etas.model <- getEtasModelDA(model) # sorted to be lower-triangular in gammaEta
+                                      # and includes etas from cov-model
+  etas <- unique(c(etas.input, etas.model))
 
   # xis <- getXisModelDA(model)
   # we don't want xis as they are sorted in the model
@@ -951,12 +1008,21 @@ sortParTableDA <- function(parTable, model) {
   # in the model.syntax input. Instead we use getXis() on
   # parTable.input
 
-  xis      <- getXis(parTable.input, checkAny = FALSE, etas = etas)
-  indsXis  <- model$info$allIndsXis
-  indsEtas <- model$info$allIndsEtas
+  xis            <- getXis(parTable.input, checkAny = FALSE, etas = etas)
+  indsXis        <- model$info$allIndsXis
+  indsEtas       <- model$info$allIndsEtas
+  higherOrderLVs <- model$info$higherOrderLVs
+
+  isHigherOrderXi  <- xis  %in% higherOrderLVs
+  isHigherOrderEta <- etas %in% higherOrderLVs
+
+  xisLow   <- xis[!isHigherOrderXi]
+  xisHigh  <- xis[isHigherOrderXi]
+  etasLow  <- etas[!isHigherOrderEta]
+  etasHigh <- etas[isHigherOrderEta]
 
   opOrder <- c("=~", "~", "~1", "~~", "|", ":=")
-  varOrder <- unique(c(indsXis, indsEtas, xis, etas))
+  varOrder <- unique(c(indsXis, indsEtas, xisLow, etasLow, xisHigh, xisLow))
 
   getScore <- function(x, order.by) {
     order.by <- unique(c(order.by, x)) # ensure that all of x is in order.by
@@ -990,4 +1056,97 @@ updateStatusLog <- function(iterations, mode, logLikNew, deltaLL, relDeltaLL, ve
     printf("\rIter=%d Mode=%s LogLik=%.2f \u0394LL=%.2g rel\u0394LL=%.2g",
            iterations, mode, logLikNew, deltaLL, relDeltaLL)
   }
+}
+
+
+higherOrderStruct2Measr <- function(parTable, indsHigherOrderLVs) {
+  if (is.null(indsHigherOrderLVs) || !length(indsHigherOrderLVs))
+    return(parTable)
+
+  higherOrderLVs <- names(indsHigherOrderLVs)
+
+  for (lVh in higherOrderLVs) {
+    inds <- indsHigherOrderLVs[[lVh]]
+    mask <- parTable$rhs == lVh & parTable$op == "~" & parTable$lhs %in% inds
+
+    if (!any(mask)) next
+
+    lhs <- parTable[mask, "lhs"]
+    rhs <- parTable[mask, "rhs"]
+
+    parTable[mask, "lhs"] <- rhs
+    parTable[mask, "op"]  <- "=~"
+    parTable[mask, "rhs"] <- lhs
+  }
+
+  parTable
+}
+
+
+higherOrderMeasr2Struct <- function(parTable) {
+  higherOrderLVs <- getHigherOrderLVs(parTable)
+
+  if (is.null(higherOrderLVs) || !length(higherOrderLVs))
+    return(parTable)
+
+  for (lVh in higherOrderLVs) {
+    mask <- parTable$lhs == lVh & parTable$op == "=~"
+
+    if (!any(mask)) next
+
+    lhs <- parTable[mask, "lhs"]
+    rhs <- parTable[mask, "rhs"]
+
+    parTable[mask, "lhs"] <- rhs
+    parTable[mask, "op"]  <- "~"
+    parTable[mask, "rhs"] <- lhs
+  }
+
+  parTable
+}
+
+
+recalcInterceptsY <- function(parTable) {
+  # fix intercept for indicators of endogenous variables, based on means
+  # of interaction terms
+  # intercepts are from a linear (CFA) model, combined with a non-linear SAM
+  # structural model. We want the mean structure to be coherent with those
+  # from a full non-linear model
+  nlin.intercepts <- grepl(":", parTable$lhs) & parTable$op == "~1"
+  parTable.nlin <- meanInteractions(parTable, ignore.means = TRUE)
+  parTable.lin  <- parTable[!nlin.intercepts, , drop = FALSE] # remove non linear intercepts
+                                                              # from the SAM structural model
+
+  for (eta in getEtas(parTable)) {
+    meta.lin  <- getMean(eta, parTable = parTable.lin)
+    meta.nlin <- getMean(eta, parTable = parTable.nlin)
+
+    inds <- parTable[parTable$lhs == eta & parTable$op == "=~", "rhs"]
+    inds <- unique(inds)
+
+    ieta <- getIntercept(eta, parTable)
+
+    if (ieta != 0) {
+      cond <- parTable$op == "~1" & parTable$lhs == eta
+      parTable[cond, "est"] <- parTable[cond, "est"] - (meta.nlin - meta.lin) # correct for the difference
+      meta.lin  <- getMean(eta, parTable = parTable.nlin) # update for the rest of the code
+    }
+
+    for (ind in inds) {
+      cond <- parTable$lhs == ind & parTable$op == "~1"
+      lambda <- parTable[parTable$lhs == eta &
+                         parTable$op == "=~" &
+                         parTable$rhs == ind, "est"]
+
+      if (!length(lambda) || !any(cond))
+        next
+
+      intercept <- parTable[cond, "est"]
+      mu.lin  <- intercept + lambda * meta.lin
+      mu.nlin <- intercept + lambda * meta.nlin
+      parTable[cond, "est"] <- intercept - (mu.nlin - mu.lin) # correct for the difference
+    }
+  }
+
+  parTable
 }

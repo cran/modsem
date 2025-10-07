@@ -212,9 +212,24 @@ checkOverlappingIndicators <- function(allIndsXis, allIndsEtas) {
 }
 
 
-checkParTableDA <- function(parTable) {
-  stopif(length(getHigherOrderLVs(parTable)) > 0,
-         "Higher-order latent variables are not supported in the lms and qml approaches.")
+checkParTableDA <- function(parTable, method = "lms") {
+  stopif(isHigherOrderParTable(parTable) && method == "qml",
+         "Higher-order latent variables are not supported with `method=\"qml\"`.\n",
+         "Try using `method=\"lms\"` or `rcs=TRUE`")
+}
+
+
+checkResCovX_Y <- function(parTable, allIndsXis, allIndsEtas, method = "lms") {
+  if (method == "lms") return(NULL)
+
+  cond1 <- parTable$op == "~~"
+  cond2 <- parTable$lhs %in% allIndsXis & parTable$rhs %in% allIndsEtas
+  cond3 <- parTable$lhs %in% allIndsEtas & parTable$rhs %in% allIndsXis
+
+  stopif(any(cond1 & (cond2 | cond3)) && method == "qml",
+         "Residual covariances between indicators of endogenous lvs, and \n",
+         "indicators of exogenous lvs are not allowed with `method=\"qml\"`.\n",
+         "Try using `method=\"lms\"` instead!")
 }
 
 
@@ -233,6 +248,7 @@ postCheckModel <- function(model) {
 
   checkParTableEstimates(parTable)
   checkVariances(model$expected.matrices)
+  checkCovMatrices(model$expected.matrices)
   checkVCOV(vcov(model, type = "free"), calc.se = model$args$calc.se)
 }
 
@@ -276,6 +292,27 @@ checkVariances <- function(expected.matrices, rel.diff.tol = 1000) {
 }
 
 
+checkCovMatrices <- function(expected.matrices) {
+  cov.lv <- expected.matrices$sigma.lv
+  cov.ov <- expected.matrices$sigma.ov
+
+  check <- function(cov, type) {
+    ok <- isPositiveDefinite(cov)
+    type.long <- switch(type, lv = "latent variables", ov = "observed variables")
+
+    warnif(
+      !ok,
+      sprintf("Covariance matrix of %s is not positive definite!\n", type.long),
+      sprintf("Use `modsem_inspect(fit, \"cov.%s\")` to investigate.", type),
+      immediate. = FALSE
+    )
+  }
+
+  check(cov.lv, type = "lv")
+  check(cov.ov, type = "ov")
+}
+
+
 checkVCOV <- function(vcov, calc.se = TRUE, tol.eigen = .Machine$double.eps ^ (3/4)) {
   if (!calc.se || is.null(vcov)) return(NULL) # checks not relevant
 
@@ -290,15 +327,25 @@ checkVCOV <- function(vcov, calc.se = TRUE, tol.eigen = .Machine$double.eps ^ (3
   minval <- min(eigenvalues, na.rm = TRUE) # should never be any NA, but just in case...
   if (minval < tol.eigen) {
     warnif(minval >= 0,
-           "The variance-covariance matrix of the estimated\n",
-           "parameters (vcov) does not appear to be positive\n",
-           sprintf("definite! The smallest eigenvalue (= %e) is close\n", minval),
-           "to zero. This may be a symptom that the model is\n",
-           "not identified.", immediate. = FALSE)
+           "The variance-covariance matrix of the estimated parameters\n",
+           "(vcov) does not appear to be positive definite! The smallest\n",
+           sprintf("eigenvalue (= %e) is close to zero. This may\n", minval),
+           "be a symptom that the model is not identified.", immediate. = FALSE)
     warnif(minval < 0,
            "The variance-covariance matrix of the estimated parameters\n",
            "(vcov) does not appear to be positive definite! The smallest\n",
            sprintf("eigenvalue (= %e) is smaller than zero. This may\n", minval),
            "be a symptom that the model is not identified.", immediate. = FALSE)
   }
+}
+
+
+isPositiveDefinite <- function(X, tol.eigen = .Machine$double.eps ^ (3/4)) {
+  if (is.null(X) || !isSymmetric(X))
+    return(FALSE)
+
+  eigenvalues <- tryCatch(eigen(X, only.values = TRUE)$values,
+                          error = \(e) rep(NA, min(1L, NCOL(X))))
+
+  !any(is.na(eigenvalues)) & !any(eigenvalues <= tol.eigen)
 }

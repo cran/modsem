@@ -44,22 +44,41 @@ reverseIntTerm <- function(xz) {
 
 
 getEtas <- function(parTable, isLV = FALSE, checkAny = TRUE) {
-  cond <- parTable$op == "~"
-  if (isLV) {
-    lVs <- unique(parTable[parTable$op == "=~", "lhs"])
-    cond <- cond & parTable$lhs %in% lVs
-  }
+  lVs <- unique(parTable[parTable$op == "=~", "lhs"])
+  cond.lhs <- parTable$op == "~"
+  cond.rhs <- parTable$op == "=~" & parTable$rhs %in% lVs
 
-  etas <- unique(parTable[cond, "lhs"])
+  if (isLV) cond.lhs <- cond.lhs & parTable$lhs %in% lVs
+
+  etas.lhs <- parTable[cond.lhs, "lhs"]
+  etas.rhs <- parTable[cond.rhs, "rhs"]
+
+  etas <- unique(c(etas.rhs, etas.lhs))
   stopif(checkAny && !length(etas), "No etas found")
+
   etas
 }
 
 
 getSortedEtas <- function(parTable, isLV = FALSE, checkAny = TRUE) {
-  structExprs  <- parTable[parTable$op == "~", ]
   unsortedEtas <- getEtas(parTable, isLV = isLV, checkAny = checkAny)
-  sortedEtas   <- character(0L)
+
+  cond1 <- parTable$op == "~"
+  cond2 <- parTable$op == "=~" & parTable$rhs %in% unsortedEtas
+
+  structExprs <- parTable[cond1, , drop = FALSE]
+  measrExprs  <- parTable[cond2, , drop = FALSE]
+
+  if (NROW(measrExprs)) {
+    measr2struct <- measrExprs
+    measr2struct$lhs <- measrExprs$rhs
+    measr2struct$op  <- "~"
+    measr2struct$rhs <- measrExprs$lhs
+
+    structExprs <- rbind(structExprs, measr2struct)
+  }
+
+  sortedEtas  <- character(0L)
 
   while (length(sortedEtas) < length(unsortedEtas) && nrow(structExprs) > 0) {
     stopif(all(unique(structExprs$lhs) %in% structExprs$rhs), "Model is non-recursive")
@@ -144,7 +163,7 @@ getHigherOrderLVs <- function(parTable) {
     if (any(inds %in% lVs)) isHigherOrder[[lV]] <- TRUE
   }
 
-  lVs[isHigherOrder]
+  if (!any(isHigherOrder)) NULL else lVs[isHigherOrder]
 }
 
 
@@ -158,18 +177,21 @@ isClustered <- function(object) {
 }
 
 
-getIndsLVs <- function(parTable, lVs) {
+getIndsLVs <- function(parTable, lVs, isOV = FALSE, ovs = NULL) {
   if (!length(lVs)) return(NULL)
 
-  measrExprs <- parTable[parTable$op == "=~" & parTable$lhs %in% lVs, ]
-  stopif(!NROW(measrExprs), "No measurement expressions found, for", lVs)
-  lapplyNamed(lVs, FUN = function(lV) measrExprs[measrExprs$lhs == lV, "rhs"],
-              names = lVs)
+  measr <- parTable[parTable$op == "=~" & parTable$lhs %in% lVs, ]
+  stopif(!NROW(measr), "No measurement expressions found, for", lVs)
+
+  if (isOV) .f <- \(lV) measr[measr$lhs == lV & measr$rhs %in% ovs, "rhs"]
+  else      .f <- \(lV) measr[measr$lhs == lV, "rhs"]
+
+  lapplyNamed(lVs, FUN = .f, names = lVs)
 }
 
 
-getInds <- function(parTable) {
-  unique(unlist(getIndsLVs(parTable, lVs = getLVs(parTable))))
+getInds <- function(parTable, ...) {
+  unique(unlist(getIndsLVs(parTable, lVs = getLVs(parTable)), ...))
 }
 
 
@@ -303,21 +325,23 @@ centerInteractions <- function(parTable, center.means = TRUE) {
     X <- XZ[[1]]
     Z <- XZ[[2]]
 
-    meanX <- getMean(X, parTable)
-    meanZ <- getMean(Z, parTable)
-
+    meanX   <- getMean(X, parTable)
+    meanZ   <- getMean(Z, parTable)
     gammaXZ <- rows[i, "est"]
-    gamma <- parTable[parTable$lhs == Y & parTable$op == "~", , drop = FALSE]
 
-    gammaX <- gamma[gamma$rhs == X, "est"] + gammaXZ * meanZ
-    gammaZ <- gamma[gamma$rhs == Z, "est"] + gammaXZ * meanX
+    isStructY    <- parTable$lhs == Y & parTable$op == "~"
+    isStructRowX <- parTable$rhs == X & isStructY
+    isStructRowZ <- parTable$rhs == Z & isStructY
 
-    parTable[parTable$lhs == Y & parTable$op == "~" &
-             parTable$rhs == X, "est"] <- gammaX
+    if (any(isStructRowX)) {
+      gammaX <- parTable[isStructRowX, "est"] + gammaXZ * meanZ
+      parTable[isStructRowX, "est"] <- gammaX
+    }
 
-    parTable[parTable$lhs == Y & parTable$op == "~" &
-             parTable$rhs == Z, "est"] <- gammaZ
-
+    if (any(isStructRowZ)) {
+      gammaZ <- parTable[isStructRowZ, "est"] + gammaXZ * meanX
+      parTable[isStructRowZ, "est"] <- gammaZ
+    }
   }
 
   if (center.means) {
@@ -691,4 +715,30 @@ is.invertible <- function(M) {
 .isOnUnix <- function(.onFail = FALSE) {
   tryCatch(tolower(.Platform$OS.type) == "unix",
            error = \(e) .onFail)
+}
+
+
+isNonCenteredParTable <- function(parTable, tol = 1e-10) {
+  intTerms <- unique(parTable[grepl(":", parTable$rhs), "rhs"])
+  intVars  <- unique(unlist(stringr::str_split(intTerms, pattern = ":")))
+
+  parTableProto <- parTable[parTable$op %in% c("~", "~1"), , drop = FALSE]
+
+  if (!"est" %in% colnames(parTableProto))
+    parTableProto$est <- 1
+
+  means <- getMeans(intVars, parTableProto)
+  any(abs(means) > tol)
+}
+
+
+hasIntTermVariances <- function(parTable) {
+  # To pass the function, we need (at least) variances for all of the
+  # interaction terms. Optimally we also have covariances
+  intTerms <- unique(parTable[grepl(":", parTable$rhs), "rhs"])
+
+  hasVariance <- \(xz)
+    any(parTable$lhs == xz & parTable$rhs == xz & parTable$op == "~~")
+
+  all(vapply(intTerms, FUN.VALUE = logical(1L), FUN = hasVariance))
 }

@@ -150,61 +150,110 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 
 
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(modsem)</span></code></pre></div>
-<p>As of yet, the <code>modsem</code> package does not support using the interaction operator <code>:</code> between two higher order constructs. However, you can still attempt to estimate the interaction effect between two higher order constructs by specifying the interaction term in models using the product indicator approaches (higher order constructs are not supported at all in the <code>lms</code> and <code>qml</code> approaches yet). The <code>modsem</code> package will then attempt to estimate the interaction effect between the two higher order constructs.</p>
-<div id="interaction-between-two-higher-order-constructs" class="section level1">
-<h1>Interaction between two higher order constructs</h1>
-<p><strong>WARNING:</strong> Please note that the literature on higher order interactions in product indicator approaches is virtually non-existant, and you will likely need to experiment with different approaches to find one that works. As well as experiment with adding constraints to the model.</p>
-<p>In <code>modsem</code> there are two datasets which are variants of the Theory of Planned Behaviour (<code>TPB</code>) dataset. The <code>TPB_2SO</code> contains two second order constructs, <code>INT</code> (intention) which is a second order construct of <code>ATT</code> (attitude) and <code>SN</code> (subjective norm), and <code>PBC</code> (perceived behavioural control) which is a second order construct of <code>PC</code> (perceived control) and <code>PB</code> (perceived behaviour).</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>tpb <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="st">  # First order constructs</span></span>
+<div id="lms-approach" class="section level1">
+<h1>LMS approach</h1>
+<p>As of version <code>1.0.13</code>, the <code>modsem</code> function supports the estimation of higher order interaction effects. A general implementation is however only available with the LMS approach. Currently, estimation of higher order interaction effects using the QML approach is not available, and only partially available for the product indicator approaches (i.e., <code>modsem_pi()</code>).</p>
+<div id="interaction-between-two-higher-order-latent-variables" class="section level2">
+<h2>Interaction between two higher order latent variables</h2>
+<p>In <code>modsem</code> there are two datasets which are variants of the Theory of Planned Behaviour (<code>TPB</code>) dataset. The <code>TPB_2SO</code> contains two second order latent variables, <code>INT</code> (intention) which is a second order latent variable of <code>ATT</code> (attitude) and <code>SN</code> (subjective norm), and <code>PBC</code> (perceived behavioural control) which is a second order latent variable of <code>PC</code> (perceived control) and <code>PB</code> (perceived behaviour).</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>tpb_2so <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="st">  # First order latent variables</span></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="st">  ATT =~ att1 + att2 + att3</span></span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="st">  SN  =~ sn1 + sn2 + sn3</span></span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="st">  PB =~ pb1 + pb2 + pb3</span></span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="st">  PC =~ pc1 + pc2 + pc3</span></span>
 <span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH =~ b1 + b2</span></span>
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="st">  # Higher order constructs</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="st">  # Higher order latent variables</span></span>
 <span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="st">  INT =~ ATT + SN</span></span>
 <span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="st">  PBC =~ PC + PB</span></span>
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="st">  # Higher order interaction</span></span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="st">  INTxPBC =~ ATT:PC + ATT:PB + SN:PC + SN:PB</span></span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="st">  # Structural model</span></span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH ~ PBC + INT + INTxPBC</span></span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>est_ca <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb, <span class="at">data =</span> TPB_2SO, <span class="at">method =</span> <span class="st">&quot;ca&quot;</span>)</span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_ca)</span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>est_dblcent <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb, <span class="at">data =</span> TPB_2SO, <span class="at">method =</span> <span class="st">&quot;dblcent&quot;</span>)</span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_dblcent)</span></code></pre></div>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="st">  # Structural model</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH ~ PBC + INT + INT:PBC</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>est_lms_2so <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb_2so, <span class="at">data =</span> TPB_2SO, <span class="at">method =</span> <span class="st">&quot;lms&quot;</span>)</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_lms_2so)</span></code></pre></div>
 </div>
-<div id="interaction-between-a-first-order-and-a-higher-order-construct" class="section level1">
-<h1>Interaction between a first order and a higher order construct</h1>
-<p>In the <code>TPB_1SO</code> dataset, the <code>INT</code> construct is a second order construct of <code>ATT</code>, <code>SN</code> and <code>PBC</code>. In this example, we will estimate the interaction between the <code>INT</code> (higher order construct) and <code>PBC</code> (first order construct).</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>tpb <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="st">  # First order constructs</span></span>
+<div id="interaction-between-a-first-order-and-a-higher-order-latent-variable" class="section level2">
+<h2>Interaction between a first order and a higher order latent variable</h2>
+<p>In the <code>TPB_1SO</code> dataset, the <code>INT</code> latent variable is a second order latent variable of <code>ATT</code>, <code>SN</code> and <code>PBC</code>. In this example, we will estimate the interaction effect between the <code>INT</code> (higher order latent variable) and <code>PBC</code> (first order latent variable).</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>tpb_1so <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="st">  # First order latent variables</span></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="st">  ATT =~ att1 + att2 + att3</span></span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="st">  SN  =~ sn1 + sn2 + sn3</span></span>
 <span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="st">  PBC =~ pbc1 + pbc2 + pbc3</span></span>
 <span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH =~ b1 + b2</span></span>
 <span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="st">  # Higher order constructs</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="st">  # Higher order latent variables</span></span>
 <span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="st">  INT =~ ATT + PBC + SN</span></span>
 <span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="st">  # Higher order interaction</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="st">  INTxPBC =~ ATT:PBC + SN:PBC + PBC:PBC</span></span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="st">  # Structural model</span></span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH ~ PBC + INT + INTxPBC</span></span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>est_ca <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb, <span class="at">data =</span> TPB_1SO, <span class="at">method =</span> <span class="st">&quot;ca&quot;</span>)</span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_ca)</span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>est_dblcent  <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb, <span class="at">data =</span> TPB_1SO, <span class="at">method =</span> <span class="st">&quot;dblcent&quot;</span>)</span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_dblcent)</span></code></pre></div>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="st">  # Structural model</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH ~ PBC + INT + INT:PBC</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>est_lms_1so <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb_1so, <span class="at">data =</span> TPB_1SO, <span class="at">method =</span> <span class="st">&quot;lms&quot;</span>, <span class="at">nodes =</span> <span class="dv">32</span>)</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_lms_1so)</span></code></pre></div>
+</div>
+</div>
+<div id="product-indicator-approaches" class="section level1">
+<h1>Product Indicator Approaches</h1>
+<p>As of yet, the <code>modsem</code> package does not support using the interaction operator <code>:</code> between two higher order latent variables, when using one of the product indicator approaches (i.e., using <code>modsem_pi()</code>). However, you can still attempt to estimate the interaction effect between two higher order latent variables by specifying the interaction term in models using the product indicator approaches.</p>
+<div id="interaction-between-two-higher-order-latent-variables-1" class="section level2">
+<h2>Interaction between two higher order latent variables</h2>
+<p><strong>WARNING:</strong> Please note that the literature on higher order interactions in product indicator approaches is virtually non-existant, and you will likely need to experiment with different approaches to find one that works. As well as experiment with adding constraints to the model.</p>
+<p>Here we see the same example as for the LMS approach, where ther is an interaction effect between two higher order latent variables.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>tpb_2so <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="st">  # First order latent variables</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="st">  ATT =~ att1 + att2 + att3</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="st">  SN  =~ sn1 + sn2 + sn3</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="st">  PB =~ pb1 + pb2 + pb3</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="st">  PC =~ pc1 + pc2 + pc3</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH =~ b1 + b2</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="st">  # Higher order latent variables</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="st">  INT =~ ATT + SN</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="st">  PBC =~ PC + PB</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="st">  # Higher order interaction</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="st">  INTxPBC =~ ATT:PC + ATT:PB + SN:PC + SN:PB</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="st">  # Structural model</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH ~ PBC + INT + INTxPBC</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>est_ca <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb_2so, <span class="at">data =</span> TPB_2SO, <span class="at">method =</span> <span class="st">&quot;ca&quot;</span>)</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_ca)</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>est_dblcent <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb_2so, <span class="at">data =</span> TPB_2SO, <span class="at">method =</span> <span class="st">&quot;dblcent&quot;</span>)</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_dblcent)</span></code></pre></div>
+</div>
+<div id="interaction-between-a-first-order-and-a-higher-order-latent-variable-1" class="section level2">
+<h2>Interaction between a first order and a higher order latent variable</h2>
+<p>Here we see the same example as for the LMS approach, where ther is an interaction effect between a higher order latent variable, and a first order latent variable.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>tpb_1so <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="st">  # First order latent variables</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="st">  ATT =~ att1 + att2 + att3</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="st">  SN  =~ sn1 + sn2 + sn3</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="st">  PBC =~ pbc1 + pbc2 + pbc3</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH =~ b1 + b2</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="st">  # Higher order latent variables</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="st">  INT =~ ATT + PBC + SN</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="st">  # Higher order interaction</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="st">  INTxPBC =~ ATT:PBC + SN:PBC + PBC:PBC</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="st">  # Structural model</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="st">  BEH ~ PBC + INT + INTxPBC</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>est_ca <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb_1so, <span class="at">data =</span> TPB_1SO, <span class="at">method =</span> <span class="st">&quot;ca&quot;</span>)</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_ca)</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>est_dblcent  <span class="ot">&lt;-</span> <span class="fu">modsem</span>(tpb_1so, <span class="at">data =</span> TPB_1SO, <span class="at">method =</span> <span class="st">&quot;dblcent&quot;</span>)</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(est_dblcent)</span></code></pre></div>
+</div>
 </div>
 
 

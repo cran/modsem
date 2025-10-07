@@ -12,8 +12,7 @@ library(modsem)
 ## -----------------------------------------------------------------------------
 m1 <- "
 # Outer Model
-  X =~ x1
-  X =~ x2 + x3
+  X =~ x1 + x2 + x3
   Z =~ z1 + z2 + z3
   Y =~ y1 + y2 + y3
 
@@ -91,4 +90,86 @@ plot_jn(x = "INT", z = "PBC", y = "BEH", model = est2,
 # 
 # est2 <- modsem(tpb, TPB, method = "qml")
 # plot_surface(x = "INT", z = "PBC", y = "BEH", model = est2)
+
+## -----------------------------------------------------------------------------
+set.seed(2934269)
+
+var_X      <- 1
+var_Z      <- 1
+cov_X_Z    <- 0.2
+
+zeta_Y     <- 0.4
+
+gamma_Y_X  <-  0
+gamma_Y_Z  <-  0
+gamma_Y_XZ <-  1
+gamma_Y_ZZ <-  3 # exclude for now
+gamma_Y_XX <- -1 # exclude for now
+
+
+lambda_1   <- 1
+lambda_2   <- .7
+lambda_3   <- .8
+
+
+epsilon    <- 0.2
+beta_1     <- 1.2
+beta_2     <- 0.8
+beta_3     <- 1.5
+N          <- 1500
+
+residual <- \(epsilon) rnorm(N, sd = sqrt(epsilon))
+create_ind <- \(lv, beta, lambda, epsilon) beta + lambda * lv + residual(epsilon)
+
+
+Phi <- matrix(c(var_X, cov_X_Z,
+                cov_X_Z, var_Z), nrow = 2)
+XI <- mvtnorm::rmvnorm(N, sigma = Phi)
+
+X <- XI[, 1]
+Z <- XI[, 2]
+
+Y <-
+  gamma_Y_X * X +
+  gamma_Y_Z * Z +
+  gamma_Y_XZ * X * Z +
+  gamma_Y_XX * X * X +
+  gamma_Y_ZZ * Z * Z +
+  residual(zeta_Y)
+
+x1 <- create_ind(X, beta_1, lambda_1, epsilon)
+x2 <- create_ind(X, beta_2, lambda_2, epsilon)
+x3 <- create_ind(X, beta_3, lambda_2, epsilon)
+
+z1 <- create_ind(Z, beta_1, lambda_1, epsilon)
+z2 <- create_ind(Z, beta_2, lambda_2, epsilon)
+z3 <- create_ind(Z, beta_3, lambda_2, epsilon)
+
+y1 <- create_ind(Y, beta_1, lambda_1, epsilon)
+y2 <- create_ind(Y, beta_2, lambda_2, epsilon)
+y3 <- create_ind(Y, beta_2, lambda_2, epsilon)
+
+
+data.sim <- data.frame(
+   x1, x2, x3,
+   z1, z2, z3,
+   y1, y2, y3
+)
+
+## ----eval = EVAL_DEFAULT------------------------------------------------------
+# model <- '
+#   X =~ x1 + x2 + x3
+#   Z =~ z1 + z2 + z3
+#   Y =~ y1 + y2 + y3
+# 
+#   Y ~ X + Z + X:X + Z:Z + X:Z
+# '
+# 
+# est3 <- modsem(model, data = data.sim, method = "qml")
+
+## ----eval = EVAL_DEFAULT------------------------------------------------------
+# plot_interaction(x = "X", z = "Z", y = "Y", model = est3, vals_z = c(-1, 0, 1))
+
+## ----eval = EVAL_DEFAULT------------------------------------------------------
+# plot_surface(x = "X", z = "Z", y = "Y", model = est3)
 
