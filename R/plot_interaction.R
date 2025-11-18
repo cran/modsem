@@ -42,6 +42,7 @@
 #'   Some SEM backends may handle the interaction term differently (for instance, by
 #'   removing or modifying the colon), and this function attempts to reconcile that
 #'   internally.
+#' @param greyscale Logical. If \code{TRUE} the plot is plotted in greyscale.
 #' @param ... Additional arguments passed on to \code{\link{simple_slopes}}.
 #'
 #' @details
@@ -117,6 +118,7 @@ plot_interaction <- function(x, z, y, model, vals_x = seq(-3, 3, .001),
                              vals_z, alpha_se = 0.15, digits = 2,
                              ci_width = 0.95, ci_type = "confidence",
                              rescale = TRUE, standardized = FALSE, xz = NULL,
+                             greyscale = FALSE,
                              ...) {
   slopes <- simple_slopes(x = x, z = z, y = y, model = model, vals_x = vals_x,
                           vals_z = vals_z, rescale = rescale, ci_width = ci_width,
@@ -133,13 +135,23 @@ plot_interaction <- function(x, z, y, model, vals_x = seq(-3, 3, .001),
   ci.upper  <- df$ci.upper
 
   # plotting margins
-  ggplot2::ggplot(df, ggplot2::aes(x = vals_x, y = predicted, colour = cat_z, group = cat_z)) +
+  p <- ggplot2::ggplot(df, ggplot2::aes(x = vals_x, y = predicted, colour = cat_z, group = cat_z)) +
     ggplot2::geom_line() +
     ggplot2::geom_ribbon(ggplot2::aes(ymin = ci.lower, ymax = ci.upper, fill = cat_z),
                          alpha = alpha_se, linewidth = 0, linetype = "blank") +
     ggplot2::labs(x = x, y = y, colour = z, fill = z) +
     ggplot2::ggtitle(sprintf("Marginal Effects of %s on %s, Given %s", x, y, z)) +
     ggplot2::theme_bw()
+
+  if (length(unique(df$group)) > 1L) {
+    group <- NULL # stop R CMD check from complaining about `~group`
+    p <- p + ggplot2::facet_wrap(~group)
+  }
+
+  if (greyscale)
+    p <- suppressMessages(p + ggplot2::scale_colour_grey() + ggplot2::scale_fill_grey())
+
+  p
 }
 
 
@@ -160,6 +172,7 @@ plot_interaction <- function(x, z, y, model, vals_x = seq(-3, 3, .001),
 #' the sd.line falls outside of \code{[min_z, max_z]}.
 #' @param standardized Should coefficients be standardized beforehand?
 #' @param xz The name of the interaction term. If not specified, it will be created using \code{x} and \code{z}.
+#' @param greyscale Logical. If \code{TRUE} the plot is plotted in greyscale.
 #' @param ... Additional arguments (currently not used).
 #'
 #' @return A \code{ggplot} object showing the interaction plot with regions of significance.
@@ -195,7 +208,8 @@ plot_interaction <- function(x, z, y, model, vals_x = seq(-3, 3, .001),
 #' @export
 plot_jn <- function(x, z, y, model, min_z = -3, max_z = 3,
                     sig.level = 0.05, alpha = 0.2, detail = 1000,
-                    sd.line = 2, standardized = FALSE, xz = NULL, ...) {
+                    sd.line = 2, standardized = FALSE, xz = NULL,
+                    greyscale = FALSE, ...) {
 
   stopif(!inherits(model, c("modsem_da", "modsem_mplus", "modsem_pi", "lavaan")),
          "model must be of class 'modsem_pi', 'modsem_da', 'modsem_mplus', or 'lavaan'")
@@ -204,8 +218,41 @@ plot_jn <- function(x, z, y, model, min_z = -3, max_z = 3,
     parTable <- standardized_estimates(model, correction = TRUE)
   } else parTable <- parameter_estimates(model)
 
-  parTable <- getMissingLabels(parTable)
+  parTable <- addMissingGroups(getMissingLabels(parTable))
 
+  plots <- list()
+  for (g in getGroupsParTable(parTable)) {
+    parTable.g <- parTable[parTable$group == g, , drop = FALSE]
+
+    plots[[g]] <- plotJN_Group(
+      x = x, z = z, y = y, parTable = parTable.g, model = model,
+      min_z = min_z, max_z = max_z, sig.level = sig.level,
+      alpha = alpha, detail = detail, sd.line = sd.line,
+      standardized = standardized, xz = xz, greyscale = greyscale, ...
+    )
+  }
+
+  if (length(plots) <= 1L)
+    return(plots[[1L]])
+
+  if (!requireNamespace("ggpubr", quietly = TRUE)) {
+    printf("The `ggpubr` package is needed to arrange Johnson-Neyman plots in multigroup models!\n")
+    printf("Do you want to install it? (y/n) ")
+    choice <- tolower(substr(readLines(n = 1L), 1L, 1L))
+
+    stopifnot(choice == "y")
+    utils::install.packages("ggpubr")
+  }
+
+  if (requireNamespace("ggpubr", quietly = TRUE)) { # Make R CMD check happy
+    group.label <- modsem_inspect(model, what = "group.label")
+    ggpubr::ggarrange(plotlist = plots, labels = group.label)
+  } else stop2("The `ggpubr` package is needed to arrange Johnson-Neyman plots in multigroup models!\n")
+}
+
+
+plotJN_Group <- function(x, z, y, parTable, model, min_z, max_z, sig.level, alpha,
+                         detail, sd.line, standardized, xz, greyscale, ...) {
   if (is.null(xz))
     xz <- paste(x, z, sep = ":")
 
@@ -369,28 +416,33 @@ plot_jn <- function(x, z, y, model, min_z = -3, max_z = 3,
     top_y <- suppressWarnings(max(df_plot$slope[is.finite(df_plot$slope)], na.rm = TRUE))
     if (!is.finite(top_y)) top_y <- y_range[2]
 
+    hline_colour <- if (greyscale) "black" else "red"
+
     if (exists("z_jn")) {
       if (is.finite(z_jn) && z_jn >= min_z && z_jn <= max_z) {
-        p <- p + ggplot2::geom_vline(xintercept = z_jn, linetype = "dashed", color = "red") +
+        p <- p + ggplot2::geom_vline(xintercept = z_jn, linetype = "dashed", color = hline_colour) +
           ggplot2::annotate("text", x = z_jn, y = top_y,
                             label = paste("JN point:", round(z_jn, 2)),
                             hjust = -0.1, vjust = 1, color = "black")
       }
     } else {
       if (is.finite(z_lower) && z_lower >= min_z && z_lower <= max_z) {
-        p <- p + ggplot2::geom_vline(xintercept = z_lower, linetype = "dashed", color = "red") +
+        p <- p + ggplot2::geom_vline(xintercept = z_lower, linetype = "dashed", color = hline_colour) +
           ggplot2::annotate("text", x = z_lower, y = top_y,
                             label = paste("JN point:", round(z_lower, 2)),
                             hjust = -0.1, vjust = 1, color = "black")
       }
       if (is.finite(z_upper) && z_upper >= min_z && z_upper <= max_z) {
-        p <- p + ggplot2::geom_vline(xintercept = z_upper, linetype = "dashed", color = "red") +
+        p <- p + ggplot2::geom_vline(xintercept = z_upper, linetype = "dashed", color = hline_colour) +
           ggplot2::annotate("text", x = z_upper, y = top_y,
                             label = paste("JN point:", round(z_upper, 2)),
                             hjust = -0.1, vjust = 1, color = "black")
       }
     }
   }
+
+  if (greyscale)
+    p <- suppressMessages(p + ggplot2::scale_colour_grey() + ggplot2::scale_fill_grey())
 
   p
 }
@@ -470,6 +522,10 @@ plot_jn <- function(x, z, y, model, min_z = -3, max_z = 3,
 #'   Must be a valid CSS color string, including \code{rgba()} for transparency.
 #'   - Default is \code{"rgba(0,0,0,0.45)"} (semi-transparent black).
 #'   Example: \code{"rgba(255,255,255,0.8)"} for semi-transparent white lines.
+#'
+#' @param group Which group to create surface plot for. Only relevant for multigroup
+#'   models. Must be an integer index, representing the nth group.
+#'
 #' @param ... Additional arguments passed to \code{plotly::plot_ly}.
 #'
 #' @details
@@ -538,14 +594,31 @@ plot_surface <- function(x, z, y, model,
                          grid_nx = 12,
                          grid_ny = 12,
                          grid_color = "rgba(0,0,0,0.45)",
+                         group = NULL,
                          ...) {
 
   stopif(!isModsemObject(model) && !isLavaanObject(model), "model must be of class ",
          "'modsem_pi', 'modsem_da', 'modsem_mplus' or 'lavaan'")
 
-  if (standardized) {
+  if (standardized)
     parTable <- standardized_estimates(model, correction = TRUE)
-  } else parTable <- parameter_estimates(model)
+  else
+    parTable <- parameter_estimates(model)
+
+  parTable <- addMissingGroups(parTable)
+  groups   <- getGroupsParTable(parTable)
+
+  if (length(groups) > 1L && is.null(group)) {
+    warning2("Plotting of surface plots for multiple groups is not implemented yet!\n",
+             "You can choose which group to plot using the `group` argument.\n",
+             "Plotting surface plot for the first group...",
+             immediate. = FALSE)
+  }
+
+  if (is.null(group))
+    group <- 1L
+
+  parTable <- parTable[parTable$group == group, , drop = FALSE]
 
   if (is.null(xz))
     xz <- paste(x, z, sep = ":")
@@ -635,7 +708,7 @@ plot_surface <- function(x, z, y, model,
   )
 
   if (grid || tolower(colorscale) != "viridis") {
-    # for some reason this doesn't render with pkgdown this is a 
+    # for some reason this doesn't render with pkgdown this is a
     # temporary workaround, until I figure out what is going on...
     plotly::plot_ly(
       x = ~vals_x,
