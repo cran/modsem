@@ -400,7 +400,7 @@ modsem_da <- function(model.syntax = NULL,
 
   if (is.null(data)) {
     stop2("No data provided")
-  } else if (!is.data.frame(data)) {
+  } else {
     data <- as.data.frame(data)
   }
 
@@ -469,7 +469,7 @@ modsem_da <- function(model.syntax = NULL,
         )
     )
 
-  cont.cols <- setdiff(colnames(data), c(cluster, group))
+  cont.cols <- setdiff(colnames(data), c(cluster, group, sampling.weights))
 
   if (args$center.data)
     data[cont.cols] <- lapply(data[cont.cols], FUN = centerIfNumeric, scaleFactor = FALSE)
@@ -616,6 +616,7 @@ modsem_da <- function(model.syntax = NULL,
 
   # Arguments
   est$args <- args
+  attr(est, "isRCS_Model") <- rcs
   class(est) <- c("modsem_da", "modsem")
 
   # Check the results
