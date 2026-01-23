@@ -12,6 +12,10 @@ library(modsem)
 ## -----------------------------------------------------------------------------
 library(modsem)
 
+fit <- modsem('y1 ~ x1 + z1 + x1:z1', data = oneInt, method = "lms")
+summary(fit, standardized = TRUE)
+
+## -----------------------------------------------------------------------------
 # Interaction effect between a latent and an observed variable
 m1 <- '
 # Outer Model
