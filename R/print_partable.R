@@ -23,7 +23,7 @@ formatParTable <- function(parTable,
   isCov    <- parTable$op == "~~" & parTable$lhs != parTable$rhs
   isReg    <- parTable$op == "~"
   isIntr   <- parTable$op == "~1" # Intercept
-  isMeasr  <- parTable$op == "=~"
+  isMeasr  <- parTable$op == "=~" | parTable$op == "<~"
   isThrs   <- parTable$op == "|"
 
   parTable[isCustom, "label"] <- ""
@@ -139,7 +139,7 @@ printParTable <- function(parTable,
   )
 
   # Measurement model
-  parTableLoadings <- fParTable[fParTable$op == "=~", ]
+  parTableLoadings <- fParTable[fParTable$op %in% c("=~", "<~"), ]
   if (loadings && NROW(parTableLoadings) > 0) {
     cat("Latent Variables:\n", formattedHeader)
 
@@ -370,7 +370,7 @@ getWidthPrintedParTable <- function(parTable,
 }
 
 
-formatPval <- function(p, scientific = TRUE) {
+formatPval <- function(p, scientific = TRUE, digits = 3) {
   if (scientific) return(format.pval(p))
-  format(round(p, digits = 3), nsmall = 3)
+  format(round(p, digits = digits), nsmall = digits)
 }

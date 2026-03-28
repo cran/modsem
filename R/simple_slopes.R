@@ -164,7 +164,7 @@ simple_slopes <- function(x,
     out[[label]] <- simpleSlopesGroup(
       x = x, z = z, y = y, parTable = parTable.g, model = model, vals_x = vals_x,
       vals_z = vals_z, rescale = rescale, ci_width = ci_width, ci_type = ci_type,
-      relative_h0 = relative_h0, xz = xz, ...
+      relative_h0 = relative_h0, xz = xz, standardized = standardized, ...
     )
   }
 
@@ -173,7 +173,8 @@ simple_slopes <- function(x,
 
 
 simpleSlopesGroup <- function(x, z, y, parTable, model, vals_x, vals_z, rescale,
-                              ci_width, ci_type, relative_h0, xz, ...) {
+                              ci_width, ci_type, relative_h0, xz,
+                              standardized, ...) {
   if (is.null(xz))
     xz <- paste(x, z, sep = ":")
 
@@ -194,15 +195,14 @@ simpleSlopesGroup <- function(x, z, y, parTable, model, vals_x, vals_z, rescale,
     zz <- stringr::str_remove_all(zz, ":")
   }
 
-  if (isLavaanObject(model)) {
+  if (inherits(model, "lavaan")) {
     vcov <- lavaan::vcov
-    nobs <- lavaan::nobs
     coef <- lavaan::coef
+    nobs <- lavaan::nobs
   }
 
   n     <- nobs(model)
-  VCOV  <- vcov(model)
-  coefs <- coef(model)
+  VCOV  <- getVcovSimpleSlopes(model, standardized = standardized)
 
   if (length(n) > 1) {
     # this won't work for multigroup models
@@ -406,6 +406,12 @@ print.simple_slopes <- function(x, digits = 2, scientific.p = FALSE, ...) {
 
 
 printSimpleSlopesGroup <- function(x, digits = 2, scientific.p = FALSE, ...) {
+  fstring <- paste0("%.", digits, "f")
+  digits.p <- max(3, digits)
+
+  fformat <- \(x, justify = "right", ...) format(sprintf(fstring, x), justify = justify, ...)
+  pformat <- \(x) formatPval(x, scientific = scientific.p, digits = digits.p)
+
   variables  <- x$variable_names
   margins    <- x$margins
   sig.slopes <- x$sig.slopes
@@ -418,37 +424,39 @@ printSimpleSlopesGroup <- function(x, digits = 2, scientific.p = FALSE, ...) {
   # Difference test ----------------------------------------------------------
   header <- c("Difference", "Std.Error",
               "z.value", "p.value", "Conf.Interval")
-  ci.lower <- format(sig.diff_min_max$ci.lower, digits = digits, nsmall = digits)
-  ci.upper <- format(sig.diff_min_max$ci.upper, digits = digits, nsmall = digits)
+  ci.lower <- fformat(sig.diff_min_max$ci.lower)
+  ci.upper <- fformat(sig.diff_min_max$ci.upper)
 
   X <- data.frame(
-    diff      = format(sig.diff_min_max$diff, digits = digits, nsmall = digits),
-    std.error = format(sig.diff_min_max$std.error, digits = digits, nsmall = digits),
-    z.value   = format(sig.diff_min_max$z.value, digits = digits, nsmall = digits),
-    p.value   = formatPval(sig.diff_min_max$p.value, scientific = scientific.p),
+    diff      = fformat(sig.diff_min_max$diff),
+    std.error = fformat(sig.diff_min_max$std.error),
+    z.value   = fformat(sig.diff_min_max$z.value),
+    p.value   = pformat(sig.diff_min_max$p.value),
     ci        = paste0("[", ci.lower, ", ", ci.upper, "]")
   )
+
   X1 <- matrix(header, nrow = 1)
   X2 <- padCharMatrix(as.matrix(X), n=1) # pad atleast one space to the left
   X <- apply(rbind(X1, X2), MARGIN = 2, format, digits = digits, justify = "right")
 
-  cat(sprintf("\nDifference test of %s~%s|%s at %s = %.3f and %.3f:\n",
-              var_y, var_x, var_z, var_z, sig.diff_min_max$min.z, sig.diff_min_max$max.z))
+  cat(sprintf("\nDifference test of %s~%s|%s at %s = %s and %s:\n",
+              var_y, var_x, var_z, var_z, fformat(sig.diff_min_max$min.z),
+              fformat(sig.diff_min_max$max.z)))
   printTable(X)
   cat("\n")
 
   # Slope test -----------------------------------------------------------------
   header <- c(sig.slopes$param[1], sig.slopes$moderator[1], "Std.Error",
               "z.value", "p.value", "Conf.Interval")
-  ci.lower <- format(sig.slopes$ci.lower, digits = digits, nsmall = digits)
-  ci.upper <- format(sig.slopes$ci.upper, digits = digits, nsmall = digits)
+  ci.lower <- fformat(sig.slopes$ci.lower)
+  ci.upper <- fformat(sig.slopes$ci.upper)
 
   X <- data.frame(
-    slope     = format(sig.slopes$slope.predictor, digits = digits, nsmall = digits),
-    val_z     = format(sig.slopes$value.moderator, digits = digits, nsmall = digits),
-    std.error = format(sig.slopes$std.error, digits = digits, nsmall = digits),
-    z.value   = format(sig.slopes$z.value, digits = digits, nsmall = digits),
-    p.value   = formatPval(sig.slopes$p.value, scientific = scientific.p),
+    slope     = fformat(sig.slopes$slope.predictor),
+    val_z     = fformat(sig.slopes$value.moderator),
+    std.error = fformat(sig.slopes$std.error),
+    z.value   = fformat(sig.slopes$z.value),
+    p.value   = pformat(sig.slopes$p.value),
     ci        = paste0("[", ci.lower, ", ", ci.upper, "]")
   )
 
@@ -465,15 +473,15 @@ printSimpleSlopesGroup <- function(x, digits = 2, scientific.p = FALSE, ...) {
   outcome    <- variables[3]
   header     <- c(predictors[1], sprintf("Predicted %s", outcome), "Std.Error",
                   "z.value", "p.value", "Conf.Interval")
-  ci.lower   <- format(margins$ci.lower, digits = digits, nsmall = digits)
-  ci.upper   <- format(margins$ci.upper, digits = digits, nsmall = digits)
-  cat_z      <- as.factor(round(margins$vals_z, digits))
+  ci.lower   <- fformat(margins$ci.lower)
+  ci.upper   <- fformat(margins$ci.upper)
+  cat_z      <- as.factor(fformat(round(margins$vals_z, digits)))
 
-  X <- data.frame(vals_x    = format(margins$vals_x, digits = digits, nsmall = digits),
-                  predicted = format(margins$predicted, digits = digits, nsmall = digits),
-                  std.error = format(margins$std.error, digits = digits, nsmall = digits),
-                  z.value   = format(margins$z.value, digits = digits, nsmall = digits),
-                  p.value   = formatPval(margins$p.value, scientific = scientific.p),
+  X <- data.frame(vals_x    = fformat(margins$vals_x),
+                  predicted = fformat(margins$predicted),
+                  std.error = fformat(margins$std.error),
+                  z.value   = fformat(margins$z.value),
+                  p.value   = pformat(margins$p.value),
                   ci        = paste0("[", ci.lower, ", ", ci.upper, "]"))
 
   X1 <- matrix(header, nrow = 1)
@@ -520,5 +528,25 @@ checkInputsSimpleSlopes <- function(..., parTable) {
   for (nm in names(params)) {
     checkLength(x = params[[nm]], nm = nm)
     checkExists(x = params[[nm]])
+  }
+}
+
+
+getVcovSimpleSlopes <- function(model, standardized = FALSE) {
+  if (inherits(model, "modsem_da")) {
+    return(modsem_inspect(model, what = "vcov.all", standardized = standardized))
+
+  } else if (inherits(model, "modsem_pi")) {
+    what <- if (standardized) "vcov.std.all" else "vcov"
+    return(modsem_inspect(model, what = what))
+
+  } else if (inherits(model, "lavaan")) {
+    what <- if (standardized) "vcov.std.all" else "vcov"
+    return(lavaan::lavInspect(model, what = what))
+
+  } else {
+    warning2("standardized vcov is not available for model of class: ",
+             class(model)[[1L]], immediate. = FALSE)
+    return(vcov(model))
   }
 }
