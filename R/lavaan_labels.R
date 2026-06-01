@@ -17,8 +17,11 @@ createLavLabels <- function(matrices, subset, etas, parTable.in = NULL) {
   lambdaY      <- createLabelsMatrix(matrices$lambdaY, op = "=~")
   thetaDelta   <- createLabelsMatrix(matrices$thetaDelta, op = "~~")
   thetaEpsilon <- createLabelsMatrix(matrices$thetaEpsilon, op = "~~")
+  W            <- createLabelsMatrix(matrices$W, op = "<~")
+  T            <- createLabelsMatrix(matrices$T, op = "~~")
   phi          <- createLabelsMatrix(matrices$phi, op = "~~")
   A            <- createLabelsMatrix(matrices$A, op = "~~")
+  covZetaXi    <- createLabelsMatrix(matrices$covZetaXi, op = "~~", first = "cols")
   psi          <- createLabelsMatrix(matrices$psi, op = "~~")
   tauX         <- createLabelsMatrix(matrices$tauX, op = "~", first = "rows")
   tauY         <- createLabelsMatrix(matrices$tauY, op = "~", first = "rows")
@@ -29,21 +32,26 @@ createLavLabels <- function(matrices, subset, etas, parTable.in = NULL) {
   omegaXiXi    <- createLabelsOmega(matrices$omegaXiXi, parTable.in = parTable.in)
   omegaEtaXi   <- createLabelsOmega(matrices$omegaEtaXi, parTable.in = parTable.in)
 
-  labels <- c("lambdaX" = lambdaX,
-              "lambdaY" = lambdaY,
-              "tauX" = tauX,
-              "tauY" = tauY,
-              "thetaDelta" = thetaDelta,
-              "thetaEpsilon" = thetaEpsilon,
-              "phi" = phi,
-              "A" = A,
-              "psi" = psi,
-              "alpha" = alpha,
-              "beta0" = beta0,
-              "gammaXi" = gammaXi,
-              "gammaEta" = gammaEta,
-              "omegaXiXi" = omegaXiXi,
-              "omegaEtaXi" = omegaEtaXi)
+  labels <- c(
+    lambdaX = lambdaX,
+    lambdaY = lambdaY,
+    tauX = tauX,
+    tauY = tauY,
+    thetaDelta = thetaDelta,
+    thetaEpsilon = thetaEpsilon,
+    W = W,
+    T = T,
+    phi = phi,
+    A = A,
+    covZetaXi = covZetaXi,
+    psi = psi,
+    alpha = alpha,
+    beta0 = beta0,
+    gammaXi = gammaXi,
+    gammaEta = gammaEta,
+    omegaXiXi = omegaXiXi,
+    omegaEtaXi = omegaEtaXi
+  )
 
   labels[subset]
 }

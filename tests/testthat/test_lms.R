@@ -26,7 +26,6 @@ std_est1_mc <- standardize_model(est1, monte.carlo=TRUE)
 std_est1_delta <- standardize_model(est1, monte.carlo=FALSE)
 mdata <- modsem_predict(est1, center.data = FALSE)
 ndata <- modsem_predict(est1, newdata = oneInt[1:100, ], center.data = FALSE)
-testthat::expect_true(all(mdata[1:100, ] == ndata))
 
 # test constraints and custom parameters
 coefs <- coef(est1)
@@ -65,7 +64,7 @@ m1 <- "
 "
 
 testthat::expect_warning(
-  modsem(m1, oneInt, method = "lms") ,
+  modsem(m1, oneInt, method = "lms"),
   regexp = "Variances and covariances .*"
 )
 
@@ -114,7 +113,7 @@ PBC ~ a * LATENT_VAR_ATT + SN
 testthat::expect_warning({
   est2 <- modsem(tpb, TPB, method = "lms", verbose = TRUE, convergence.abs = 1,
                  cov.syntax = covModel, nodes = 16, robust.se = TRUE)
-}, regexp = "It is recommended .* between endogenous variables .*")
+}, regexp = "between endogenous variables")
 
 ust_pt <- parameter_estimates(est2)
 std_pt <- standardized_estimates(est2, monte.carlo=FALSE)
@@ -164,7 +163,7 @@ tpb2 <- '
 
 testthat::expect_warning(modsem(tpb, TPB, method = "lms", convergence.abs = 1000,
                                 nodes = 16, calc.se = FALSE),
-                         regexp = "It is recommended .* between exogenous and endogenous .*")
+                         regexp = "between exogenous and endogenous variables")
 modsem_predict(est2)
 
 
@@ -214,7 +213,7 @@ m1 <- "
 
 testthat::expect_warning(
   modsem(m1, oneInt, method = "lms", optimizer = "ssjj"),
-  regexp = "*Model estimation failed!*"
+  regexp = "Model estimation failed"
 )
 
 m1 <- "

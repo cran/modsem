@@ -1,41 +1,36 @@
 TITLE:
 Running Model via Mplus
 DATA:
-FILE = "mplusResults_d7630a570fe7052efa569a29540ef19e.dat"; 
+FILE = "mplusResults_0cdf413a1525cdd43e084da9823487b8.dat"; 
 VARIABLE:
-NAMES = x1 x2 x3 x4 z1 z2 z3 z4 y1 y2 y3 y4; 
+NAMES = cluster cmps_X1_ cmps_X2_ cmps_X3_ cmps_W1_ cmps_W2_ cmpst_f_; 
  MISSING=.;
- 
+ CLUSTER = cluster;
 ANALYSIS:
-estimator = ml;
-type = random;
+estimator = MLR;
+type = complex;
 algorithm = integration;
 processors = 2;
 integration =  15;
 
 MODEL:
-LX1 BY x1;
-LX1 BY x2;
-LX2 BY x3;
-LX2 BY x4;
-LZ1 BY z1;
-LZ1 BY z2;
-LZ2 BY z3;
-LZ2 BY z4;
-LY1 BY y1;
-LY1 BY y2;
-LY2 BY y3;
-LY2 BY y4;
-LX BY LX1;
-LX BY LX2;
-LZ BY LZ1;
-LZ BY LZ2;
-LY BY LY1;
-LY BY LY2;
-LY ON LX;
-LY ON LZ;
-LY ON LXLZ;
-LXLZ | LX XWITH LZ;
+fw ON X1;
+fw ON X2;
+fw ON X3;
+fw ON W1;
+fw ON W2;
+X1 BY cmps_X1_@1;
+X2 BY cmps_X2_@1;
+X3 BY cmps_X3_@1;
+W1 BY cmps_W1_@1;
+W2 BY cmps_W2_@1;
+fw BY cmpst_f_@1;
+  cmps_X1_@0.0000000;
+  cmps_X2_@0.0000000;
+  cmps_X3_@0.0000000;
+  cmps_W1_@0.0000000;
+  cmps_W2_@0.0000000;
+  cmpst_f_@0.5788063;
 
 OUTPUT:
 TECH1;
