@@ -2,7 +2,7 @@ Package: modsem
 Type: Package
 Title: Latent Interaction (and Moderation) Analysis in Structural
         Equation Models (SEM)
-Version: 1.0.20
+Version: 1.0.21
 Authors@R: 
     c(person(given = "Kjell", family = "Solem Slupphaug", 
              email = "slupphaugkjell@gmail.com", role = c("aut", "cre"),
@@ -57,22 +57,21 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 LinkingTo: Rcpp, RcppArmadillo
-Imports: Rcpp, purrr, stringr, lavaan, rlang, MplusAutomation, nlme,
-        dplyr, mvnfast, stats, fastGHQuad, mvtnorm, ggplot2, parallel,
-        plotly, Deriv, MASS, Amelia, grDevices, cli, RhpcBLASctl,
-        memoise
+Imports: Rcpp, purrr, stringr, lavaan, rlang, nlme, dplyr, mvnfast,
+        stats, fastGHQuad, mvtnorm, ggplot2, parallel, plotly, Deriv,
+        MASS, Amelia, grDevices, cli, RhpcBLASctl, memoise
 Depends: R (>= 4.1.0)
 URL: https://modsem.org, https://github.com/kss2k/modsem
-Suggests: knitr, rmarkdown, ggpubr, RColorBrewer
+Suggests: knitr, rmarkdown, ggpubr, RColorBrewer, MplusAutomation
 VignetteBuilder: knitr
 Config/roxygen2/version: 8.0.0
 RoxygenNote: 7.3.3
 NeedsCompilation: yes
-Packaged: 2026-06-01 12:06:53 UTC; kss
+Packaged: 2026-07-02 15:50:16 UTC; kss
 Author: Kjell Solem Slupphaug [aut, cre] (ORCID:
     <https://orcid.org/0009-0005-8324-2834>),
   Mehmet Mehmetoglu [ctb] (ORCID:
     <https://orcid.org/0000-0002-6092-8551>),
   Matthias Mittner [ctb] (ORCID: <https://orcid.org/0000-0003-0205-7353>)
 Repository: CRAN
-Date/Publication: 2026-06-01 12:50:02 UTC
+Date/Publication: 2026-07-03 02:40:02 UTC

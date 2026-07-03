@@ -996,8 +996,8 @@ sortParTableDA <- function(parTable, model) {
 updateStatusLog <- function(iterations, mode, logLikNew, deltaLL, relDeltaLL, verbose = FALSE) {
   if (verbose) {
     clearConsoleLine()
-    printf("\rIter=%d Mode=%s LogLik=%.2f \u0394LL=%.2g rel\u0394LL=%.2g",
-           iterations, mode, logLikNew, deltaLL, relDeltaLL)
+    msg <- MSG_STRINGS$strings$updateStatusLog0
+    printf(msg, iterations, mode, logLikNew, deltaLL, relDeltaLL)
   }
 }
 
@@ -1409,9 +1409,15 @@ parseModelArgumentsByGroupDA <- function(model.syntax, cov.syntax,
     parTable <- rbind(
       parTable,
       data.frame(lhs = ov, op = "=~", rhs = tmp.ov, mod = "1"),
-      data.frame(lhs = ov, op = "~1", rhs = "", mod = ""),
       data.frame(lhs = tmp.ov, op = "~1", rhs = "", mod = "0")
     )
+
+    if (!any(parTable$lhs == ov & parTable$op == "~1")) {
+      parTable <- rbind(
+        parTable,
+        data.frame(lhs = ov, op = "~1", rhs = "", mod = "")
+      )
+    }
   }
 
   if (length(structovs))

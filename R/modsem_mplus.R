@@ -23,6 +23,10 @@
 #'
 #' @param output.std Should \code{STANDARDIZED} be added to \code{OUTPUT}?
 #'
+#' @param cleanup Should the \code{Mplus} files (\code{.inp}, \code{.dat} and \code{.out})
+#'   created during estimation be deleted when \code{modsem_mplus()} exits? Default is
+#'   \code{FALSE}, meaning the files are kept in the working directory.
+#'
 #' @param ... arguments passed to other functions
 #'
 #' @return modsem_mplus object
@@ -64,7 +68,11 @@ modsem_mplus <- function(model.syntax,
                          rcs.scale.corrected = TRUE,
                          output.std = TRUE,
                          categorical = NULL,
+                         cleanup = FALSE,
                          ...) {
+  if (!requireNamespace("MplusAutomation", quietly = TRUE))
+    stop("modsem_mplus() requires the 'MplusAutomation' package; please install it.")
+
   if (rcs) { # use reliability-correct single items?
     corrected <- relcorr_single_item(
       syntax          = model.syntax,
@@ -169,15 +177,26 @@ modsem_mplus <- function(model.syntax,
     rdata = data[usevariables],
   )
 
-  results <- MplusAutomation::mplusModeler(model,
-                                           modelout = "mplusResults.inp",
-                                           run = 1L)
+  fprefix <- getMplusFilePrefix()
+  if (cleanup)
+    on.exit(cleanupMplusFiles(fprefix), add = TRUE)
+
+  results <- MplusAutomation::mplusModeler(
+    model,
+    modelout = paste0(fprefix, ".inp"),
+    run = 1L,
+    writeData = "always",
+    hashfilename = FALSE
+  )
+
   coefsTable    <- coef(results)
-  mplusParTable <- mplusTableToParTable(coefsTable,
-                                        intTerms = intTerms,
-                                        intTermsMplus = intTermsMplus,
-                                        indicators = indicators,
-                                        parTable.in = parTable)
+  mplusParTable <- mplusTableToParTable(
+    coefsTable,
+    intTerms = intTerms,
+    intTermsMplus = intTermsMplus,
+    indicators = indicators,
+    parTable.in = parTable
+  )
 
   # coef and vcov
   TECH1 <- MplusAutomation::get_results(results, element = "tech1")
@@ -689,4 +708,51 @@ cbind0 <- function(...) {
     return(NULL)
 
   cbind(...)
+}
+
+
+mplusFilePrefixExists <- function(fprefix) {
+  inp <- paste0(fprefix, ".inp")
+  dat <- paste0(fprefix, ".dat")
+  out <- paste0(fprefix, ".out")
+  file.exists(inp) || file.exists(dat) || file.exists(out)
+}
+
+
+cleanupMplusFiles <- function(fprefix) {
+  files <- paste0(fprefix, c(".inp", ".dat", ".out"))
+  unlink(files[file.exists(files)])
+}
+
+
+getMplusFilePrefix <- function(max.iter = 20, base = "mpresults") {
+  randid <- generateRandomCharId(n=12)
+  fprefix <- paste0(base, randid)
+
+  if (!mplusFilePrefixExists(fprefix))
+    return(fprefix)
+
+  for (i in seq_len(max.iter)) {
+    id <- generateRandomCharId(2)
+    fprefix <- paste0(fprefix, id)
+
+    if (!mplusFilePrefixExists(fprefix))
+      return(fprefix)
+  }
+
+  mod_msg_warn(
+    "Unable to create a unique name for Mplus files!",
+    "Previous results might get overwritten..."
+  )
+
+  fprefix
+}
+
+
+generateRandomCharId <- function(n = 36) {
+  # use only lower letters, as Mplus sometimes seem to convert upper case
+  # characters in the .inp file to lower characters in the .out file. In
+  # particular this seems to happen on Mplus 8.11 on Windows
+  chars <- c(letters, as.character(0:9))
+  paste0(sample(chars, size = n, replace = TRUE), collapse = "")
 }
