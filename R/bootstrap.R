@@ -77,6 +77,10 @@ bootstrap_modsem.modsem_pi <- function(model, FUN = "coef", ...) {
 #' @param verbose Should progress information be printed to the console?
 #' @param calc.se Should standard errors for each replicate. Defaults to \code{FALSE}.
 #' @param optimize Should starting values be re-optimized for each replicate. Defaults to \code{FALSE}.
+#' @param algorithm Which algorithm should be used for the LMS approach? Defaults to \code{"EM"}, as
+#'   opposed to \code{"EMA"}.
+#' @param convergence.abs Absolute convergence criteria. Defaults to 10 times the original criteria.
+#' @param convergence.rel Relative convergence criteria. Defaults to 10 times the original criteria.
 #'
 #' @details The function internally resamples the observed data (non-parametric
 #'   case) or simulates from the estimated parameter table (parametric case),
@@ -106,6 +110,9 @@ bootstrap_modsem.modsem_da <- function(model,
                                        verbose = interactive(),
                                        calc.se = FALSE,
                                        optimize = FALSE,
+                                       convergence.abs = 10 * model$args$convergence.abs,
+                                       convergence.rel = 10 * model$args$convergence.rel,
+                                       algorithm = "EM",
                                        ...) {
   checkWarnRCS(model)
 
@@ -165,12 +172,21 @@ bootstrap_modsem.modsem_da <- function(model,
     mod_msg_stop("Unrecognized type!\n")
   )
 
-  argList              <- model$args
-  argList$calc.se      <- calc.se
-  argList$verbose      <- verbose
-  argList$model.syntax <- model$model$info$group.info$syntax
-  argList$cov.syntax   <- model$model$info$group.info$cov.syntax
-  argList$method       <- model$method
+  # Use settings from the original model, but allow the user to
+  # overrride the defaults
+  userArgs <- list(...)
+  argList  <- model$args
+  argList[names(userArgs)] <- userArgs
+ 
+  # Except these...
+  argList$algorithm       <- algorithm
+  argList$convergence.abs <- convergence.abs
+  argList$convergence.rel <- convergence.rel
+  argList$calc.se         <- calc.se
+  argList$verbose         <- verbose
+  argList$model.syntax    <- model$model$info$group.info$syntax
+  argList$cov.syntax      <- model$model$info$group.info$cov.syntax
+  argList$method          <- model$method
   argList$sampling.weights.normalization <- "none" # This has already been done
 
   if (type == "parametric" && !is.null(argList$sampling.weights)) {
@@ -206,7 +222,7 @@ bootstrap_modsem.modsem_da <- function(model,
       argList_i <- c(argList, list(data = sample_i))
 
       fit_i <- tryCatch(
-        do.call(modsem_da, args = argList_i, ...),
+        do.call(modsem_da, args = argList_i),
         error = ERROR
       )
 
@@ -340,7 +356,7 @@ bootstrap_modsem.function <- function(model = modsem,
 
 
 resample <- function(df, n.out = NROW(df), cluster = NULL, replace = TRUE) {
-  df.orig   <- as.data.frame(df)
+  df.orig <- as.data.frame(df)
 
   if (is.null(cluster)) {
     idx <- sample(NROW(df.orig), size = n.out, replace = replace)

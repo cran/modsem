@@ -200,7 +200,8 @@ getLabelIntTerms <- function(varsInInt, eta, intTerms) {
 
 
 getEmptyModel <- function(group.info, cov.syntax, parTableCovModel,
-                          mean.observed = TRUE, method = "lms") {
+                          mean.observed = TRUE, method = "lms",
+                          orthogonal.x, orthogonal.y) {
   group.info$parTable$mod <- ""
   group.info$parTable <- removeConstraintExpressions(group.info$parTable)
   group.info["data"]  <- list(data = NULL)
@@ -230,7 +231,9 @@ getEmptyModel <- function(group.info, cov.syntax, parTableCovModel,
     auto.fix.first   = FALSE,
     auto.fix.single  = FALSE,
     createTheta      = FALSE,
-    checkModel       = FALSE
+    checkModel       = FALSE,
+    orthogonal.x     = orthogonal.x,
+    orthogonal.y     = orthogonal.y
   )
 }
 
@@ -249,8 +252,13 @@ replaceNonNaModelMatrices <- function(model, value = -999) {
     x
   }
 
-  for (g in seq_along(model$models))
+  for (g in seq_along(model$models)) {
     model$models[[g]]$matrices <- lapply(model$models[[g]]$matrices, FUN = .fillna)
+
+    if (!is.null(model$models[[g]]$covModel$matrices))
+      model$models[[g]]$covModel$matrices <- lapply(model$models[[g]]$covModel$matrices, FUN = .fillna)
+  }
+
 
   model
 }
@@ -601,7 +609,8 @@ getLevelsParTable <- function(parTable) {
 isPureEta <- function(eta, parTable) {
   predictors <- unique(parTable[parTable$op == "~", "rhs"])
   indicators <- unique(parTable[parTable$op == "=~", "rhs"])
-  !eta %in% c(predictors, indicators)
+  dependents <- unique(parTable[parTable$op == "~", "lhs"])
+  !eta %in% c(predictors, indicators) & eta %in% dependents
 }
 
 
@@ -888,7 +897,8 @@ splitParTableEtas <- function(parTable, parTableCov = NULL, splitEtas, allEtas,
     split <- splitParTableEtas(parTable = parTable,
                                parTableCov = parTableCov,
                                splitEtas = downstreamEtas,
-                               allEtas = allEtas)
+                               allEtas = allEtas,
+                               nonLinearEtas = nonLinearEtas)
 
     parTable    <- split$parTable
     parTableCov <- split$parTableCov

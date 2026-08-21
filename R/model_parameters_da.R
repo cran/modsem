@@ -3,7 +3,7 @@ NAMES_PAR_MATRICES <- c("lambdaX", "lambdaY", "gammaXi", "gammaEta",
                       "thetaDelta", "thetaEpsilon", "W", "T", "phi", "A",
                       "covZetaXi", "psi", "tauX", "tauY", "alpha", "beta0",
                       "omegaEtaXi", "omegaXiXi")
-NAMES_PAR_MATRICES_COV <- c("gammaXi", "gammaEta", "A", "psi", "phi")
+NAMES_PAR_MATRICES_COV <- c("gamma", "psi")
 
 
 createTheta <- function(model, start = NULL, parTable.in = NULL) {
@@ -148,17 +148,9 @@ createTheta <- function(model, start = NULL, parTable.in = NULL) {
 createThetaCovModel <- function(covModel, start = NULL) {
   M <- covModel$matrices
 
-  phi      <- as.vector(M$phi)
-  psi      <- as.vector(M$psi)
-  alpha    <- as.vector(M$alpha)
-  gammaXi  <- as.vector(M$gammaXi)
-  gammaEta <- as.vector(M$gammaEta)
-  thetaCov <- c(
-    phi = phi,
-    psi = psi,
-    gammaXi = gammaXi,
-    gammaEta = gammaEta
-  )
+  psi   <- as.vector(M$psi)
+  gamma <- as.vector(M$gamma)
+  thetaCov <- c(psi = psi, gamma = gamma)
 
   lavLabelsCov <- createLavLabelsCov(M, subset = is.na(thetaCov))
   thetaCov <- thetaCov[is.na(thetaCov)]
@@ -301,10 +293,8 @@ fillCovModel <- function(covModel, theta, thetaLabel) {
   pMatrices <- M[NAMES_PAR_MATRICES_COV]
   M[NAMES_PAR_MATRICES_COV] <- fillMatricesLabels(pMatrices, lMatrices, thetaLabel)
 
-  M$psi      <- fillSymmetric(M$psi, fetch(theta, "^psi"))
-  M$gammaEta <- fillNA_Matrix(M$gammaEta, theta = theta, pattern = "^gammaEta")
-  M$gammaXi  <- fillNA_Matrix(M$gammaXi, theta = theta, pattern = "^gammaXi")
-  M$phi <- fillSymmetric(M$phi, fetch(theta, "^phi"))
+  M$psi   <- fillSymmetric(M$psi, fetch(theta, "^psi"))
+  M$gamma <- fillNA_Matrix(M$gamma, theta = theta, pattern = "^gamma")
 
   covModel$matrices <- M
   covModel
@@ -543,6 +533,7 @@ evalCovModelA <- function(theta, submodel, params, g, method = "lms") {
       calcThetaLabel(theta[params$SELECT_THETA_LAB[[1L]]], params$constrExprs)
     )
   }
+
   thetaCov <- if (length(params$SELECT_THETA_COV[[g]]))
     theta[params$SELECT_THETA_COV[[g]]] else NULL
 
@@ -586,10 +577,11 @@ refreshCovModelJacobian <- function(theta, model, Jacobian, Jacobian2 = NULL,
                                     method = NULL) {
   if (is.null(method))
     method <- model$params$gradientStruct$covModelMethod %||% "lms"
+
   locations <- model$params$gradientStruct$locations
-  cov_block <- if (identical(method, "qml")) DA_BLOCKS[["phi"]] else DA_BLOCKS[["A"]]
-  cov_locs  <- locations[locations$block == cov_block, , drop = FALSE]
-  if (!NROW(cov_locs)) return(list(J = Jacobian, J2 = Jacobian2))
+  cov.block <- if (identical(method, "qml")) DA_BLOCKS[["phi"]] else DA_BLOCKS[["A"]]
+  cov.locs  <- locations[locations$block == cov.block, , drop = FALSE]
+  if (!NROW(cov.locs)) return(list(J = Jacobian, J2 = Jacobian2))
 
   eps        <- (.Machine$double.eps)^(1/4)
   param.part <- rownames(Jacobian)
@@ -598,23 +590,24 @@ refreshCovModelJacobian <- function(theta, model, Jacobian, Jacobian2 = NULL,
     submodel <- model$models[[g]]
     if (is.null(submodel$covModel$matrices)) next
 
-    A_locs_g  <- cov_locs[cov_locs$group == g, , drop = FALSE]
+    A.locs.g  <- cov.locs[cov.locs$group == g, , drop = FALSE]
     affecting <- c(model$params$SELECT_THETA_LAB[[1L]],
                    model$params$SELECT_THETA_COV[[g]])
-    if (!length(affecting) || !NROW(A_locs_g)) next
+    if (!length(affecting) || !NROW(A.locs.g)) next
 
     A0    <- evalCovModelA(theta, submodel, model$params, g, method = method)
-    ri    <- A_locs_g$row + 1L
-    ci    <- A_locs_g$col + 1L
-    acols <- A_locs_g$param  # already carries the #N dedup suffix
+    ri    <- A.locs.g$row + 1L
+    ci    <- A.locs.g$col + 1L
+    acols <- A.locs.g$param  # already carries the #N dedup suffix
 
-    for (k_idx in affecting) {
-      k_nm <- param.part[[k_idx]]
-      tp <- theta; tp[[k_idx]] <- tp[[k_idx]] + eps
-      tm <- theta; tm[[k_idx]] <- tm[[k_idx]] - eps
+    for (k.idx in affecting) {
+      k_nm <- param.part[[k.idx]]
+      tp <- theta; tp[[k.idx]] <- tp[[k.idx]] + eps
+      tm <- theta; tm[[k.idx]] <- tm[[k.idx]] - eps
       Ap <- evalCovModelA(tp, submodel, model$params, g, method = method)
       Am <- evalCovModelA(tm, submodel, model$params, g, method = method)
       Jacobian[k_nm, acols] <- (Ap - Am)[cbind(ri, ci)] / (2 * eps)
+
       if (!is.null(Jacobian2))
         Jacobian2[k_nm, acols] <- (Ap - 2*A0 + Am)[cbind(ri, ci)] / eps^2
     }
@@ -723,48 +716,49 @@ getGradientStructSimple <- function(model, theta, method = "lms") {
   # finite differences on expectedCovModel — cheap (matrix algebra only,
   # no integration) and exact enough for gradient/Hessian quality.
   if (hasCovModel) {
-    cov_locs <- NULL
+    cov.locs <- NULL
     for (g in seq_len(model$info$n.groups)) {
       if (!is.null(model$models[[g]]$covModel$matrices))
-        cov_locs <- rbind(cov_locs, getCovModelALocations(model$models[[g]], g,
+        cov.locs <- rbind(cov.locs, getCovModelALocations(model$models[[g]], g,
                                                            method = method))
     }
 
-    n_cov  <- NROW(cov_locs)
-    cov_J  <- matrix(0, nrow = m, ncol = n_cov,
-                     dimnames = list(param.part, cov_locs$param))
-    cov_J2 <- cov_J
+    n_cov  <- NROW(cov.locs)
+    cov.J  <- matrix(0, nrow = m, ncol = n_cov,
+                     dimnames = list(param.part, cov.locs$param))
+    cov.J2 <- cov.J
     eps    <- (.Machine$double.eps)^(1/4) # good balance for both J and J2
 
     for (g in seq_len(model$info$n.groups)) {
       submodel <- model$models[[g]]
       if (is.null(submodel$covModel$matrices)) next
 
-      A_locs_g  <- cov_locs[cov_locs$group == g, , drop = FALSE]
+      A.locs.g  <- cov.locs[cov.locs$group == g, , drop = FALSE]
       affecting <- c(model$params$SELECT_THETA_LAB[[1L]],
                      model$params$SELECT_THETA_COV[[g]])
-      if (!length(affecting) || !NROW(A_locs_g)) next
+      if (!length(affecting) || !NROW(A.locs.g)) next
 
       A0 <- evalCovModelA(theta, submodel, model$params, g, method = method)
-      ri <- A_locs_g$row + 1L  # 0-indexed -> 1-indexed
-      ci <- A_locs_g$col + 1L
+      ri <- A.locs.g$row + 1L  # 0-indexed -> 1-indexed
+      ci <- A.locs.g$col + 1L
 
-      for (k_idx in affecting) {
-        k_nm <- param.part[[k_idx]]
-        theta_p <- theta; theta_p[[k_idx]] <- theta_p[[k_idx]] + eps
-        theta_m <- theta; theta_m[[k_idx]] <- theta_m[[k_idx]] - eps
+      for (k.idx in affecting) {
+        k_nm <- param.part[[k.idx]]
+        theta.p <- theta.m <- theta
+        theta.p[[k.idx]] <- theta.p[[k.idx]] + eps
+        theta.m[[k.idx]] <- theta.m[[k.idx]] - eps
 
-        Ap <- evalCovModelA(theta_p, submodel, model$params, g, method = method)
-        Am <- evalCovModelA(theta_m, submodel, model$params, g, method = method)
+        Ap <- evalCovModelA(theta.p, submodel, model$params, g, method = method)
+        Am <- evalCovModelA(theta.m, submodel, model$params, g, method = method)
 
-        cov_J [k_nm, A_locs_g$param] <- (Ap - Am)[cbind(ri, ci)] / (2 * eps)
-        cov_J2[k_nm, A_locs_g$param] <- (Ap - 2*A0 + Am)[cbind(ri, ci)] / eps^2
+        cov.J [k_nm, A.locs.g$param] <- (Ap - Am)[cbind(ri, ci)] / (2 * eps)
+        cov.J2[k_nm, A.locs.g$param] <- (Ap - 2*A0 + Am)[cbind(ri, ci)] / eps^2
       }
     }
 
-    locations <- rbind(locations, cov_locs)
-    Jacobian  <- cbind(Jacobian,  cov_J)
-    Jacobian2 <- cbind(Jacobian2, cov_J2)
+    locations <- rbind(locations, cov.locs)
+    Jacobian  <- cbind(Jacobian,  cov.J)
+    Jacobian2 <- cbind(Jacobian2, cov.J2)
   }
 
   # In multigroup models we can have duplicated labels, that doesn't work
