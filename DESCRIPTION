@@ -2,7 +2,7 @@ Package: modsem
 Type: Package
 Title: Latent Interaction (and Moderation) Analysis in Structural
         Equation Models (SEM)
-Version: 1.0.22
+Version: 1.0.23
 Authors@R: 
     c(person(given = "Kjell", family = "Solem Slupphaug", 
              email = "slupphaugkjell@gmail.com", role = c("aut", "cre"),
@@ -66,11 +66,11 @@ Suggests: knitr, rmarkdown, ggpubr, RColorBrewer, MplusAutomation
 VignetteBuilder: knitr
 Config/roxygen2/version: 8.1.0
 NeedsCompilation: yes
-Packaged: 2026-08-20 12:57:39 UTC; kss
+Packaged: 2026-10-01 12:57:52 UTC; kss
 Author: Kjell Solem Slupphaug [aut, cre] (ORCID:
     <https://orcid.org/0009-0005-8324-2834>),
   Mehmet Mehmetoglu [ctb] (ORCID:
     <https://orcid.org/0000-0002-6092-8551>),
   Matthias Mittner [ctb] (ORCID: <https://orcid.org/0000-0003-0205-7353>)
 Repository: CRAN
-Date/Publication: 2026-08-21 07:00:09 UTC
+Date/Publication: 2026-10-01 14:00:02 UTC
