@@ -352,11 +352,11 @@ syntax and data, or via the <code>rcs</code> argument in
 <code>relcorr_single_item</code> function:</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>tpb_uk <span class="ot">&lt;-</span> <span class="st">&quot;</span></span>
 <span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="st"># Outer Model (Based on Hagger et al., 2007)</span></span>
-<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="st"> ATT =~ att3 + att2 + att1 + att4</span></span>
-<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="st"> SN =~ sn4 + sn2 + sn3 + sn1</span></span>
-<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="st"> PBC =~ pbc2 + pbc1 + pbc3 + pbc4</span></span>
-<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="st"> INT =~ int2 + int1 + int3 + int4</span></span>
-<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="st"> BEH =~ beh3 + beh2 + beh1 + beh4</span></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="st"> ATT =~ att1 + att2 + att3 + att4 + att5</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="st"> SN =~ sn1 + sn2 + sn3</span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="st"> PBC =~ pbc1 + pbc2 + pbc3 + pbc4</span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="st"> INT =~ int1 + int2 + int3 + int4</span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="st"> BEH =~ beh1 + beh2 + beh3</span></span>
 <span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a></span>
 <span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="st"># Inner Model (Based on Steinmetz et al., 2011)</span></span>
 <span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="st"> INT ~ ATT + SN + PBC</span></span>

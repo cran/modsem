@@ -41,6 +41,12 @@
 #'   For the LMS approach the EM-algorithm stops whenever
 #'   the relative or absolute convergence criterion is reached.
 #'
+#' @param convergence.grad Gradient convergence criterion for the LMS approach. When the absolute or
+#'   relative criterion is reached, estimation only stops if the largest absolute gradient of the
+#'   log-likelihood is below \code{convergence.grad}; otherwise a Fisher scoring step is taken and
+#'   the EM-algorithm continues. Set to \code{Inf} to disable. Defaults to \code{1e-3}.
+#'   Ignored for the QML approach.
+#'
 #' @param optimizer optimizer to use, can be either \code{"nlminb"} or \code{"L-BFGS-B"}. For LMS, \code{"nlminb"} is recommended.
 #'   For QML, \code{"L-BFGS-B"} may be faster if there is a large number of iterations, but slower if there are few iterations.
 #'
@@ -260,7 +266,9 @@
 #'   if the first loading is labelled, where it gets treated as a free parameter instead.
 #'
 #' @param fix.composite.var If \code{TRUE} (default) the block covariance structure
-#'   of composite indiactors is fixed.
+#'   of composite indicators is fixed. With FIML and missing observations, these
+#'   covariances are estimated jointly with the model, overriding this setting,
+#'   because fixing marginal covariance estimates can bias the structural estimates.
 #'
 #' @param auto.split.syntax Should the model syntax automatically be split into a
 #'   linear and non-linear part? This is done by moving the structural model for
@@ -345,6 +353,7 @@ modsem_da <- function(model.syntax = NULL,
                       missing = NULL,
                       convergence.abs = NULL,
                       convergence.rel = NULL,
+                      convergence.grad = NULL,
                       optimizer = NULL,
                       center.data = NULL,
                       standardize.data = NULL,
@@ -408,6 +417,8 @@ modsem_da <- function(model.syntax = NULL,
     mod_msg_stop("The provided model syntax is not of length 1")
   }
 
+  stopIfMultilevel(model.syntax, fun = "modsem_da")
+
   if (length(ordered) || any(sapply(data, FUN = is.ordered))) {
     out <- modsemOrderedMCCorrection(
        model.syntax                   = model.syntax,
@@ -419,6 +430,7 @@ modsem_da <- function(model.syntax = NULL,
        missing                        = missing,
        convergence.abs                = convergence.abs,
        convergence.rel                = convergence.rel,
+       convergence.grad               = convergence.grad,
        optimizer                      = optimizer,
        center.data                    = center.data,
        standardize.data               = standardize.data,
@@ -512,6 +524,7 @@ modsem_da <- function(model.syntax = NULL,
           nodes                          = nodes,
           convergence.abs                = convergence.abs,
           convergence.rel                = convergence.rel,
+          convergence.grad               = convergence.grad,
           optimizer                      = optimizer,
           center.data                    = center.data,
           standardize.data               = standardize.data,
@@ -673,6 +686,7 @@ modsem_da <- function(model.syntax = NULL,
       verbose           = args$verbose,
       convergence.abs   = args$convergence.abs,
       convergence.rel   = args$convergence.rel,
+      convergence.grad  = args$convergence.grad,
       calc.se           = args$calc.se,
       FIM               = args$FIM,
       EFIM.S            = args$EFIM.S,

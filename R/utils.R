@@ -525,6 +525,12 @@ getParTableLabels <- function(parTable, labelCol="label", replace.dup = FALSE) {
                          yes = paste0(new.labels, ".g", group),
                          no = new.labels)
 
+  level <- parTable$level
+  if (!is.null(level))
+    new.labels <- ifelse(level > 1L,
+                         yes = paste0(new.labels, ".l", level),
+                         no = new.labels)
+
   ifelse(parTable[[labelCol]] == "", yes = new.labels, no = parTable[[labelCol]])
 }
 
@@ -847,4 +853,12 @@ std1 <- function(v) {
     sigma <- 1
 
   (v - mu) / sigma
+}
+
+
+stopIfMultilevel <- function(syntax, fun) {
+  parTable <- modsemify(syntax)
+  if (any(parTable$lhs == "level" & parTable$op == ":")) {
+    mod_msg_stop(sprintf("Multilevel models (`level:` blocks) are not supported in `%s()`!", fun))
+  }
 }

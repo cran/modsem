@@ -1,3 +1,13 @@
+# Computing the Gauss-Hermite rule scales roughly cubically in `m` (~0.2s for
+# m = 500), and the quasi-adaptive quadrature requests the same rules repeatedly
+gaussHermiteDataCached <- memoise::memoise(fastGHQuad::gaussHermiteData)
+
+
+# Default tolerance for pre-pruning quadrature nodes by their (cumulative)
+# weights. .Machine$longdouble.eps is not available on all systems
+QUAD_WEIGHT_TOL <- 1e-19
+
+
 # Calculate weights and node points for mixture functions via Gauss-Hermite
 # quadrature as defined in Klein & Moosbrugger (2000). Also stores information
 # regarding adaptive quadrature.
@@ -28,7 +38,7 @@ quadrature <- function(m, k,
     ))
   }
 
-  singleDimGauss <- fastGHQuad::gaussHermiteData(m)
+  singleDimGauss <- gaussHermiteDataCached(m)
   nodes <- singleDimGauss$x
   weights <- singleDimGauss$w
 
@@ -61,10 +71,11 @@ adaptiveGaussQuadrature <- function(fun,
                                     m.ceil = m + m / 2,
                                     k = 1,
                                     iter.max = 10,
-                                    node.max = 500,
+                                    node.max = max(m, 750),
                                     tol = 1e-12,
                                     mdiff.tol = 2,
                                     secondary.pruning = TRUE,
+                                    wtol = QUAD_WEIGHT_TOL,
                                     ...) {
   if (k == 0 || m == 0)
     return(list(n = matrix(0), w = 1, f = NA, m = 1, k = 1))
@@ -79,7 +90,8 @@ adaptiveGaussQuadrature <- function(fun,
     out <- adaptiveGaussQuadratureK(
       fun = fun, a = a, b = b, m = m, m.ceil = m.ceil,
       k = 1, K = k, iter = 1, iter.max = iter.max,
-      node.max = node.max, tol = tol, mdiff.tol = mdiff.tol, ...
+      node.max = node.max, tol = tol, mdiff.tol = mdiff.tol,
+      wtol = wtol, ...
     )
 
     return(out)
@@ -92,32 +104,29 @@ adaptiveGaussQuadrature <- function(fun,
   NODES     <- vector("list", k)
   WEIGHTS   <- vector("list", k)
   new.ceils <- integer(k)
+  capped    <- logical(k)
 
   for (i in seq_len(k)) {
     QUAD <- adaptiveGaussQuadratureK(
       fun = fun, a = a[i], b = b[i], m = m, m.ceil = m.ceil[i],
       k = i, K = k, iter = 1, iter.max = iter.max,
-      node.max = node.max, tol = tol, mdiff.tol = mdiff.tol, ...
+      node.max = node.max, tol = tol, mdiff.tol = mdiff.tol,
+      wtol = wtol, ...
     )
 
     NODES[[i]]     <- QUAD$n[, i]
     WEIGHTS[[i]]   <- QUAD$w
     new.ceils[[i]] <- QUAD$m.ceil
+    capped[[i]]    <- QUAD$capped
   }
 
   quadn <- as.matrix(do.call(expand.grid, NODES))
   quadw <- Reduce(kronecker, rev(WEIGHTS))
-  quadf <- fun(quadn, ...)
-  weighted <- sweep(quadf, 2, quadw, "*")
-  integral <- quadratureLogLik(weighted)
-  error <- 0
-  error.abs <- 0
-  error.rel <- 0
 
   if (secondary.pruning) {
-    pruned <- pruneQuadratureNodes(
-      quadw = quadw, quadn = quadn, quadf = quadf,
-      a = a, b = b, tol = tol
+    pruned <- prunedQuadrature(
+      fun = fun, quadw = quadw, quadn = quadn,
+      a = a, b = b, tol = tol, wtol = wtol, ...
     )
 
     quadw     <- pruned$quadw
@@ -127,17 +136,28 @@ adaptiveGaussQuadrature <- function(fun,
     error     <- pruned$I.err
     error.abs <- pruned$I.err.abs
     error.rel <- pruned$I.err.rel
+
+  } else {
+    quadf     <- fun(quadn, ...)
+    integral  <- quadratureLogLik(sweep(quadf, 2, quadw, "*"))
+    error     <- 0
+    error.abs <- 0
+    error.rel <- 0
   }
 
   list(
     n = quadn,
     w = quadw,
     F = quadf,
+    m.target = m,
+    k = k,
     m.ceil = new.ceils,
+    capped = any(capped),
     error = error,
     error.abs = error.abs,
     error.rel = error.rel,
-    integral = integral
+    integral = integral,
+    adaptive = TRUE
   )
 }
 
@@ -151,9 +171,10 @@ adaptiveGaussQuadratureK <- function(fun,
                                      K = 1,
                                      iter = 1,
                                      iter.max = 10,
-                                     node.max = 500,
+                                     node.max = max(750, m),
                                      tol = 1e-12,
                                      mdiff.tol = 2,
+                                     wtol = QUAD_WEIGHT_TOL,
                                      ...) {
   if (k == 0 || m == 0)
     return(list(n = matrix(0), w = 1, f = NA, m = 1, k = 1))
@@ -161,19 +182,18 @@ adaptiveGaussQuadratureK <- function(fun,
   if (is.null(m.ceil) || is.na(m.ceil) || m.ceil <= 0)
     m.ceil <- round(estMForNodesInRange(m, a = -5, b = 5))
 
-  quad  <- quadrature(m = m.ceil, k = 1)
+  m.ceil <- max(m, min(m.ceil, node.max))
+  quad   <- quadrature(m = m.ceil, k = 1)
+  quadw  <- quad$w
 
   if (K > 1) { # more computationally efficient/scalable
-    quadn <- matrix(0, nrow = m.ceil, ncol = K)
+    quadn <- matrix(0, nrow = length(quadw), ncol = K)
     quadn[,k] <- quad$n
   } else quadn <- quad$n
 
-  quadf <- fun(quadn, ...)
-  quadw <- quad$w
-
-  pruned <- pruneQuadratureNodes(
-    quadw = quadw, quadn = quadn, quadf = quadf,
-    a = a, b = b, tol = tol
+  pruned <- prunedQuadrature(
+    fun = fun, quadw = quadw, quadn = quadn,
+    a = a, b = b, tol = tol, wtol = wtol, ...
   )
 
   quadw     <- pruned$quadw
@@ -191,15 +211,22 @@ adaptiveGaussQuadratureK <- function(fun,
   diff.m <- NROW(quadn) - m
 
   # Calculate next ceiling
-  if (abs(diff.m) > 2 * mdiff.tol) {
+  if (abs(diff.m) > 4 * mdiff.tol) {
     # If the difference is large, use a rough estimate
     new.ceil <- round(estMForNodesInRange(k = m, a = lower, b = upper))
 
     # else do a step change
-  } else new.ceil <- m.ceil - diff.m
+  } else {
+    pct.diff <- abs(diff.m) / m # relative error
+    rel.diff <- sign(diff.m) * max(round(pct.diff * m.ceil), 1L)
+    new.ceil <- m.ceil - rel.diff
+  }
 
-  OKNextCeil <- new.ceil <= node.max && new.ceil != m.ceil
-  converged <- abs(diff.m) <= mdiff.tol
+  # Never request more than `node.max` nodes. If the target can't be reached
+  # within `node.max`, use `node.max` instead of keeping the current ceiling
+  new.ceil   <- min(new.ceil, node.max)
+  OKNextCeil <- new.ceil != m.ceil
+  converged <- abs(diff.m) <= 0 || (abs(diff.m) <= mdiff.tol && iter > 1L)
   OKIter <- iter < iter.max
 
   if (!converged && OKIter && OKNextCeil) {
@@ -217,6 +244,7 @@ adaptiveGaussQuadratureK <- function(fun,
       iter.max = iter.max,
       node.max = node.max,
       mdiff.tol = mdiff.tol,
+      wtol = wtol,
       ...
     ))
   }
@@ -236,12 +264,15 @@ adaptiveGaussQuadratureK <- function(fun,
     k = k,
     m = nrow(quadn) ^ (1 / k),
 
-    m.ceil   = m.ceil,
-    iter     = iter,
-    error    = I.err,
+    m.target  = m,
+    m.ceil    = m.ceil,
+    capped    = m.ceil >= node.max && NROW(quadn) < m - mdiff.tol,
+    iter      = iter,
+    error     = I.err,
     error.abs = I.err.abs,
     error.rel = I.err.rel,
-    integral = I.cur
+    integral  = I.cur,
+    adaptive  = TRUE
   )
 }
 
@@ -316,6 +347,53 @@ estMForNodesInRange <- function(k, a, b,
   root <- stats::uniroot(f, lower = lower, upper = upper, tol = tol)
 
   root$root
+}
+
+
+prunedQuadrature <- function(fun, quadw, quadn, a, b, tol, wtol = NULL,
+                             edge.ratio = 1e4, edge.ratio.eval = 100, ...) {
+  keep <- seq_along(quadw)
+  drop <- integer(0L)
+
+  # pre pruning based on weights only
+  if (!is.null(wtol) && is.finite(wtol) && wtol > 0) {
+    idx  <- order(quadw)
+    drop <- idx[cumsum(quadw[idx]) < wtol]
+
+    if (length(drop) < length(quadw))
+      keep <- setdiff(keep, drop) # keeps the original node order
+    else
+      drop <- integer(0L) # never remove all nodes...
+  }
+
+  quadf  <- fun(quadn[keep, , drop = FALSE], ...)
+  pruned <- pruneQuadratureNodes(
+    quadw = quadw[keep], quadn = quadn[keep, , drop = FALSE], quadf = quadf,
+    a = a, b = b, tol = tol
+  )
+
+  if (!length(drop)) # no nodes were (pre) pruned
+    return(pruned)
+
+  # Check for non-trimmed tails. If we don't trim a tail, we might have an
+  # outlier, and we should evaluate the pre-pruned weights/nodes
+  w.edge <- max(
+    edge.ratio * max(quadw[drop]), # largest removed weight
+    edge.ratio.eval * min(quadw[keep]) # smallest weight evaluated
+  )
+
+  if (all(pruned$quadw > w.edge))
+    return(pruned) # no (kept) weights are close to the cut off
+
+  # If the tails weren't trimmed, we just evaluate everything
+  quadf.full <- matrix(NA_real_, nrow = NROW(quadf), ncol = length(quadw))
+  quadf.full[, keep] <- quadf
+  quadf.full[, drop] <- fun(quadn[drop, , drop = FALSE], ...)
+
+  pruneQuadratureNodes(
+    quadw = quadw, quadn = quadn, quadf = quadf.full,
+    a = a, b = b, tol = tol
+  )
 }
 
 

@@ -15,6 +15,7 @@ modsem_da(
   missing = NULL,
   convergence.abs = NULL,
   convergence.rel = NULL,
+  convergence.grad = NULL,
   optimizer = NULL,
   center.data = NULL,
   standardize.data = NULL,
@@ -111,6 +112,12 @@ the relative or absolute convergence criterion is reached.}
 Lower values give better estimates but slower computation.
 For the LMS approach the EM-algorithm stops whenever
 the relative or absolute convergence criterion is reached.}
+
+\item{convergence.grad}{Gradient convergence criterion for the LMS approach. When the absolute or
+relative criterion is reached, estimation only stops if the largest absolute gradient of the
+log-likelihood is below \code{convergence.grad}; otherwise a Fisher scoring step is taken and
+the EM-algorithm continues. Set to \code{Inf} to disable. Defaults to \code{1e-3}.
+Ignored for the QML approach.}
 
 \item{optimizer}{optimizer to use, can be either \code{"nlminb"} or \code{"L-BFGS-B"}. For LMS, \code{"nlminb"} is recommended.
 For QML, \code{"L-BFGS-B"} may be faster if there is a large number of iterations, but slower if there are few iterations.}
@@ -336,7 +343,9 @@ variables can in some cases be biased, if the model is not split beforehand.
 The default is therefore \code{TRUE} for the QML approach.}
 
 \item{fix.composite.var}{If \code{TRUE} (default) the block covariance structure
-of composite indiactors is fixed.}
+of composite indicators is fixed. With FIML and missing observations, these
+covariances are estimated jointly with the model, overriding this setting,
+because fixing marginal covariance estimates can bias the structural estimates.}
 
 \item{...}{additional arguments to be passed to the estimation function.}
 }

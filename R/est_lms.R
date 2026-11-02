@@ -177,6 +177,7 @@ emLms <- function(model,
                   verbose = FALSE,
                   convergence.abs = 1e-4,
                   convergence.rel = 1e-10,
+                  convergence.grad = 1e-3,
                   max.iter = 500,
                   max.step = 1,
                   control = list(),
@@ -217,6 +218,7 @@ emLms <- function(model,
                   ema.final.qn.factr      = em.control$ema.final.qn.factr      %||% qn.factr,
                   ema.final.qn.rounds.max = em.control$ema.final.qn.rounds.max %||% 25L,
                   fs.maxit.start          = em.control$fs.maxit.start          %||% 1L,
+                  grad.max.steps          = em.control$grad.max.steps          %||% 25L,
                   ...) {
 
   algorithm <- toupper(match.arg(algorithm))
@@ -245,6 +247,11 @@ emLms <- function(model,
 
   max.iter.fs <- fs.maxit.start
   max.iter.qn <- qn.maxit.start
+
+  check.grad  <- is.numeric(convergence.grad) && is.finite(convergence.grad)
+  grad.steps  <- 0L
+  grad.max    <- NA_real_
+  grad.status <- if (check.grad) "not checked" else "disabled"
 
   tryCatch({
     logLikNew <- -Inf
@@ -300,6 +307,12 @@ emLms <- function(model,
         testSimpleGradient <- FALSE
       }
 
+      # Did the recalculated quadrature end up on a different grid?
+      quadChanged <- recalcQuad && !is.null(lastQuad) && !identical(
+        lapply(lastQuad, FUN = \(q) q$m.ceil),
+        lapply(P$quad,   FUN = \(q) q$m.ceil)
+      )
+
       lastQuad <- P$quad
 
       logLikNew  <- P$obsLL
@@ -324,10 +337,10 @@ emLms <- function(model,
         elapsed.time    = proc.time()[["elapsed"]] - history.start.time
       )
 
-      converged <- (abs(deltaLL) < convergence.abs) ||
-                   (abs(relDeltaLL) < convergence.rel)
+      converged <- (abs(deltaLL) < convergence.abs) || (abs(relDeltaLL) < convergence.rel)
       converged.em <- converged && mode == "EM"
       run.final.qn <- FALSE
+      run.grad.fs  <- FALSE
 
       if (iterations >= max.iter) break
       if (algorithm == "EMA" && do.final.qn && ema.final.phase == "qn") {
@@ -338,17 +351,47 @@ emLms <- function(model,
         }
 
       } else if (converged.em) {
+
         if (algorithm == "EMA" && do.final.qn && ema.final.phase == "none") {
           ema.final.phase <- "qn"
           run.final.qn <- TRUE
-        } else {
+
+        } else if (!check.grad) {
           break
+
+        } else {
+          # check if gradient agrees
+          grad.max <- maxAbsGradientLms(
+            theta   = thetaOld,
+            model   = model,
+            P       = P,
+            lower   = theta.lower,
+            upper   = theta.upper,
+            epsilon = epsilon
+          )
+
+          # reasons for terminating?
+          if (!is.finite(grad.max)) {
+            grad.status <- "non-finite gradient"
+            break
+          } else if (grad.max < convergence.grad) {
+            grad.status <- "converged"
+            break
+          } else if (grad.steps >= grad.max.steps) {
+            grad.status <- "max steps reached"
+            break
+          }
+
+          # continue
+          grad.steps  <- grad.steps + 1L
+          run.grad.fs <- TRUE
         }
       }
 
-      # If quadrature has just been recalculated, we should be less strict
-      quad.err <- as.integer(recalcQuad) * P$quad.err
-      if (deltaLL < -max(1e-8, quad.err, na.rm = TRUE)) {
+      # If the quadrature grid itself changed `logLikOld` and `logLikNew`
+      # are computed on different grids, and a decrease says nothing about the
+      # EM step, so we skip the check
+      if (!quadChanged && deltaLL < -1e-8) {
         if (verbose) cat("\n")
         mod_msg_warn_immediate(
           sprintf("Loglikelihood decreased by %.2g!", deltaLL),
@@ -372,11 +415,11 @@ emLms <- function(model,
       } else if (algorithm == "EMA" && n.em.iter > ema.min.iter) {
         # Check if expected number of iterations is increasing
         change <- diff(utils::tail(history$expected.remaining.iterations, ema.min.iter))
-       
+
         if (all(is.finite(change)) && mean(change) > ema.trend.min) {
           remaining <- utils::tail(history$expected.remaining.iterations, 1L)[[1L]]
 
-          # Increase the max step in case remaining > 500 or 
+          # Increase the max step in case remaining > 500 or
           # QN/FS fails, and we fall back to an EM step
           tmp.max.step <- max(fallback.max.step.min,
                             fallback.max.step.mult * max.step,
@@ -392,6 +435,11 @@ emLms <- function(model,
         }
       }
 
+      if (run.grad.fs) {
+        mode <- "FS"
+        updateStatusLog(iterations, mode, logLikNew, deltaLL, relDeltaLL, verbose)
+      }
+
       .obsfn <- function(x) {
         ll <- obsLogLikLms(theta = x, model = model, P = P, sign = -1)
         if (!is.finite(ll)) .Machine$double.xmax^(1/10) else ll # optim doesn't handle Inf well
@@ -399,7 +447,7 @@ emLms <- function(model,
 
       .obsgr <- function(x) {
         grad <- gradientObsLogLikLms(theta = x, model = model, P = P, sign = -1, epsilon = epsilon)
-   
+
         non.finite <- !is.finite(grad)
         if (any(non.finite)) {
           # This might happen during a bad line search in optim()
@@ -510,6 +558,13 @@ emLms <- function(model,
       } else {
         thetaNew <- thetaOld
       }
+
+      no.progress <- all.equal(thetaNew, thetaOld, tolerance = 0)
+      if (run.grad.fs && isTRUE(no.progress)) {
+        grad.status <- "no progress"
+        break
+      }
+
     } # while
 
     if (verbose) cat("\n")
@@ -521,6 +576,21 @@ emLms <- function(model,
         max.step, max.iter, nodes, adaptive.quad,
         adaptive.quad.tol, quad.range
       )
+    )
+
+    mod_warnif(check.grad && iterations < max.iter && grad.status != "converged",
+      sprintf("The largest absolute gradient is %.3g (`convergence.grad = %.3g`, %s).\n",
+              grad.max, convergence.grad, grad.status),
+      "The model might not have converged, or it might be poorly identified.\n",
+      "Consider increasing `em.control$grad.max.steps`."
+    )
+
+    quad.capped <- any(vapply(lastQuad, FUN.VALUE = logical(1L),
+                              FUN = \(q) isTRUE(q$capped)))
+    mod_warnif(quad.capped,
+      "Quasi-adaptive quadrature hit the maximum number of nodes and uses fewer\n",
+      sprintf("nodes than requested (`nodes = %d`). Increasing `nodes` further\n", nodes),
+      "will not improve accuracy."
     )
 
     # final E-step
@@ -540,7 +610,7 @@ emLms <- function(model,
       data              = lapply(model$models, FUN = \(submodel) submodel$data),
       logLik            = P$obsLL,
       iterations        = iterations,
-      converged         = iterations < max.iter,
+      converged         = iterations < max.iter && (!check.grad || grad.status == "converged"),
       optimizer         = paste(algorithm, optimizer, sep = "-"),
       calc.se           = calc.se,
       FIM               = FIM,
@@ -556,7 +626,10 @@ emLms <- function(model,
       includeStartModel = TRUE,
       startModel        = model
     )
+
     fit$iteration.history <- history
+    fit$convergence.grad  <- list(max.abs.grad = grad.max, tol = convergence.grad,
+                                  steps = grad.steps, status = grad.status)
     fit
 
   }, error = function(e) {
@@ -603,6 +676,24 @@ emLms <- function(model,
 }
 
 
+maxAbsGradientLms <- function(theta, model, P, lower = -Inf, upper = Inf,
+                              epsilon = 1e-6) {
+  g <- gradientObsLogLikLms(
+    theta   = theta,
+    model   = model,
+    P       = P,
+    sign    = 1,
+    epsilon = epsilon
+  )
+
+  atBound <- (theta <= lower & g < 0) | (theta >= upper & g > 0)
+  g <- g[!atBound]
+
+  if (!length(g)) return(0)
+  max(abs(g))
+}
+
+
 fischerScoring <- function(par,
                            fn,
                            gr,
@@ -617,12 +708,12 @@ fischerScoring <- function(par,
 
   truncate <- function(x) {
     underflow <- x < lower
-    overflow  <- x > upper 
+    overflow  <- x > upper
 
     x[underflow] <- lower[underflow]
     x[overflow]  <- upper[overflow]
 
-    x 
+    x
   }
 
   f0 <- fn(par, ...)
@@ -649,7 +740,7 @@ fischerScoring <- function(par,
         iterations = i
       ))
     }
-        
+
     alpha   <- max.alpha
     success <- FALSE
 
@@ -657,7 +748,7 @@ fischerScoring <- function(par,
       parTrial  <- truncate(par + alpha * direction)
       f1  <- suppressWarnings(fn(parTrial, ...))
 
-      ok <- is.finite(f1) && f1 <= f0 
+      ok <- is.finite(f1) && f1 <= f0
       if (ok) { success <- TRUE; break }
       alpha <- alpha / 2
     }

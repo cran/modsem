@@ -347,57 +347,77 @@ approach</h1>
 <h1>Accelerated EM and Adaptive Quadrature</h1>
 <p>By default (as of <code>v1.0.9</code>) the LMS approach uses an
 accelerated EM procedure (<code>&quot;EMA&quot;</code>) that uses Quasi-Newton and
-Fisher Scoring optimization steps when needed. If desireable, this can
-be switched to the standard Expectation-Maximization (EM) algorithm, by
+Fisher Scoring optimization steps when needed. If desirable, this can be
+switched to the standard Expectation-Maximization (EM) algorithm, by
 setting <code>algorithm = &quot;EM&quot;</code>.</p>
-<p>By default the LMS approach also uses a fixed Gauss-Hermite
+<p>By default the LMS approach also uses a quasi-adaptive Gauss-Hermite
 quadrature, to estimate a numerical approximation of the log-likelihood.
-Instead of a fixed quadrature, it is possible to use a quasi-adaptive
-quadrature instead. Due to performance reasons, the adaptive quadrature
-does not fit an individual quadrature to each participant, but instead
-one for the entire sample (at each EM iteration), based on the whole
-sample densities of the likelihood function. It essentially works by
-removing irrelevant nodes which don’t contribute to the integral, and
-increasing the number of nodes which actually contribute to the
-integral. This usually means that more nodes are placed towards the
-center of the distribution, compared to a standard fixed Gauss-Hermite
-quadrature. Using the EMA and adaptive quadrature might yield estimates
-that are closer to results from <code>Mplus</code>.</p>
+Due to performance reasons, the adaptive quadrature does not fit an
+individual quadrature to each participant, but instead one for the
+entire sample (at each EM iteration), based on the whole sample
+densities of the likelihood function. It essentially works by removing
+irrelevant nodes which don’t contribute to the integral, and increasing
+the number of nodes which actually contribute to the integral. This
+usually means that more nodes are placed towards the center of the
+distribution, compared to a standard fixed Gauss-Hermite quadrature.
+Using the EMA and adaptive quadrature might yield estimates that are
+closer to results from <code>Mplus</code>. A fixed Gauss-Hermite
+quadrature can be used instead, by setting
+<code>adaptive.quad = FALSE</code>.</p>
 <p>If the model struggles to converge, you can try changing the EM
-procedure by setting <code>algorithm = &quot;EMA&quot;</code>, or
-<code>algorithm = &quot;EM&quot;</code>, and <code>adaptive.quad = TRUE</code> in
-the <code>modsem()</code> function. Additionally it is possible to tweak
-these parameters:</p>
+procedure by setting <code>algorithm = &quot;EMA&quot;</code> or
+<code>algorithm = &quot;EM&quot;</code>, switching between the adaptive and fixed
+quadrature (<code>adaptive.quad</code>), or increasing the number of
+nodes (<code>nodes</code>) in the <code>modsem()</code> function.
+Additionally it is possible to tweak these parameters:</p>
 <ul>
 <li><code>max.iter</code>: Maximum number of iterations for the EM
 algorithm (default is 500).</li>
 <li><code>max.step</code>: Maximum number of steps used in the
 Maximization step of the EM algorithm (default is 1).</li>
 <li><code>convergence.rel</code>: Relative convergence criterion for the
-EM algorithm.</li>
+EM algorithm (default is <code>1e-10</code>).</li>
 <li><code>convergence.abs</code>: Absolute convergence criterion for the
-EM algorithm.</li>
+EM algorithm (default is <code>1e-4</code>).</li>
+<li><code>convergence.grad</code>: Gradient convergence criterion
+(default is <code>1e-3</code>). When the absolute or relative criterion
+is reached, estimation only stops if the largest absolute gradient of
+the log-likelihood is below <code>convergence.grad</code>. Otherwise a
+Fisher scoring step is taken and the EM algorithm continues, for at most
+<code>em.control$grad.max.steps</code> (default is 25) such steps. Set
+to <code>Inf</code> to disable the check.</li>
 <li><code>nodes</code>: Number of nodes for numerical integration
 (default is 24). Increasing this number can improve the accuracy of the
 estimates, especially for complex models.</li>
+<li><code>adaptive.quad</code>: Should a quasi-adaptive quadrature be
+used (default is <code>TRUE</code>)? If <code>FALSE</code>, a fixed
+Gauss-Hermite quadrature is used.</li>
 <li><code>quad.range</code>: Integration range for quadrature. Smaller
 ranges means that the integral is more focused. Applies to only when
 using a quasi-adaptive quadrature.</li>
 <li><code>adaptive.frequency</code>: How often should the quasi-adaptive
 quadrature be calculated? Defaults to every third EM iteration.</li>
 <li><code>adaptive.quad.tol</code>: Relative error tolerance when
-calculating the quasi-adaptive quadrature.</li>
+calculating the quasi-adaptive quadrature (default is
+<code>1e-12</code>).</li>
+<li><code>em.control</code>: A list of control parameters for the EM and
+EMA algorithms (e.g., <code>grad.max.steps</code>), for fine-tuning the
+estimation procedure.</li>
+<li><code>n.threads</code>: Number of threads used for computing the
+densities of the likelihood function. By default (<code>NULL</code>), at
+most two threads are used, while <code>&quot;max&quot;</code> uses all available
+threads.</li>
 </ul>
-<p>Here we can see an example using the <code>TPB_UK</code> dataaset,
+<p>Here we can see an example using the <code>TPB_UK</code> dataset,
 which is more troublesome to estimate than the simulated
 <code>TPB</code> dataset.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>tpb_uk <span class="ot">&lt;-</span> <span class="st">&quot;</span></span>
 <span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="st"># Outer Model (Based on Hagger et al., 2007)</span></span>
-<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="st">  ATT =~ att3 + att2 + att1 + att4</span></span>
-<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="st">  SN =~ sn4 + sn2 + sn3 + sn1</span></span>
-<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="st">  PBC =~ pbc2 + pbc1 + pbc3 + pbc4</span></span>
-<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="st">  INT =~ int2 + int1 + int3 + int4</span></span>
-<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="st">  BEH =~ beh3 + beh2 + beh1 + beh4</span></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="st">  ATT =~ att1 + att2 + att3 + att4 + att5</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="st">  SN =~ sn1 + sn2 + sn3</span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="st">  PBC =~ pbc1 + pbc2 + pbc3 + pbc4</span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="st">  INT =~ int1 + int2 + int3 + int4</span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="st">  BEH =~ beh1 + beh2 + beh3</span></span>
 <span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a></span>
 <span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="st"># Inner Model (Based on Steinmetz et al., 2011)</span></span>
 <span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="st">  INT ~ ATT + SN + PBC</span></span>
@@ -413,11 +433,21 @@ which is more troublesome to estimate than the simulated
 <span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a>              <span class="at">adaptive.frequency =</span> <span class="dv">3</span>, <span class="co"># Update the quasi-adaptive quadrature every third EM-iteration</span></span>
 <span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a>              <span class="at">adaptive.quad.tol =</span> <span class="dv">1</span>e<span class="sc">-</span><span class="dv">12</span>, <span class="co"># Relative error tolerance for quasi-adaptive quad</span></span>
 <span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a>              <span class="at">algorithm =</span><span class="st">&quot;EMA&quot;</span>, <span class="co"># Use accelerated EM algorithm (Default)</span></span>
-<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a>              <span class="at">convergence.abs =</span> <span class="dv">1</span>e<span class="sc">-</span><span class="dv">4</span>, <span class="co"># Relative convergence criterion</span></span>
+<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a>              <span class="at">convergence.abs =</span> <span class="dv">1</span>e<span class="sc">-</span><span class="dv">4</span>, <span class="co"># Absolute convergence criterion</span></span>
 <span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a>              <span class="at">convergence.rel =</span> <span class="dv">1</span>e<span class="sc">-</span><span class="dv">10</span>, <span class="co"># Relative convergence criterion</span></span>
-<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a>              <span class="at">max.iter =</span> <span class="dv">500</span>, <span class="co"># Maximum number of iterations</span></span>
-<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a>              <span class="at">max.step =</span> <span class="dv">1</span>) <span class="co"># Maximum number of steps in the maximization step</span></span>
-<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a><span class="fu">summary</span>(fit)</span></code></pre></div>
+<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a>              <span class="at">convergence.grad =</span> <span class="dv">1</span>e<span class="sc">-</span><span class="dv">3</span>, <span class="co"># Gradient convergence criterion</span></span>
+<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a>              <span class="at">max.iter =</span> <span class="dv">500</span>, <span class="co"># Maximum number of iterations</span></span>
+<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a>              <span class="at">max.step =</span> <span class="dv">1</span>) <span class="co"># Maximum number of steps in the maximization step</span></span>
+<span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a><span class="fu">summary</span>(fit)</span></code></pre></div>
+<p>When using the quasi-adaptive quadrature (default), the
+<code>Numerical Integration</code> section of the summary reports two
+sets of node counts. <code>Standard</code> is the requested number of
+nodes (<code>nodes</code>), which is roughly the number of nodes kept
+after pruning. <code>Effective</code> is the number of nodes you would
+need with a fixed Gauss-Hermite quadrature
+(<code>adaptive.quad = FALSE</code>) to get effectively the same
+results. The same information can be retrieved using
+<code>modsem_inspect(fit, &quot;quad&quot;)</code>.</p>
 </div>
 
 
